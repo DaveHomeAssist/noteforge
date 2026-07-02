@@ -1,6 +1,6 @@
 # 📝 My Notes
 
-**Live demo → https://davehomeassist.github.io/my-notes-app/**
+**Live demo → https://systembydave.com/noteforge/** &nbsp;·&nbsp; mirror: https://davehomeassist.github.io/noteforge/
 
 A local-first personal notes app inspired by Obsidian & Notion. Markdown notes
 with `[[wikilinks]]`, automatic backlinks, tags, full-text search, a link graph,

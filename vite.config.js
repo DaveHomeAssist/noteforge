@@ -81,9 +81,10 @@ function cspPlugin() {
 
 export default defineConfig(({ command }) => ({
   root: '.',
-  // Project is served from a GitHub Pages sub-path (davehomeassist.github.io/my-notes-app/)
-  // in production; dev + the test servers stay at root so nothing else has to change.
-  base: command === 'build' ? '/my-notes-app/' : '/',
+  // Production is served from the /noteforge/ sub-path (systembydave.com/noteforge/,
+  // and a davehomeassist.github.io/noteforge/ mirror); dev + the test servers stay at
+  // root so nothing else has to change.
+  base: command === 'build' ? '/noteforge/' : '/',
   plugins: [cspPlugin(), swVersionPlugin()],
   server: {
     port: 5175,
