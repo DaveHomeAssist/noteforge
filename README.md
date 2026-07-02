@@ -1,5 +1,7 @@
 # 📝 My Notes
 
+**Live demo → https://davehomeassist.github.io/my-notes-app/**
+
 A local-first personal notes app inspired by Obsidian & Notion. Markdown notes
 with `[[wikilinks]]`, automatic backlinks, tags, full-text search, a link graph,
 and dark mode — all stored in your browser, no backend required.
