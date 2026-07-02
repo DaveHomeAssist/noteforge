@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feature tests</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <style>#scratch{position:fixed;left:-9999px;top:0}</style>
+</head>
+<body>
+<!-- offscreen scratch area so layout/getClientRects work -->
+<div id="scratch"></div>
+<pre id="out" style="padding:16px;font-family:monospace"></pre>
+<script type="module">
+  import { BlockEditor } from '/src/components/block-editor.js';
+  import { Database } from '/src/core/database.js';
+  import { Editor } from '/src/components/editor.js';
+  import { BannerControl, BANNER_GRADIENTS } from '/src/components/banner.js';
+  import { TrashView } from '/src/components/trash-view.js';
+  import { Modal } from '/src/components/modal.js';
+  import { NoteList } from '/src/components/note-list.js';
+  import { CommandPalette } from '/src/components/command-palette.js';
+  import { SettingsView } from '/src/components/settings-view.js';
+  import { GraphView } from '/src/components/graph.js';
+  import { TEMPLATES } from '/src/app/templates.js';
+  import { fileToBannerDataURL } from '/src/utils/image.js';
+  import { parse, serialize } from '/src/utils/blocks.js';
+
+  const results = [];
+  const check = (name, cond) => results.push((cond ? 'PASS' : 'FAIL') + '  ' + name);
+  const section = (name, fn) => { try { fn(); } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); } };
+
+  const scratch = document.getElementById('scratch');
+  const mkHost = () => { const h = document.createElement('div'); h.className = 'editor__blocks'; scratch.appendChild(h); return h; };
+  const setCaretEnd = (el) => { el.focus(); const s = getSelection(), r = document.createRange(); r.selectNodeContents(el); r.collapse(false); s.removeAllRanges(); s.addRange(r); };
+  const setCaretAt = (el, off) => { el.focus(); const n = el.firstChild || el; const s = getSelection(), r = document.createRange(); r.setStart(n, Math.min(off, (n.textContent||'').length)); r.collapse(true); s.removeAllRanges(); s.addRange(r); };
+  const type = (el, text) => { el.textContent = text; setCaretEnd(el); el.dispatchEvent(new InputEvent('input', { bubbles: true })); };
+  const key = (el, k, opts = {}) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...opts }));
+  const focusedContent = () => document.activeElement;
+  const rowType = (elm) => elm?.closest?.('.blk-row')?.dataset.type;
+  const TITLES = ['Alpha', 'Beta'];
+  const mkBE = (md) => new BlockEditor(mkHost(), { initialMarkdown: md, getTitles: () => TITLES, onOpenWikilink: (t) => (mkBE._opened = t) });
+
+  // ============ block rendering (every type) ============
+  section('render all block types', () => {
+    const be = mkBE(['# H', '- b', '1. n', '- [ ] t', '> q', '```\nc\n```', '@date(2026-07-01)', '---', 'p'].join('\n\n'));
+    const host = be.host;
+    for (const t of ['heading', 'bullet', 'numbered', 'todo', 'quote', 'code', 'date', 'divider', 'paragraph']) {
+      check(`renders ${t} row`, !!host.querySelector(`.blk-row[data-type="${t}"]`));
+    }
+    check('date chip renders', !!host.querySelector('.blk-row[data-type="date"] .blk-date'));
+    check('divider renders <hr>', !!host.querySelector('.blk-row[data-type="divider"] hr'));
+    check('todo renders checkbox', !!host.querySelector('.blk-row[data-type="todo"] .blk-check'));
+  });
+
+  // ============ markdown shortcuts ============
+  section('markdown shortcuts', () => {
+    const cases = [
+      ['# ', 'heading'], ['## ', 'heading'], ['### ', 'heading'],
+      ['- ', 'bullet'], ['1. ', 'numbered'], ['[] ', 'todo'], ['[x] ', 'todo'], ['> ', 'quote'],
+    ];
+    for (const [trigger, expected] of cases) {
+      const be = mkBE('');
+      const blk = be.host.querySelector('.blk');
+      blk.focus();
+      type(blk, trigger);
+      check(`"${trigger.trim()} " -> ${expected}`, rowType(focusedContent()) === expected);
+    }
+    // divider + code fence via shortcuts
+    const be2 = mkBE('');
+    const b2 = be2.host.querySelector('.blk'); b2.focus(); type(b2, '---');
+    check('"---" -> divider', !!be2.host.querySelector('.blk-row[data-type="divider"]'));
+    const be3 = mkBE('');
+    const b3 = be3.host.querySelector('.blk'); b3.focus(); type(b3, '```js'); key(b3, 'Enter');
+    check('"```js" + Enter -> code', rowType(focusedContent()) === 'code');
+  });
+
+  // ============ slash menu (open, filter, select date & divider) ============
+  section('slash menu', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, '/');
+    let menu = document.querySelector('.blk-menu');
+    check('slash menu opens', !!menu && menu.querySelectorAll('.blk-menu__item').length >= 10);
+    type(blk, '/date');
+    menu = document.querySelector('.blk-menu');
+    check('slash filters to Date', !!menu && /Date/.test(menu.textContent) && !/Heading/.test(menu.textContent));
+    key(blk, 'Enter');
+    check('slash "date" creates date block', !!be.host.querySelector('.blk-row[data-type="date"]'));
+    check('date serializes to @date(...)', /@date\(\d{4}-\d{2}-\d{2}\)/.test(be.serialize()));
+    // divider via slash
+    const be2 = mkBE('');
+    const b2 = be2.host.querySelector('.blk'); b2.focus(); type(b2, '/div');
+    key(b2, 'Enter');
+    check('slash "div" creates divider', !!be2.host.querySelector('.blk-row[data-type="divider"]'));
+    // keyboard nav in menu
+    const be3 = mkBE('');
+    const b3 = be3.host.querySelector('.blk'); b3.focus(); type(b3, '/');
+    key(b3, 'ArrowDown'); key(b3, 'ArrowDown'); key(b3, 'Escape');
+    check('Escape closes menu leaving text', !document.querySelector('.blk-menu'));
+  });
+
+  // ============ menu scroll fix ============
+  section('menu scroll does not close menu', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus(); type(blk, '/');
+    const menu = document.querySelector('.blk-menu');
+    check('menu present before scroll', !!menu);
+    // scroll INSIDE the menu: must stay open
+    menu.dispatchEvent(new Event('scroll', { bubbles: true }));
+    check('scroll inside menu keeps it open', !!document.querySelector('.blk-menu'));
+    // scroll on the editor host: must close
+    be.host.dispatchEvent(new Event('scroll', { bubbles: true }));
+    check('scroll outside menu closes it', !document.querySelector('.blk-menu'));
+  });
+
+  // ============ date block: picker changes value ============
+  section('date picker updates value', () => {
+    const be = mkBE('@date(2026-07-01)');
+    const chip = be.host.querySelector('.blk-date');
+    check('date chip shows formatted label', /2026/.test(chip.textContent));
+    chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const input = be.host.querySelector('.blk-date-input');
+    check('clicking chip opens date input', !!input);
+    input.value = '2030-01-15';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    check('changing date updates serialize', be.serialize() === '@date(2030-01-15)');
+    check('chip restored after change', !!be.host.querySelector('.blk-date'));
+  });
+
+  // ============ non-text block delete/nav (divider + date) ============
+  section('non-text block select + delete', () => {
+    for (const md of ['a\n\n---\n\nb', 'a\n\n@date(2026-07-01)\n\nb']) {
+      const be = mkBE(md);
+      const ntRow = be.host.querySelector('.blk-row[data-type="divider"], .blk-row[data-type="date"]');
+      const kind = ntRow.dataset.type;
+      // click to select
+      ntRow.querySelector('.blk').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      check(`${kind} selectable by click`, be.host.querySelector('.blk-row--selected')?.dataset.type === kind);
+      // Backspace deletes the selected non-text block
+      be.host.querySelector('.blk-row').dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+      check(`${kind} deleted on Backspace`, !be.host.querySelector(`.blk-row[data-type="${kind}"]`));
+    }
+    // Backspace at start of paragraph after a date removes the date
+    const be2 = mkBE('@date(2026-07-01)\n\ntext');
+    const para = [...be2.host.querySelectorAll('.blk-row[data-type="paragraph"] .blk')].pop();
+    para.focus(); setCaretAt(para, 0);
+    key(para, 'Backspace');
+    check('Backspace-at-start after date deletes the date', !be2.host.querySelector('.blk-row[data-type="date"]'));
+  });
+
+  // ============ keyboard model: Enter/Backspace/Tab ============
+  section('keyboard model', () => {
+    // Enter splits paragraph
+    let be = mkBE('helloworld');
+    let blk = be.host.querySelector('.blk'); blk.focus(); setCaretAt(blk, 5);
+    key(blk, 'Enter');
+    check('Enter splits at caret', be.serialize() === 'hello\n\nworld');
+    // Enter continues a bullet list
+    be = mkBE('- one');
+    blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    key(blk, 'Enter');
+    check('Enter continues bullet list', rowType(focusedContent()) === 'bullet' && be.host.querySelectorAll('.blk-row[data-type="bullet"]').length === 2);
+    // Enter on empty list item exits the list
+    key(focusedContent(), 'Enter');
+    check('Enter on empty list item exits to paragraph', rowType(focusedContent()) === 'paragraph');
+    // Backspace at start demotes heading to paragraph
+    be = mkBE('# title');
+    blk = be.host.querySelector('.blk'); blk.focus(); setCaretAt(blk, 0);
+    key(blk, 'Backspace');
+    check('Backspace-at-start demotes heading to paragraph', rowType(focusedContent()) === 'paragraph');
+    // Backspace at start merges into previous
+    be = mkBE('aaa\n\nbbb');
+    const second = [...be.host.querySelectorAll('.blk')][1]; second.focus(); setCaretAt(second, 0);
+    key(second, 'Backspace');
+    check('Backspace merges into previous block', be.serialize() === 'aaabbb');
+    // Tab indents a list item
+    be = mkBE('- x');
+    blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    key(blk, 'Tab');
+    check('Tab indents list item', be.serialize() === '  - x');
+    key(focusedContent(), 'Tab', { shiftKey: true });
+    check('Shift+Tab outdents list item', be.serialize() === '- x');
+  });
+
+  // ============ wikilink autocomplete + click ============
+  section('wikilink autocomplete + navigation', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, 'see [[Al');
+    const menu = document.querySelector('.blk-menu');
+    check('[[ opens title autocomplete', !!menu && /Alpha/.test(menu.textContent));
+    key(blk, 'Enter');
+    check('selecting inserts [[Alpha]]', be.serialize() === 'see [[Alpha]]');
+    // blur -> renders anchor; click navigates
+    blk.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    const anchor = be.host.querySelector('a[data-wikilink]');
+    check('blurred wikilink renders anchor', !!anchor);
+    anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    check('wikilink click navigates', mkBE._opened === 'Alpha');
+  });
+
+  // ============ checkbox toggle ============
+  section('checkbox toggle', () => {
+    const be = mkBE('- [ ] task');
+    const chk = be.host.querySelector('.blk-check');
+    chk.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('checkbox toggles to done', be.serialize() === '- [x] task');
+    chk.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('checkbox toggles back', be.serialize() === '- [ ] task');
+  });
+
+  // ============ undo / redo ============
+  section('undo / redo', () => {
+    const be = mkBE('abc');
+    const blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    key(blk, 'Enter');
+    check('split -> 2 blocks', be.host.querySelectorAll('.blk-row').length === 2);
+    key(focusedContent(), 'z', { ctrlKey: true });
+    check('undo reverts split', be.serialize() === 'abc' && be.host.querySelectorAll('.blk-row').length === 1);
+    key(be.host.querySelector('.blk'), 'z', { ctrlKey: true, shiftKey: true });
+    check('redo re-applies split', be.host.querySelectorAll('.blk-row').length === 2);
+  });
+
+  // ============ paste explosion ============
+  section('multi-line paste explodes into blocks', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    const dt = new DataTransfer();
+    dt.setData('text/plain', '# Title\n\n- a\n- b');
+    blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    check('paste creates heading + 2 bullets', !!be.host.querySelector('.blk-row[data-type="heading"]') && be.host.querySelectorAll('.blk-row[data-type="bullet"]').length === 2);
+  });
+
+  // ============ drag reorder ============
+  section('drag reorder', () => {
+    const be = mkBE('first\n\nsecond');
+    const rows = () => [...be.host.querySelectorAll('.blk-row')];
+    const handle = rows()[0].querySelector('.blk-handle');
+    const targetRow = rows()[1];
+    const dt = new DataTransfer();
+    handle.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    const rect = targetRow.getBoundingClientRect();
+    const dropY = rect.top + rect.height - 1; // drop AFTER target
+    targetRow.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, clientY: dropY, cancelable: true }));
+    targetRow.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, clientY: dropY, cancelable: true }));
+    check('drag reorder moves block', be.serialize() === 'second\n\nfirst');
+  });
+
+  // ============ XSS inert ============
+  section('XSS-safe rendering', () => {
+    const be = mkBE('bad <script>window.__x=1<\/script> <img src=x onerror="window.__x=1">');
+    check('no <script> in DOM', !be.host.innerHTML.toLowerCase().includes('<script'));
+    check('no onerror in DOM', !be.host.innerHTML.toLowerCase().includes('onerror'));
+    check('XSS did not execute', window.__x === undefined);
+  });
+
+  // ============ full app: tag mid-edit keeps content; serialize round-trip ============
+  section('editor integration + no data loss on tag', () => {
+    const db = new Database();
+    const note = db.createNote({ title: 'N', content: 'original' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const editor = new Editor(container, db, { openNote: () => {}, openOrCreateByTitle: () => {} });
+    db.subscribe(() => editor.refresh());
+    editor.open(note.id);
+    const blk = container.querySelector('.blk'); blk.focus();
+    type(blk, 'EDITED');
+    blk.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    const tagInput = container.querySelector('.editor__tag-input');
+    tagInput.value = 'tagx';
+    key(tagInput, 'Enter');
+    const saved = db.getNote(note.id);
+    check('tag added', saved.tags.includes('tagx'));
+    check('block edit not lost on tag add', saved.content.includes('EDITED'));
+  });
+
+  // ============ banner: add / gradient / change / url / reposition / remove ====
+  const mkBanner = (initial) => {
+    const host = document.createElement('div'); host.className = 'editor__banner'; scratch.appendChild(host);
+    let banner = initial ?? null;
+    const bc = new BannerControl(host, { getBanner: () => banner, onChange: (b) => { banner = b; bc.render(); } });
+    return { host, bc, get: () => banner };
+  };
+
+  section('banner: add + gradient render', () => {
+    const b = mkBanner(null);
+    check('no banner shows "Add banner" button', !!b.host.querySelector('.banner-add') && !b.host.querySelector('.banner'));
+    b.host.querySelector('.banner-add').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('clicking Add banner sets a gradient', b.get() && b.get().type === 'gradient');
+    check('gradient strip renders', !!b.host.querySelector('.banner.banner--gradient'));
+    check('gradient has no Reposition button', !b.host.querySelector('[data-act="reposition"]'));
+  });
+
+  section('banner: change picker + swatch + url', () => {
+    const b = mkBanner({ type: 'gradient', value: BANNER_GRADIENTS[0], position: 50 });
+    b.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const picker = document.querySelector('.banner-picker');
+    check('Change opens the picker', !!picker);
+    check('picker shows all gradient swatches', picker.querySelectorAll('.banner-swatch').length === BANNER_GRADIENTS.length);
+    check('picker has upload + url controls', !!picker.querySelector('.banner-picker__upload') && !!picker.querySelector('.banner-picker__url'));
+    // pick a different swatch
+    picker.querySelectorAll('.banner-swatch')[3].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('swatch applies its gradient', b.get().value === BANNER_GRADIENTS[3]);
+    check('picker closed after choosing', !document.querySelector('.banner-picker'));
+    // apply an image URL
+    b.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const p2 = document.querySelector('.banner-picker');
+    p2.querySelector('.banner-picker__url').value = 'https://example.com/pic.png';
+    p2.querySelector('.banner-picker__url-apply').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('URL applies as an image banner', b.get().type === 'image' && b.get().value === 'https://example.com/pic.png');
+    check('image banner renders <img>', !!b.host.querySelector('.banner__img'));
+    check('non-http url is rejected', (() => {
+      const bb = mkBanner({ type: 'gradient', value: BANNER_GRADIENTS[0], position: 50 });
+      bb.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const pp = document.querySelector('.banner-picker');
+      pp.querySelector('.banner-picker__url').value = 'javascript:alert(1)';
+      pp.querySelector('.banner-picker__url-apply').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const rejected = bb.get().type === 'gradient';
+      document.querySelector('.banner-picker') && bb.bc.destroy();
+      return rejected;
+    })());
+  });
+
+  section('banner: reposition image + remove', () => {
+    const b = mkBanner({ type: 'image', value: 'https://example.com/x.png', position: 50 });
+    check('image banner has Reposition button', !!b.host.querySelector('[data-act="reposition"]'));
+    b.host.querySelector('[data-act="reposition"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const range = b.host.querySelector('.banner__reposition input[type="range"]');
+    check('Reposition shows a slider', !!range);
+    range.value = '20';
+    range.dispatchEvent(new Event('change', { bubbles: true }));
+    check('slider change saves new position', b.get().position === 20);
+    // remove
+    b.host.querySelector('[data-act="remove"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('Remove clears the banner', b.get() === null && !!b.host.querySelector('.banner-add'));
+  });
+
+  section('banner: image src is set as attribute (not innerHTML) — XSS-safe', () => {
+    const b = mkBanner({ type: 'image', value: 'https://example.com/"><script>window.__b=1<\/script>', position: 50 });
+    check('no script injected via banner value', !b.host.innerHTML.toLowerCase().includes('<script'));
+    check('banner value did not execute', window.__b === undefined);
+  });
+
+  section('banner: picker Escape + outside-click close; live reposition preview', () => {
+    const b = mkBanner({ type: 'gradient', value: BANNER_GRADIENTS[0], position: 50 });
+    b.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('picker open', !!document.querySelector('.banner-picker'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    check('Escape closes picker', !document.querySelector('.banner-picker'));
+    b.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); // outside click
+    check('outside click closes picker', !document.querySelector('.banner-picker'));
+    // live reposition preview updates the img objectPosition before commit
+    const bi = mkBanner({ type: 'image', value: 'https://example.com/x.png', position: 50 });
+    bi.host.querySelector('[data-act="reposition"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const range = bi.host.querySelector('.banner__reposition input[type="range"]');
+    range.value = '10';
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    check('reposition input updates live objectPosition', bi.host.querySelector('.banner__img').style.objectPosition.includes('10%'));
+    check('live input did not yet persist', bi.get().position === 50);
+  });
+
+  await (async () => {
+    const name = 'banner: upload error surfaces a message';
+    try {
+      const b = mkBanner({ type: 'gradient', value: BANNER_GRADIENTS[0], position: 50 });
+      b.host.querySelector('[data-act="change"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const picker = document.querySelector('.banner-picker');
+      const fileInput = picker.querySelector('input[type="file"]');
+      const bad = new File(['not an image'], 'notes.txt', { type: 'text/plain' });
+      Object.defineProperty(fileInput, 'files', { value: [bad], configurable: true });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 30));
+      const status = picker.querySelector('.banner-picker__status');
+      check(name, !status.hidden && /image/i.test(status.textContent) && b.get().type === 'gradient');
+      b.bc.destroy();
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  await (async () => {
+    const name = 'banner: broken image URL shows fallback overlay';
+    try {
+      const b = mkBanner({ type: 'image', value: 'https://invalid.invalid/nope-404.png', position: 50 });
+      const img = b.host.querySelector('.banner__img');
+      img.dispatchEvent(new Event('error', { bubbles: true }));
+      check(name, b.host.querySelector('.banner').classList.contains('banner--broken'));
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  section('banner: value validation drops url() beacon at the note layer', () => {
+    const db = new Database();
+    const note = db.createNote({ title: 'N', content: 'c' });
+    note.setBanner({ type: 'gradient', value: 'url(https://evil/x.gif)' });
+    check('url() gradient rejected -> banner null', note.banner === null);
+    note.setBanner({ type: 'image', value: 'ftp://x/y.png' });
+    check('non-http/data image scheme rejected', note.banner === null);
+  });
+
+  section('banner: editor refresh does not clobber an open picker/reposition', () => {
+    const db = new Database();
+    const note = db.createNote({ title: 'N', content: 'c', banner: { type: 'image', value: 'https://example.com/x.png', position: 50 } });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const editor = new Editor(container, db, { openNote: () => {}, openOrCreateByTitle: () => {} });
+    db.subscribe(() => editor.refresh());
+    editor.open(note.id);
+    // open reposition, then cause a foreign emit
+    container.querySelector('[data-act="reposition"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('reposition slider present', !!container.querySelector('.banner__reposition'));
+    db.createNote({ title: 'Other', content: 'x' }); // foreign emit -> refresh()
+    check('refresh bailed: reposition slider still present', !!container.querySelector('.banner__reposition'));
+  });
+
+  await (async () => {
+    const name = 'banner: upload is downscaled + compressed';
+    try {
+      // synthesize a big image via canvas -> blob -> File
+      const c = document.createElement('canvas'); c.width = 2400; c.height = 900;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#3355ff'; ctx.fillRect(0, 0, 2400, 900);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const file = new File([blob], 'big.png', { type: 'image/png' });
+      const dataUrl = await fileToBannerDataURL(file);
+      check('upload returns a jpeg data URL', /^data:image\/jpeg/.test(dataUrl));
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+      check('upload downscaled width to <= 1600', img.naturalWidth <= 1600);
+      check('upload data URL is reasonably small (< 700KB)', dataUrl.length < 700_000);
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  section('banner: persists on the note + survives editor round-trip', () => {
+    const db = new Database();
+    const note = db.createNote({ title: 'N', content: 'body text' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const editor = new Editor(container, db, { openNote: () => {}, openOrCreateByTitle: () => {} });
+    db.subscribe(() => editor.refresh());
+    editor.open(note.id);
+    // type an edit first (must not be lost when banner is set)
+    const blk = container.querySelector('.blk'); blk.focus(); type(blk, 'body EDITED');
+    blk.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    // add a banner via the Add button
+    container.querySelector('.banner-add').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const saved = db.getNote(note.id);
+    check('note.banner persisted', saved.banner && saved.banner.type === 'gradient');
+    check('banner is metadata, not in content', !saved.content.includes('gradient') && saved.content.includes('body EDITED'));
+    check('toJSON export includes banner', db.getAllNotes()[0].toJSON().banner.type === 'gradient');
+  });
+
+  // ============ [hidden] view is truly hidden (editor/graph toggle) ============
+  // Regression: `.graph { display:flex }` overrode the UA `[hidden]{display:none}`,
+  // so the empty graph panel took up space and squished the editor.
+  section('[hidden] fully hides a view', () => {
+    const main = document.createElement('div');
+    main.className = 'main'; main.style.height = '400px';
+    const ed = document.createElement('section'); ed.className = 'editor'; ed.textContent = 'x';
+    const gr = document.createElement('section'); gr.className = 'graph'; gr.hidden = true;
+    main.append(ed, gr); scratch.appendChild(main);
+    check('hidden .graph has zero height', gr.offsetHeight === 0);
+    check('hidden .graph is not laid out', gr.offsetParent === null);
+    gr.hidden = false;
+    check('shown .graph takes space again', gr.offsetHeight > 0);
+  });
+
+  // ============ seed corpus round-trips through the editor ============
+  section('seed-style content round-trips through editor', () => {
+    const md = '# H\n\n- a\n- b\n\n@date(2026-07-01)\n\n---\n\n> quote\n\n```js\nconst x=1;\n```';
+    const be = mkBE(md);
+    check('serialize == serialize(parse(md))', be.serialize() === serialize(parse(md)));
+  });
+
+  // ============ focusFirst skips leading non-text blocks (date/divider) ============
+  section('focusFirst skips leading non-text block', () => {
+    const be = mkBE('@date(2026-07-01)\n\nhello');
+    be.focusFirst();
+    check('focusFirst lands caret on first text block (not the date chip)', rowType(focusedContent()) === 'paragraph');
+    check('date block not selected by focusFirst', !be.host.querySelector('.blk-row--selected'));
+    const be2 = mkBE('---\n\nfirst');
+    be2.focusFirst();
+    check('focusFirst skips leading divider too', rowType(focusedContent()) === 'paragraph');
+  });
+
+  // ============ Delete-key (forward) merge ============
+  section('forward Delete merges next block', () => {
+    const be = mkBE('aaa\n\nbbb');
+    const first = be.host.querySelector('.blk'); first.focus(); setCaretEnd(first);
+    key(first, 'Delete');
+    check('Delete at end merges next into current', be.serialize() === 'aaabbb');
+    // Delete over a following divider removes it
+    const be2 = mkBE('x\n\n---');
+    const p = be2.host.querySelector('.blk'); p.focus(); setCaretEnd(p);
+    key(p, 'Delete');
+    check('Delete over following divider removes it', !be2.host.querySelector('.blk-row[data-type="divider"]'));
+  });
+
+  // ============ cross-block arrow navigation ============
+  section('arrow navigation between blocks', () => {
+    const be = mkBE('one\n\ntwo');
+    const first = be.host.querySelector('.blk'); first.focus(); setCaretEnd(first);
+    key(first, 'ArrowDown');
+    check('ArrowDown moves to next block', focusedContent().textContent === 'two');
+    key(focusedContent(), 'ArrowUp');
+    check('ArrowUp moves back to previous block', focusedContent().textContent === 'one');
+  });
+
+  // ============ Enter inside code block: newline then exit ============
+  section('Enter in code block', () => {
+    const be = mkBE('```\ncode\n```');
+    const codeBlk = be.host.querySelector('.blk-row[data-type="code"] .blk');
+    codeBlk.focus(); setCaretEnd(codeBlk);
+    key(codeBlk, 'Enter');
+    check('Enter in code inserts newline (no split)', be.serialize() === '```\ncode\n\n```');
+    key(focusedContent(), 'Enter');
+    check('Enter on trailing blank line exits code', rowType(focusedContent()) === 'paragraph' && be.serialize().startsWith('```\ncode\n```'));
+  });
+
+  // ============ numbered / todo list continuation ============
+  section('numbered + todo list continuation', () => {
+    const be = mkBE('1. a');
+    let blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    key(blk, 'Enter');
+    check('Enter continues numbered list', rowType(focusedContent()) === 'numbered' && be.host.querySelectorAll('.blk-row[data-type="numbered"]').length === 2);
+    const be2 = mkBE('- [x] done');
+    blk = be2.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    key(blk, 'Enter');
+    check('Enter continues todo list with checked=false', rowType(focusedContent()) === 'todo' && be2.serialize() === '- [x] done\n- [ ] ');
+  });
+
+  // ============ Shift+Enter soft break ============
+  section('Shift+Enter soft break', () => {
+    const be = mkBE('ab');
+    const blk = be.host.querySelector('.blk'); blk.focus(); setCaretAt(blk, 1);
+    key(blk, 'Enter', { shiftKey: true });
+    check('Shift+Enter inserts a soft break in the same block', be.serialize() === 'a\nb' && be.host.querySelectorAll('.blk-row').length === 1);
+  });
+
+  // ============ paste: single-line + inside code (verbatim) ============
+  section('single-line & code paste', () => {
+    const be = mkBE('x');
+    const blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    const dt = new DataTransfer(); dt.setData('text/plain', 'yz');
+    blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    check('single-line paste inserts inline', be.serialize() === 'xyz' && be.host.querySelectorAll('.blk-row').length === 1);
+    const be2 = mkBE('```\na\n```');
+    const code = be2.host.querySelector('.blk-row[data-type="code"] .blk'); code.focus(); setCaretEnd(code);
+    const dt2 = new DataTransfer(); dt2.setData('text/plain', '\nb\nc');
+    code.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt2, bubbles: true, cancelable: true }));
+    check('paste inside code is verbatim (no explosion)', be2.host.querySelectorAll('.blk-row[data-type="code"]').length === 1 && be2.serialize().includes('a\nb\nc'));
+  });
+
+  // ============ gutter "+" adds a block and opens the menu ============
+  section('gutter + add button', () => {
+    const be = mkBE('hello');
+    const add = be.host.querySelector('.blk-add');
+    add.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('"+" inserts a new block', be.host.querySelectorAll('.blk-row').length === 2);
+    check('"+" opens the slash menu', !!document.querySelector('.blk-menu'));
+    document.querySelector('.blk-menu') && key(be.host.querySelector('.blk'), 'Escape');
+  });
+
+  // ============ date picker: empty/cleared value must not corrupt ============
+  section('date picker empty value safety', () => {
+    const be = mkBE('@date(2026-07-01)');
+    const chip = be.host.querySelector('.blk-date');
+    chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const input = be.host.querySelector('.blk-date-input');
+    input.value = '';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    check('empty date change does not corrupt meta', be.serialize() === '@date(2026-07-01)');
+    check('chip restored after empty change', !!be.host.querySelector('.blk-date'));
+    // blur without change also safe
+    const be2 = mkBE('@date(2026-07-01)');
+    be2.host.querySelector('.blk-date').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const input2 = be2.host.querySelector('.blk-date-input');
+    input2.dispatchEvent(new Event('blur', { bubbles: true }));
+    check('blur without change keeps date', be2.serialize() === '@date(2026-07-01)' && !!be2.host.querySelector('.blk-date'));
+  });
+
+  // ============ invalid calendar date renders raw label (not rolled over) ============
+  section('invalid calendar date label', () => {
+    const be = mkBE('@date(2026-02-30)');
+    const chip = be.host.querySelector('.blk-date');
+    check('invalid date shows raw value, not a rolled-over month', chip.textContent.includes('2026-02-30') && !/March/.test(chip.textContent));
+    check('invalid date still round-trips losslessly', be.serialize() === '@date(2026-02-30)');
+  });
+
+  // ============ structural edits schedule autosave (onChange) ============
+  section('structural edits fire onChange', () => {
+    let changes = 0;
+    const be = new BlockEditor(mkHost(), { initialMarkdown: 'aaa\n\nbbb', getTitles: () => [], onChange: () => (changes += 1) });
+    const second = [...be.host.querySelectorAll('.blk')][1]; second.focus(); setCaretAt(second, 0);
+    changes = 0;
+    key(second, 'Backspace'); // merge into previous
+    check('Backspace-merge schedules autosave', changes > 0);
+    const be2 = new BlockEditor(mkHost(), { initialMarkdown: '- x', getTitles: () => [], onChange: () => (changes += 1) });
+    const blk = be2.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk);
+    changes = 0;
+    key(blk, 'Tab'); // indent
+    check('Tab-indent schedules autosave', changes > 0);
+  });
+
+  // ============ Trash: soft-delete / restore / purge (db + TrashView) ============
+  const mkTrashEls = () => {
+    const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.hidden = true;
+    const panel = document.createElement('div'); panel.className = 'modal__panel'; panel.tabIndex = -1;
+    const list = document.createElement('div');
+    const empty = document.createElement('button'); empty.textContent = 'Empty trash';
+    const badge = document.createElement('span');
+    panel.append(empty, list);
+    overlay.append(panel); scratch.append(overlay, badge);
+    return { overlay, list, empty, badge };
+  };
+
+  section('trash: soft-delete excludes a note from every live query', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'Keep', content: 'has [[Trashee]] link', tags: ['x'] });
+    const b = db.createNote({ title: 'Trashee', content: 'uniquebody', tags: ['x', 'y'] });
+    check('both notes live initially', db.getAllNotes().length === 2);
+    check('backlink present before delete', db.backlinksFor(b.id).length === 1);
+    check('search finds the note before delete', db.searchNotes('uniquebody').length === 1);
+    const deleted = db.deleteNote(b.id);
+    check('deleteNote returns true for a live note', deleted === true);
+    check('getNote returns null for a trashed note', db.getNote(b.id) === null);
+    check('getAllNotes excludes trashed', db.getAllNotes().length === 1 && db.getAllNotes()[0].id === a.id);
+    check('getTrash includes the trashed note', db.getTrash().length === 1 && db.getTrash()[0].id === b.id);
+    check('search excludes trashed', db.searchNotes('uniquebody').length === 0);
+    check('resolveTitle cannot resolve a trashed note', db.resolveTitle('Trashee') === null);
+    check('allTitles excludes trashed', !db.allTitles().includes('Trashee'));
+    check('tagCounts ignores tags unique to trashed notes', (db.tagCounts().get('y') || 0) === 0 && db.tagCounts().get('x') === 1);
+    check('backlinks for a trashed target are empty', db.backlinksFor(b.id).length === 0);
+    check('deleting an already-trashed note is a no-op', db.deleteNote(b.id) === false);
+  });
+
+  section('trash: restore + purge + emptyTrash', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'A', content: 'x' });
+    const b = db.createNote({ title: 'B', content: 'y' });
+    db.deleteNote(a.id); db.deleteNote(b.id);
+    check('two notes in trash', db.getTrash().length === 2);
+    check('restoreNote brings a note back', db.restoreNote(a.id) === true && db.getNote(a.id) !== null && db.getTrash().length === 1);
+    check('restoring a live note is a no-op', db.restoreNote(a.id) === false);
+    check('purgeNote removes a note permanently', db.purgeNote(b.id) === true && db.getTrash().length === 0 && db.notes.has(b.id) === false);
+    const c = db.createNote({ title: 'C', content: 'z' });
+    db.deleteNote(c.id);
+    check('emptyTrash purges remaining trashed notes', db.emptyTrash() === 1 && db.getTrash().length === 0);
+    check('emptyTrash on an empty trash returns 0', db.emptyTrash() === 0);
+  });
+
+  section('TrashView: badge, render, restore + purge buttons', () => {
+    const db = new Database();
+    const els = mkTrashEls();
+    let opened = null;
+    const tv = new TrashView(els, db, (id) => (opened = id));
+    check('badge hidden when trash is empty', els.badge.hidden === true && els.badge.textContent === '');
+    const n = db.createNote({ title: 'Doomed', content: 'bye' });
+    db.deleteNote(n.id);
+    check('badge shows the trash count', els.badge.hidden === false && els.badge.textContent === '1');
+    tv.show();
+    check('show() reveals overlay and renders the item', els.overlay.hidden === false && !!els.list.querySelector('.trash-item'));
+    els.list.querySelector('[data-act="restore"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('restore button restores, opens the note, and closes the overlay', db.getNote(n.id) !== null && opened === n.id && els.overlay.hidden === true);
+    db.deleteNote(n.id);
+    tv.show();
+    const origConfirm = window.confirm; window.confirm = () => true;
+    try {
+      els.list.querySelector('[data-act="purge"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    } finally { window.confirm = origConfirm; }
+    check('purge button permanently deletes the note', db.notes.has(n.id) === false && db.getTrash().length === 0);
+    check('empty-state message shows when trash is empty', /empty/i.test(els.list.textContent));
+    tv.close();
+    check('close() hides the overlay', els.overlay.hidden === true);
+  });
+
+  // ---- review fixes: durability, trashed-title lookup, seed gate ----
+  await (async () => {
+    const name = 'db.flush() drains the write queue';
+    try {
+      const db = new Database();
+      db.createNote({ title: 'Flush me', content: 'x' });
+      await db.flush();
+      check(name, db._writeQueue.size === 0);
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  section('trash: findTrashedByTitle powers wikilink-restore instead of duplicate', () => {
+    const db = new Database();
+    const n = db.createNote({ title: 'Ghost', content: 'boo' });
+    check('findTrashedByTitle null for a live note', db.findTrashedByTitle('Ghost') === null);
+    db.deleteNote(n.id);
+    check('findTrashedByTitle finds a trashed note (case-insensitive)', db.findTrashedByTitle('ghost')?.id === n.id);
+    check('findTrashedByTitle null for an absent title', db.findTrashedByTitle('Nope') === null);
+    check('resolveTitle still ignores trashed (why the Trash must be consulted)', db.resolveTitle('Ghost') === null);
+  });
+
+  section('trash: all-trashed vault keeps notes in the store (first-run seed gate)', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'A', content: 'x' });
+    db.deleteNote(a.id);
+    check('getAllNotes() is empty when everything is trashed', db.getAllNotes().length === 0);
+    check('notes.size still counts trashed notes, so seeding is gated off', db.notes.size === 1);
+  });
+
+  section('TrashView: focus enters the dialog on open and is restored on close', () => {
+    const db = new Database();
+    const els = mkTrashEls();
+    const tv = new TrashView(els, db, () => {});
+    const trigger = document.createElement('button'); scratch.appendChild(trigger); trigger.focus();
+    check('trigger focused before open', document.activeElement === trigger);
+    tv.show();
+    const panel = els.overlay.querySelector('.modal__panel');
+    check('focus moved into the dialog panel on open', document.activeElement === panel);
+    tv.close();
+    check('focus restored to the trigger on close', document.activeElement === trigger);
+    trigger.remove();
+  });
+
+  section('TrashView: empty trash focuses the dialog, not the disabled Empty button', () => {
+    const db = new Database();
+    const els = mkTrashEls();
+    const tv = new TrashView(els, db, () => {});
+    tv.show();
+    const panel = els.overlay.querySelector('.modal__panel');
+    check('Empty button disabled when trash empty', els.empty.disabled === true);
+    check('focus is on the panel, not the disabled button', document.activeElement === panel);
+    tv.close();
+  });
+
+  section('TrashView: a purge rebuild keeps keyboard focus inside the dialog', () => {
+    const db = new Database();
+    const els = mkTrashEls();
+    const tv = new TrashView(els, db, () => {});
+    const n1 = db.createNote({ title: 'One', content: 'a' });
+    const n2 = db.createNote({ title: 'Two', content: 'b' });
+    db.deleteNote(n1.id); db.deleteNote(n2.id);
+    tv.show();
+    const purgeBtn = els.list.querySelector('.trash-item [data-act="purge"]');
+    purgeBtn.focus();
+    check('purge button focused', document.activeElement === purgeBtn);
+    const origConfirm = window.confirm; window.confirm = () => true;
+    try { purgeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
+    finally { window.confirm = origConfirm; }
+    check('one item purged, one remains', db.getTrash().length === 1);
+    check('focus stayed inside the dialog after the list rebuilt', els.overlay.contains(document.activeElement));
+    tv.close();
+  });
+
+  // ============ Round 2: command palette ============
+  const mkPaletteEls = () => {
+    const overlay = document.createElement('div'); overlay.className = 'modal palette'; overlay.hidden = true;
+    const panel = document.createElement('div'); panel.className = 'modal__panel'; panel.tabIndex = -1;
+    const input = document.createElement('input'); input.type = 'text';
+    const list = document.createElement('div');
+    panel.append(input, list); overlay.append(panel); scratch.appendChild(overlay);
+    return { overlay, input, list };
+  };
+  const typeInput = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+
+  section('command palette: notes + commands, filter, keyboard activate', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'Alpha Notes', content: '# Heading One\n\ntext' });
+    db.createNote({ title: 'Beta Plan', content: 'no heading' });
+    let ran = null; let opened = null;
+    const cmds = [{ id: 'theme', title: 'Toggle theme', hint: 'x', icon: '🌓', run: () => (ran = 'theme') }];
+    const els = mkPaletteEls();
+    const cp = new CommandPalette(els, { getNotes: () => db.getAllNotes(), getCommands: () => cmds, onOpenNote: (id) => (opened = id) });
+    cp.show();
+    check('palette opens', els.overlay.hidden === false);
+    check('empty palette lists notes + commands', els.list.querySelectorAll('.palette__item').length >= 3);
+    typeInput(els.input, 'alpha');
+    check('fuzzy filters to Alpha and highlights', /Alpha/.test(els.list.textContent) && !!els.list.querySelector('mark'));
+    els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    check('Enter opens top note + closes palette', opened === a.id && els.overlay.hidden === true);
+    // > commands
+    cp.show(); typeInput(els.input, '>');
+    check('"> " lists commands only', els.list.textContent.includes('Toggle theme'));
+    els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    check('Enter runs the command', ran === 'theme');
+    // # headings
+    opened = null;
+    cp.show(); typeInput(els.input, '#head');
+    check('"#" searches headings', /Heading One/.test(els.list.textContent));
+    els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    check('selecting a heading opens its note', opened === a.id);
+    // ArrowDown moves selection
+    cp.show(); typeInput(els.input, '');
+    const activeBefore = els.list.querySelector('.palette__item--active');
+    els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    const activeAfter = els.list.querySelector('.palette__item--active');
+    check('ArrowDown moves the active selection', !!activeAfter && activeAfter !== activeBefore);
+    // click activates
+    let clickOpened = null;
+    cp.onOpenNote = (id) => (clickOpened = id);
+    typeInput(els.input, 'beta');
+    els.list.querySelector('.palette__item').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('clicking a note item opens it', clickOpened !== null && els.overlay.hidden === true);
+  });
+
+  // ============ Round 2: sidebar sort + pin ============
+  const mkListEls = () => {
+    const list = document.createElement('div');
+    const tags = document.createElement('div');
+    const count = document.createElement('span');
+    const search = document.createElement('input');
+    const sort = document.createElement('select');
+    ['updated', 'created', 'title'].forEach((v) => { const o = document.createElement('option'); o.value = v; sort.appendChild(o); });
+    scratch.append(list, tags, count, search, sort);
+    return { list, tags, count, search, sort };
+  };
+  const listTitles = (els) => [...els.list.querySelectorAll('.note-item__title')].map((e) => e.textContent);
+
+  section('sidebar: sort modes + pinned float to top', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'Banana', content: 'x', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
+    db.createNote({ title: 'Apple', content: 'y', createdAt: '2026-01-02T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' });
+    const c = db.createNote({ title: 'Cherry', content: 'z', createdAt: '2026-01-03T00:00:00Z', updatedAt: '2026-01-03T00:00:00Z' });
+    let toggled = null;
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: (id) => (toggled = id) });
+    nl.render();
+    check('default sort = updated (newest first)', listTitles(els)[0] === 'Cherry');
+    els.sort.value = 'title'; els.sort.dispatchEvent(new Event('change', { bubbles: true }));
+    check('title sort orders A→Z', JSON.stringify(listTitles(els)) === JSON.stringify(['Apple', 'Banana', 'Cherry']));
+    db.setPinned(c.id, true); nl.render();
+    check('pinned note floats to the top under title sort', listTitles(els)[0] === 'Cherry');
+    check('pinned item carries the pinned class', els.list.querySelector(`.note-item[data-id="${c.id}"]`).classList.contains('note-item--pinned'));
+    els.list.querySelector('.note-item [data-pin]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('clicking the pin button invokes onTogglePin', toggled === c.id);
+    check('opening still works (main click, not pin)', (() => { let o = null; nl.onOpen = (id) => (o = id); els.list.querySelector('.note-item__main').dispatchEvent(new MouseEvent('click', { bubbles: true })); return o !== null; })());
+  });
+
+  section('sidebar: scoped search filters + highlight', () => {
+    const db = new Database();
+    db.createNote({ title: 'Work log', content: 'a', tags: ['work'] });
+    db.createNote({ title: 'Home stuff', content: 'b', tags: ['home'] });
+    db.createNote({ title: 'Cover', content: 'c', banner: { type: 'gradient', value: 'linear-gradient(120deg,#000,#fff)', position: 50 } });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} });
+    nl.render();
+    const setQ = (q) => { els.search.value = q; els.search.dispatchEvent(new Event('input', { bubbles: true })); };
+    setQ('tag:work');
+    check('tag: filter narrows the list', els.list.querySelectorAll('.note-item').length === 1 && /Work log/.test(els.list.textContent));
+    setQ('has:banner');
+    check('has:banner filter', els.list.querySelectorAll('.note-item').length === 1 && /Cover/.test(els.list.textContent));
+    setQ('in:title home');
+    check('in:title text match', els.list.querySelectorAll('.note-item').length === 1 && /Home/.test(els.list.textContent));
+    setQ('work');
+    check('free-text query highlights a match', !!els.list.querySelector('mark'));
+  });
+
+  // ============ Round 2: templates ============
+  section('templates: build note content with a date block', () => {
+    const daily = TEMPLATES.find((t) => t.id === 'daily').build();
+    check('daily template title is the date', /^\d{4}-\d{2}-\d{2}$/.test(daily.title));
+    check('daily template parses to include a date block', parse(daily.content).some((b) => b.type === 'date'));
+    const meeting = TEMPLATES.find((t) => t.id === 'meeting').build();
+    check('meeting template has Action items', /Action items/.test(meeting.content));
+    check('project template has a Milestones heading', /## Milestones/.test(TEMPLATES.find((t) => t.id === 'project').build().content));
+  });
+
+  // ============ Round 2 review fixes ============
+  section('editor: switching notes flushes the outgoing note (no lost edits)', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'A', content: 'aaa' });
+    const b = db.createNote({ title: 'B', content: 'bbb' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const editor = new Editor(container, db, { openNote: () => {}, openOrCreateByTitle: () => {}, deleteNote: () => {}, togglePin: () => {} });
+    db.subscribe(() => editor.refresh());
+    editor.open(a.id);
+    const blk = container.querySelector('.blk'); blk.focus();
+    type(blk, 'A EDITED');
+    editor.open(b.id); // switch WITHOUT waiting for the 400ms autosave debounce
+    check('outgoing note A was flushed on switch', db.getNote(a.id).content.includes('A EDITED'));
+    check('editor now shows note B', editor.currentId === b.id && db.getNote(b.id).content === 'bbb');
+  });
+
+  section('sidebar: substring highlight does not split HTML entities', () => {
+    const db = new Database();
+    db.createNote({ title: 'Zzz', content: 'R&D lab' });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} });
+    els.search.value = '&'; els.search.dispatchEvent(new Event('input', { bubbles: true }));
+    const html = els.list.innerHTML;
+    check('entity stays intact around the highlight', html.includes('<mark>&amp;</mark>'));
+    check('no broken/split entity in output', !html.includes('&<mark>') && !html.includes('</mark>amp;'));
+  });
+
+  section('command palette: aria-activedescendant + indented fences do not hide headings', () => {
+    const db = new Database();
+    const fence = String.fromCharCode(96, 96, 96);
+    db.createNote({ title: 'Doc', content: 'intro\n    ' + fence + '\n# Deep Heading\nmore' });
+    const els = mkPaletteEls();
+    const cp = new CommandPalette(els, { getNotes: () => db.getAllNotes(), getCommands: () => [], onOpenNote: () => {} });
+    cp.show();
+    typeInput(els.input, 'doc');
+    check('active option is exposed via aria-activedescendant', els.input.getAttribute('aria-activedescendant') === 'palette-opt-0');
+    typeInput(els.input, '#deep');
+    check('indented ``` does not hide a real heading', /Deep Heading/.test(els.list.textContent));
+    typeInput(els.input, 'zzznomatch');
+    check('aria-activedescendant cleared when there are no results', els.input.getAttribute('aria-activedescendant') === null);
+    cp.close();
+  });
+
+  section('modal: inert is reference-counted across stacked modals', () => {
+    const app = document.createElement('div'); app.id = 'app'; scratch.appendChild(app);
+    try {
+      const mk = () => { const o = document.createElement('div'); o.className = 'modal'; o.hidden = true; const p = document.createElement('div'); p.className = 'modal__panel'; p.tabIndex = -1; o.appendChild(p); scratch.appendChild(o); return o; };
+      const m1 = new Modal(mk());
+      const m2 = new Modal(mk());
+      m1.open();
+      check('inert set when the first modal opens', app.hasAttribute('inert'));
+      m2.open();
+      check('inert stays set when a second modal opens', app.hasAttribute('inert'));
+      m1.close();
+      check('inert retained while one modal remains open', app.hasAttribute('inert'));
+      m2.close();
+      check('inert removed only after the last modal closes', !app.hasAttribute('inert'));
+    } finally { app.remove(); }
+  });
+
+  // ============ Round 3: image blocks ============
+  section('image block: renders a safe <img>, selects + deletes', () => {
+    const be = mkBE('![a cat](https://example.com/cat.jpg)');
+    const img = be.host.querySelector('.blk-row[data-type="image"] img.blk-img');
+    check('image block renders an <img>', !!img && img.getAttribute('src') === 'https://example.com/cat.jpg');
+    check('image alt is set', img.alt === 'a cat');
+    be.host.querySelector('.blk-row[data-type="image"] .blk').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    check('image selectable by click', be.host.querySelector('.blk-row--selected')?.dataset.type === 'image');
+    be.host.querySelector('.blk-row').dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    check('image deleted on Backspace', !be.host.querySelector('.blk-row[data-type="image"]'));
+  });
+
+  section('image block: unsafe src is not loaded (allowlist)', () => {
+    const be = mkBE('![x](javascript:alert)');
+    check('unsafe image still parses as an image block', !!be.host.querySelector('.blk-row[data-type="image"]'));
+    check('unsafe src is NOT rendered as <img>', !be.host.querySelector('img.blk-img'));
+    check('unsafe image round-trips as text losslessly', be.serialize() === '![x](javascript:alert)');
+  });
+
+  await (async () => {
+    const name = 'image block: pasting an image file inserts a downscaled image';
+    try {
+      const be = mkBE('');
+      const blk = be.host.querySelector('.blk'); blk.focus();
+      const c = document.createElement('canvas'); c.width = 400; c.height = 300;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#22aa55'; ctx.fillRect(0, 0, 400, 300);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const file = new File([blob], 'pic.png', { type: 'image/png' });
+      const dt = new DataTransfer(); dt.items.add(file);
+      blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const img = be.host.querySelector('img.blk-img');
+      check(name, !!img && /^data:image\/jpeg/.test(img.getAttribute('src')));
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  // ============ Round 3: callouts ============
+  section('callout: [!warning] blockquote renders a callout box', () => {
+    const be = mkBE('> [!warning] be careful');
+    const box = be.host.querySelector('.blk-callout');
+    check('callout box rendered', !!box);
+    check('callout shows kind label + body', /Warning/.test(box.textContent) && /be careful/.test(box.textContent));
+    check('callout carries its kind class', !!be.host.querySelector('.blk--callout-warning'));
+    check('callout round-trips as a blockquote', be.serialize() === '> [!warning] be careful');
+    const blk = be.host.querySelector('.blk-row[data-type="quote"] .blk'); blk.focus();
+    check('focused callout shows raw markdown', blk.textContent.includes('[!warning]'));
+  });
+
+  section('slash menu: callout + table inserters', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus(); type(blk, '/callout'); key(blk, 'Enter');
+    check('slash "callout" -> blockquote with [!note]', be.serialize().startsWith('> [!note]'));
+  });
+
+  // ============ Round 3: block multi-select ============
+  section('block multi-select: shift-click range + delete', () => {
+    const be = mkBE('alpha\n\nbeta\n\ngamma');
+    check('three blocks', be.host.querySelectorAll('.blk-row').length === 3);
+    be.host.querySelectorAll('.blk-row')[0].querySelector('.blk').focus();
+    be.host.querySelectorAll('.blk-row')[2].querySelector('.blk')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey: true }));
+    check('shift-click selects the whole range', be.host.querySelectorAll('.blk-row--selected').length === 3);
+    check('host is focused so keyboard ops actually reach the editor', document.activeElement === be.host);
+    be.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    check('Backspace deletes all selected blocks', be.serialize() === '' && be.host.querySelectorAll('.blk-row').length === 1);
+  });
+
+  section('block multi-select: Escape clears the selection', () => {
+    const be = mkBE('one\n\ntwo');
+    be.host.querySelectorAll('.blk-row')[0].querySelector('.blk').focus();
+    be.host.querySelectorAll('.blk-row')[1].querySelector('.blk')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey: true }));
+    check('range selected', be.host.querySelectorAll('.blk-row--selected').length === 2);
+    be.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    check('Escape clears the selection', be.host.querySelectorAll('.blk-row--selected').length === 0);
+    check('blocks intact after clearing selection', be.serialize() === 'one\n\ntwo');
+  });
+
+  section('block multi-select: undo clears selection (no pinned isEditing)', () => {
+    const be = mkBE('a\n\nb\n\nc');
+    const blk = be.host.querySelector('.blk'); blk.focus(); setCaretEnd(blk); key(blk, 'Enter'); // make an undo step
+    be.host.querySelectorAll('.blk-row')[0].querySelector('.blk').focus();
+    be.host.querySelectorAll('.blk-row')[1].querySelector('.blk')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey: true }));
+    check('selection active + isEditing true before undo', be.host.querySelectorAll('.blk-row--selected').length >= 1 && be.isEditing());
+    be.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+    check('undo clears the selection', be.host.querySelectorAll('.blk-row--selected').length === 0);
+    check('isEditing() no longer pinned true after undo', be.isEditing() === false);
+  });
+
+  await (async () => {
+    const name = 'image block: alt with "]" is sanitized so it round-trips';
+    try {
+      const be = mkBE('');
+      const blk = be.host.querySelector('.blk'); blk.focus();
+      const c = document.createElement('canvas'); c.width = 40; c.height = 40; c.getContext('2d').fillRect(0, 0, 40, 40);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const file = new File([blob], 'a]b.png', { type: 'image/png' });
+      const dt = new DataTransfer(); dt.items.add(file);
+      blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const md = be.serialize();
+      check(name, /!\[a b\]\(data:image\/jpeg/.test(md) && parse(md).some((b) => b.type === 'image'));
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
+
+  // ============ nested notes: outline tree ============
+  section('note tree: nesting renders depth + disclosure; collapse hides children', () => {
+    const db = new Database();
+    const p = db.createNote({ title: 'Parent', content: 'x' });
+    const c = db.createNote({ title: 'Child', content: 'y' });
+    db.setParent(c.id, p.id);
+    const els = mkListEls();
+    let newChildOf = null;
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: (pid) => (newChildOf = pid) });
+    nl.render();
+    check('both notes shown as tree rows', els.list.querySelectorAll('.note-item').length === 2);
+    const parentRow = els.list.querySelector(`.note-item[data-id="${p.id}"]`);
+    const childRow = els.list.querySelector(`.note-item[data-id="${c.id}"]`);
+    check('parent has a disclosure twist', !!parentRow.querySelector('[data-twist]'));
+    check('child is indented (depth 1)', childRow.style.getPropertyValue('--depth') === '1');
+    parentRow.querySelector('[data-twist]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('collapsing the parent hides the child', !els.list.querySelector(`.note-item[data-id="${c.id}"]`));
+    check('collapse state persisted to config', (db.config.collapsed || []).includes(p.id));
+    els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('expanding shows the child again', !!els.list.querySelector(`.note-item[data-id="${c.id}"]`));
+    els.list.querySelector(`.note-item[data-id="${p.id}"] [data-add]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('the ＋ button invokes onNewChild(parent)', newChildOf === p.id);
+  });
+
+  section('note tree: dragging one note onto another reparents it', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'A', content: '' });
+    const b = db.createNote({ title: 'B', content: '' });
+    const els = mkListEls();
+    let reparented = null;
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    nl.render();
+    const rowA = els.list.querySelector(`.note-item[data-id="${a.id}"]`);
+    const rowB = els.list.querySelector(`.note-item[data-id="${b.id}"]`);
+    const dt = new DataTransfer();
+    rowA.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    rowB.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    rowB.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    check('drop onto another note reparents under it', reparented && reparented[0] === a.id && reparented[1] === b.id);
+  });
+
+  section('note tree: search flattens (no indent / no twist)', () => {
+    const db = new Database();
+    const p = db.createNote({ title: 'Alpha parent', content: 'x' });
+    const c = db.createNote({ title: 'Alpha child', content: 'y' });
+    db.setParent(c.id, p.id);
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    els.search.value = 'alpha'; els.search.dispatchEvent(new Event('input', { bubbles: true }));
+    const rows = [...els.list.querySelectorAll('.note-item')];
+    check('both alpha notes match (flat)', rows.length === 2);
+    check('search rows are not indented', rows.every((r) => (r.style.getPropertyValue('--depth') || '0') === '0'));
+    check('search rows have no disclosure twist', !els.list.querySelector('[data-twist]'));
+  });
+
+  section('note tree: reveal expands a collapsed ancestor', () => {
+    const db = new Database();
+    const p = db.createNote({ title: 'P', content: '' });
+    const c = db.createNote({ title: 'C', content: '', parentId: p.id });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('child hidden after collapse', !els.list.querySelector(`.note-item[data-id="${c.id}"]`));
+    nl.reveal(c.id);
+    check('reveal re-expands so the child is visible', !!els.list.querySelector(`.note-item[data-id="${c.id}"]`));
+  });
+
+  section('note tree: stale collapsed ids are pruned when a parent loses its children', () => {
+    const db = new Database();
+    const p = db.createNote({ title: 'P', content: '' });
+    const c = db.createNote({ title: 'C', content: '', parentId: p.id });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('parent collapsed + persisted', (db.config.collapsed || []).includes(p.id));
+    db.purgeNote(c.id); // parent no longer has children
+    nl.render();
+    check('stale collapsed id pruned from config', !(db.config.collapsed || []).includes(p.id));
+  });
+
+  section('note tree: dropping on empty list space moves a note to top level', () => {
+    const db = new Database();
+    const p = db.createNote({ title: 'P', content: '' });
+    const c = db.createNote({ title: 'C', content: '', parentId: p.id });
+    const els = mkListEls();
+    let reparented = null;
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    nl.render();
+    const rowC = els.list.querySelector(`.note-item[data-id="${c.id}"]`);
+    const dt = new DataTransfer();
+    rowC.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    els.list.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    check('drop on genuine empty space reparents to top level', reparented && reparented[0] === c.id && reparented[1] === null);
+  });
+
+  // ============ Round 4: settings + graph keyboard ============
+  section('settings: changing a control persists to config and applies', () => {
+    const db = new Database();
+    const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.hidden = true;
+    const panel = document.createElement('div'); panel.className = 'modal__panel'; panel.tabIndex = -1;
+    const form = document.createElement('div');
+    panel.appendChild(form); overlay.appendChild(panel); scratch.appendChild(overlay);
+    let applied = null;
+    const sv = new SettingsView({ overlay, form }, db, (s) => (applied = s));
+    sv.show();
+    check('settings renders its controls', !!form.querySelector('#set-font') && !!form.querySelector('#set-theme') && !!form.querySelector('#set-autosave'));
+    const fontSel = form.querySelector('#set-font'); fontSel.value = 'l'; fontSel.dispatchEvent(new Event('change', { bubbles: true }));
+    check('font change persisted to config', db.config.fontScale === 'l');
+    check('onApply called with normalized settings', applied && applied.fontScale === 'l');
+    const auto = form.querySelector('#set-autosave'); auto.value = '800'; auto.dispatchEvent(new Event('change', { bubbles: true }));
+    check('autosave change persisted as a number', db.config.autosaveMs === 800);
+    sv.close();
+    check('settings modal closes', overlay.hidden === true);
+  });
+
+  section('graph: nodes are keyboard-focusable and Enter opens them', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'GraphA', content: 'links to [[GraphB]]' });
+    db.createNote({ title: 'GraphB', content: 'x' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    let opened = null;
+    const gv = new GraphView(container, db, (id) => (opened = id));
+    gv.render();
+    const node = container.querySelector('.graph__node-g');
+    check('node is focusable (tabindex 0, role button)', node.getAttribute('tabindex') === '0' && node.getAttribute('role') === 'button');
+    check('node has an aria-label', /Open note/.test(node.getAttribute('aria-label') || ''));
+    node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    check('Enter on a focused node opens it', opened !== null);
+  });
+
+  // ============ performance: virtualization + graph budget ============
+  section('note list: virtualizes a large list (only a window is rendered)', () => {
+    const db = new Database();
+    for (let i = 0; i < 200; i++) db.createNote({ title: 'N' + i, content: 'body ' + i });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    const rendered = els.list.querySelectorAll('.note-item').length;
+    check('only a window of rows is rendered (not all 200)', rendered > 0 && rendered < 60);
+    check('windowing is active', !!nl._window && nl._window.virtualize === true);
+    check('a spacer pad reserves the off-screen height', !!els.list.querySelector('.note-list__pad'));
+    check('footer count reflects the full total', els.count.textContent === '200 notes');
+  });
+
+  section('note list: small lists are not virtualized (all rendered)', () => {
+    const db = new Database();
+    for (let i = 0; i < 12; i++) db.createNote({ title: 'S' + i, content: '' });
+    const els = mkListEls();
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    check('all rows rendered below the threshold', els.list.querySelectorAll('.note-item').length === 12);
+    check('no windowing pads below threshold', !els.list.querySelector('.note-list__pad') && nl._window.virtualize === false);
+  });
+
+  section('graph: a large vault is capped to the most-connected nodes', () => {
+    const db = new Database();
+    for (let i = 0; i < 320; i++) db.createNote({ title: 'G' + i, content: '' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    gv.render();
+    check('graph renders at most the node budget (300)', container.querySelectorAll('.graph__node-g').length === 300);
+    check('graph shows a "most-connected of N" notice', /most-connected of 320/.test(container.textContent));
+  });
+
+  section('graph: the active note is always kept in a capped graph', () => {
+    const db = new Database();
+    let last;
+    for (let i = 0; i < 320; i++) last = db.createNote({ title: 'A' + i, content: '' }).id;
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    gv.render(last); // active = a degree-0 node that would otherwise be dropped
+    check('active note node is present despite the budget', !!container.querySelector(`.graph__node-g[data-id="${last}"]`));
+    check('keeping the active note does not exceed the budget (still 300)', container.querySelectorAll('.graph__node-g').length === 300);
+    check('notice reports 300, not 301', /most-connected of 320/.test(container.textContent) && /showing 300/.test(container.textContent));
+  });
+
+  section('graph: a null title does not crash the render', () => {
+    const db = new Database();
+    db.createNote({ title: 'A', content: '[[B]]' });
+    const b = db.createNote({ title: 'B', content: '' });
+    b.title = null; // simulate a legacy/imported note whose title is literally null
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    let threw = false;
+    try { gv.render(); } catch { threw = true; }
+    check('graph renders a null-title note without throwing', !threw && container.querySelectorAll('.graph__node-g').length >= 1);
+  });
+
+  section('note list: revealing an off-screen note scrolls it into the window', () => {
+    const db = new Database();
+    const ids = [];
+    for (let i = 0; i < 200; i++) ids.push(db.createNote({ title: 'V' + i, content: '', updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }).id);
+    const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    const target = ids[0]; // oldest -> bottom of the updated-desc order
+    check('target not initially rendered (off-screen)', !els.list.querySelector(`.note-item[data-id="${target}"]`));
+    nl.reveal(target);
+    check('reveal scrolls the target into the window', !!els.list.querySelector(`.note-item[data-id="${target}"]`) && els.list.scrollTop > 0);
+  });
+
+  section('note list: a stale over-scroll is clamped (no blank list)', () => {
+    const db = new Database();
+    for (let i = 0; i < 200; i++) db.createNote({ title: 'C' + i, content: '' });
+    const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    nl.render();
+    els.list.scrollTop = 999999; // simulate a stale over-scroll (e.g. after collapsing a big subtree)
+    nl.render();
+    check('list still renders rows after an over-scroll (clamped)', els.list.querySelectorAll('.note-item').length > 0);
+  });
+
+  section('note list: dropping on a virtualization pad moves to top level', () => {
+    const db = new Database();
+    for (let i = 0; i < 200; i++) db.createNote({ title: 'D' + i, content: '' });
+    const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
+    let reparented = null;
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    nl.render();
+    const row = els.list.querySelector('.note-item');
+    const pad = els.list.querySelector('.note-list__pad');
+    check('a virtualization pad exists', !!pad);
+    const dt = new DataTransfer();
+    row.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+    pad.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    check('drop on a pad reparents to top level', reparented && reparented[1] === null);
+  });
+
+  // ============ editable tables ============
+  section('table: markdown renders an editable grid', () => {
+    const be = mkBE('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    const cells = be.host.querySelectorAll('.blk-table th, .blk-table td');
+    check('table renders 4 cells', cells.length === 4);
+    check('header cells are editable', be.host.querySelector('.blk-table th')?.getAttribute('contenteditable') === 'true');
+    check('table shell is non-editable', be.host.querySelector('.blk-row[data-type="table"] .blk')?.getAttribute('contenteditable') === 'false');
+  });
+
+  section('table: editing a cell updates the serialized markdown', () => {
+    const be = mkBE('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    const cell = be.host.querySelector('.blk-table td'); // first body cell ('1')
+    cell.textContent = 'X';
+    cell.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    check('cell edit reflected in serialize', /\|\s*X\s*\|/.test(be.serialize()));
+  });
+
+  section('table: tools add a row and a column', () => {
+    const be = mkBE('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    be.host.querySelector('[data-tbl="addrow"]').click();
+    check('add row -> 3 rows', be.host.querySelectorAll('.blk-table tr').length === 3);
+    be.host.querySelector('[data-tbl="addcol"]').click();
+    check('add col -> 3 columns', be.host.querySelectorAll('.blk-table tr')[0].children.length === 3);
+    be.host.querySelector('[data-tbl="delrow"]').click();
+    check('remove row -> back to 2 rows', be.host.querySelectorAll('.blk-table tr').length === 2);
+  });
+
+  section('table: Tab past the last cell appends a row', () => {
+    const be = mkBE('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    const cells = be.host.querySelectorAll('.blk-table th, .blk-table td');
+    const last = cells[cells.length - 1];
+    last.focus();
+    last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    check('Tab at last cell adds a row', be.host.querySelectorAll('.blk-table tr').length === 3);
+  });
+
+  section('table: slash command inserts a table', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, '/table');
+    key(blk, 'Enter');
+    check('slash "table" creates a table block', !!be.host.querySelector('.blk-row[data-type="table"] .blk-table'));
+    check('new table has 2x2 grid', be.host.querySelectorAll('.blk-table th, .blk-table td').length === 4);
+  });
+
+  section('table: selectable + deletable via the drag handle', () => {
+    const be = mkBE('a\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nb');
+    const handle = be.host.querySelector('.blk-row[data-type="table"] .blk-handle');
+    handle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('table selected via handle', be.host.querySelector('.blk-row--selected')?.dataset.type === 'table');
+    be.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    check('table deleted on Backspace when selected', !be.host.querySelector('.blk-row[data-type="table"]'));
+  });
+
+  // ============ toggles (collapsible <details>) ============
+  section('toggle: a details block renders as a collapsible', () => {
+    const be = mkBE('<details>\n<summary>More</summary>\n\nhidden body\n\n</details>');
+    const row = be.host.querySelector('.blk-row[data-type="raw"]');
+    check('renders a <details>', !!row?.querySelector('details'));
+    check('renders a <summary>', /More/.test(row?.querySelector('summary')?.textContent || ''));
+    check('toggle round-trips through serialize', /<details>/.test(be.serialize()) && /<\/details>/.test(be.serialize()));
+  });
+
+  section('toggle: slash command inserts a collapsible', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, '/toggle');
+    key(blk, 'Enter');
+    // Focused block shows raw source; blur it to render the details.
+    be.serialize();
+    check('slash "toggle" scaffolds a <details> source', /<details>/.test(be.serialize()));
+  });
+
+  // ============ a11y fixes ============
+  section('todo checkbox is a keyboard-operable, labeled control', () => {
+    const be = mkBE('- [ ] task');
+    const box = be.host.querySelector('.blk-check');
+    check('checkbox is a real <button>', !!box && box.tagName === 'BUTTON');
+    check('checkbox has an accessible name', box.getAttribute('aria-label') === 'Toggle to-do');
+    check('checkbox exposes role + unchecked state', box.getAttribute('role') === 'checkbox' && box.getAttribute('aria-checked') === 'false');
+    box.dispatchEvent(new MouseEvent('click', { bubbles: true })); // native buttons also fire this on Space/Enter
+    check('activating toggles checked + aria-checked', be.serialize().includes('[x]') && box.getAttribute('aria-checked') === 'true');
+  });
+
+  section('tag filter chip exposes aria-pressed toggle state', () => {
+    const els = mkListEls();
+    const db = new Database();
+    db.createNote({ title: 'Tagged', content: '', tags: ['work'] });
+    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} });
+    nl.render();
+    const chip = els.tags.querySelector('.tag-chip[data-tag="work"]');
+    check('chip starts aria-pressed=false', !!chip && chip.getAttribute('aria-pressed') === 'false');
+    chip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('chip becomes aria-pressed=true when active', els.tags.querySelector('.tag-chip[data-tag="work"]').getAttribute('aria-pressed') === 'true');
+  });
+
+  section('block editor preserves undo history across a same-note rebuild', () => {
+    const be = mkBE('one');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, 'one edited'); // creates an undo step
+    // Simulate editor.js rebuilding the block editor for the SAME note (e.g. a tag
+    // was added), carrying history across so it isn't wiped.
+    const be2 = new BlockEditor(mkHost(), { initialMarkdown: be.serialize(), history: be.exportHistory(), getTitles: () => [] });
+    const before = be2.serialize();
+    be2.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+    check('undo still reverts after the rebuild', before === 'one edited' && be2.serialize() === 'one');
+  });
+
+  const failures = results.filter((r) => r.startsWith('FAIL')).length;
+  const summary = failures === 0 ? `ALL PASS (${results.length})` : `FAILURES: ${failures} of ${results.length}`;
+  document.getElementById('out').textContent = summary + '\n' + results.join('\n');
+  document.title = summary;
+</script>
+</body>
+</html>
