@@ -1,5 +1,7 @@
 # 📝 My Notes
 
+[![Deploy](https://github.com/DaveHomeAssist/noteforge/actions/workflows/deploy.yml/badge.svg)](https://github.com/DaveHomeAssist/noteforge/actions/workflows/deploy.yml)
+
 **Live demo → https://systembydave.com/noteforge/** &nbsp;·&nbsp; mirror: https://davehomeassist.github.io/noteforge/
 
 A local-first personal notes app inspired by Obsidian & Notion. Markdown notes
