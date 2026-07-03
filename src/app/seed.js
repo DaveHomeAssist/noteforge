@@ -6,7 +6,7 @@ export const sampleNotes = [
     title: 'Welcome',
     tags: ['meta', 'start-here'],
     banner: { type: 'gradient', value: 'linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)', position: 50 },
-    content: `# Welcome to My Notes 👋
+    content: `# Welcome to NoteForge 👋
 
 This is a local-first, markdown notes app inspired by Obsidian & Notion.
 

@@ -354,10 +354,10 @@ ok('a legacy stored theme still wins on upgrade', normalizeSettings({ ...new Dat
 
 // --- PWA manifest is valid + installable-shaped ---
 const manifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
-ok('manifest has a name', manifest.name === 'My Notes');
+ok('manifest has a name', manifest.name === 'NoteForge');
 ok('manifest display is standalone', manifest.display === 'standalone');
 // Relative (./) so the manifest resolves correctly under any deploy base — root
-// in dev, and the GitHub Pages sub-path (/my-notes-app/) in production.
+// in dev, and the /noteforge/ sub-path in production.
 ok('manifest has relative start_url + scope', manifest.start_url === './' && manifest.scope === './');
 ok('manifest has at least one typed icon', Array.isArray(manifest.icons) && manifest.icons.length >= 1 && manifest.icons.every((i) => i.src && i.type));
 ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.startsWith('./')));

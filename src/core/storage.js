@@ -9,6 +9,10 @@
 // - If IndexedDB is unavailable (private mode, ancient browser), we transparently
 //   fall back to the old localStorage backend behind the same async API.
 
+// NOTE: these storage keys are deliberately kept as 'my-notes-app' even though the
+// app is now branded "NoteForge" — renaming them would point at a fresh, empty
+// IndexedDB and orphan every existing user's notes. The display name is cosmetic;
+// the storage identity must stay stable.
 const NS = 'my-notes-app:'; // legacy localStorage namespace (migration source)
 const DB_NAME = 'my-notes-app';
 const STORE = 'kv';

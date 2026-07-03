@@ -1,4 +1,4 @@
-# 📝 My Notes
+# 📝 NoteForge
 
 [![Deploy](https://github.com/DaveHomeAssist/noteforge/actions/workflows/deploy.yml/badge.svg)](https://github.com/DaveHomeAssist/noteforge/actions/workflows/deploy.yml)
 

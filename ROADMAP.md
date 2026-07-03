@@ -1,4 +1,4 @@
-# 🗺️ My Notes — Roadmap
+# 🗺️ NoteForge — Roadmap
 
 A phased plan for the next several rounds of features and upgrades. Each round is
 a coherent theme that can ship on its own; ordering reflects dependencies and

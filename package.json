@@ -1,7 +1,7 @@
 {
-  "name": "my-notes-app",
+  "name": "noteforge",
   "version": "1.0.0",
-  "description": "Personal note-taking app inspired by Obsidian/Notion — markdown, wikilinks, backlinks, tags, graph view",
+  "description": "NoteForge — local-first note-taking app inspired by Obsidian/Notion: markdown, wikilinks, backlinks, tags, graph view",
   "type": "module",
   "scripts": {
     "dev": "vite",

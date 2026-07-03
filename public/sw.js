@@ -8,8 +8,8 @@
 // the SW bytes change every deploy — that's what makes the browser install the new
 // worker, re-run install/activate, and delete the previous cache. In dev the SW is
 // never registered (see src/app/pwa.js), so the literal placeholder is harmless.
-const CACHE = 'my-notes-__BUILD_HASH__';
-// Base path this SW is scoped to (e.g. "/my-notes-app/" on GitHub Pages, "/" at
+const CACHE = 'noteforge-__BUILD_HASH__';
+// Base path this SW is scoped to (e.g. "/noteforge/" on GitHub Pages, "/" at
 // root). Derived from the SW's own URL so the same file works under any deploy path.
 const BASE = new URL('./', self.location).pathname;
 const SHELL = BASE; // app-shell / start URL
