@@ -50,8 +50,11 @@ and dark mode — all stored in your browser, no backend required.
 - **Tags** — add `#tags` as chips; filter the sidebar by tag.
 - **Pin & sort** — pin notes to float them to the top; sort the sidebar by
   Updated, Created, or Title. The list **virtualizes** (windows its rows) past ~80
-  notes and the graph caps a large vault to its most-connected nodes, so both stay
-  responsive as the vault grows.
+  notes; the graph caps a large vault to its most-connected nodes and **caches its
+  layout** (re-opening or switching the active note skips the force relayout), so
+  both stay responsive as the vault grows.
+- **Export a note** (from the command palette) — **as a self-contained HTML page**
+  (rendered, styled, offline-ready, safe to share) or **as raw Markdown** (`.md`).
 - **Templates** — start a Daily / Meeting / Project note prefilled with a date
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
@@ -119,15 +122,17 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (216 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (223 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
-nesting tree helpers, the settings normalizer / theme resolver, and the PWA manifest.
-`test/features.html` (290 assertions) drives
+nesting tree helpers, the note-export builder, the settings normalizer / theme
+resolver, and the PWA manifest.
+`test/features.html` (297 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
-Trash, command palette, sidebar sort/pin/search/nesting, list virtualization,
-settings, and the keyboard-navigable graph in a real browser; `npm run test:browser`
+Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
+layout caching, note export, settings, and the keyboard-navigable graph in a real
+browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
 `document.title`). Both suites gate every push through GitHub Actions
@@ -163,6 +168,7 @@ src/
 ├── utils/
 │   ├── blocks.js       # Pure markdown <-> block parse()/serialize() bridge (incl. image / table / toggle blocks)
 │   ├── tree.js         # Pure nesting helpers: build/flatten a note forest, ancestor/descendant checks (cycle-safe)
+│   ├── export.js       # Pure note-export builder: self-contained shareable HTML doc + filename slug
 │   ├── wikilinks.js    # Pure [[wikilink]] extraction (DOM-free; used by the data layer)
 │   ├── markdown.js     # marked + wikilink extension + DOMPurify sanitize + renderInline()
 │   ├── fuzzy.js        # Pure fuzzy subsequence matcher + safe highlight (palette/search)

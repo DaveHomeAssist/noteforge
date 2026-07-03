@@ -25,6 +25,8 @@
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
+  import { buildNoteHtmlDoc, flattenExportWikilinks } from '/src/utils/export.js';
+  import { renderMarkdown, setKnownTitles } from '/src/utils/markdown.js';
 
   const results = [];
   const check = (name, cond) => results.push((cond ? 'PASS' : 'FAIL') + '  ' + name);
@@ -1211,6 +1213,23 @@
     check('graph renders a null-title note without throwing', !threw && container.querySelectorAll('.graph__node-g').length >= 1);
   });
 
+  section('graph: layout is cached — relayout only when the structure changes', () => {
+    const db = new Database();
+    const a = db.createNote({ title: 'A', content: '[[B]]' });
+    db.createNote({ title: 'B', content: '[[C]]' });
+    db.createNote({ title: 'C', content: '' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    gv.render();
+    const first = gv._layoutComputes;
+    check('layout computed on first render', first === 1);
+    gv.render(a.id); // same vault, only the active highlight differs
+    check('re-render with an unchanged vault reuses the layout', gv._layoutComputes === first);
+    db.createNote({ title: 'D', content: '[[A]]' }); // structural change
+    gv.render();
+    check('adding a note triggers exactly one relayout', gv._layoutComputes === first + 1);
+  });
+
   section('note list: revealing an off-screen note scrolls it into the window', () => {
     const db = new Database();
     const ids = [];
@@ -1357,6 +1376,22 @@
     const before = be2.serialize();
     be2.host.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
     check('undo still reverts after the rebuild', before === 'one edited' && be2.serialize() === 'one');
+  });
+
+  // ============ note export (shareable HTML) ============
+  section('note export: wikilinks flatten to plain text (no dead links)', () => {
+    const flat = flattenExportWikilinks('<p>See <a href="#" class="wikilink" data-wikilink="Alpha">Alpha</a> now</p>');
+    check('wikilink anchor becomes a span', !/<a[^>]*data-wikilink/.test(flat) && /<span class="wikilink">Alpha<\/span>/.test(flat));
+  });
+
+  section('note export: builds a self-contained HTML doc from rendered markdown', () => {
+    setKnownTitles(['Alpha']);
+    const inner = flattenExportWikilinks(renderMarkdown('# Hi\n\nLink to [[Alpha]] and **bold**.'));
+    const doc = buildNoteHtmlDoc('My Export', inner);
+    const tpl = document.createElement('template'); tpl.innerHTML = doc; // must parse
+    check('doc carries the title', doc.includes('<title>My Export</title>'));
+    check('doc embeds the rendered + flattened content', doc.includes('<span class="wikilink">Alpha</span>') && /<strong>bold<\/strong>/.test(doc) && !doc.includes('data-wikilink'));
+    check('doc is self-contained (inline style, no external asset refs)', doc.includes('<style>') && !/\ssrc=|https?:\/\//i.test(doc));
   });
 
   const failures = results.filter((r) => r.startsWith('FAIL')).length;

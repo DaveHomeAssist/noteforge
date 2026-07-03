@@ -9,6 +9,7 @@ import { parseQuery, noteMatchesFilters, scoreNote, rankNotes } from '../src/uti
 import { normalizeSettings, resolveTheme, DEFAULT_SETTINGS } from '../src/ui/settings.js';
 import { Database } from '../src/core/database.js';
 import { buildForest, flattenForest, isDescendant, ancestorChain } from '../src/utils/tree.js';
+import { buildNoteHtmlDoc, noteFileStem } from '../src/utils/export.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -423,6 +424,23 @@ dbt.setParent(ch.id, pa.id);
 dbt.deleteNote(pa.id); // trashing the parent must not lose the child
 ok('child survives when parent is trashed', dbt.getNote(ch.id) !== null);
 ok('child is promoted to a tree root when its parent is trashed', buildForest(dbt.getAllNotes()).some((r) => r.note.id === ch.id));
+
+// --- note export (shareable HTML + filename) ---
+ok('noteFileStem slugifies a title', noteFileStem('My Great Note!') === 'my-great-note');
+ok('noteFileStem falls back to "note"', noteFileStem('') === 'note' && noteFileStem('   ') === 'note' && noteFileStem('***') === 'note');
+ok('noteFileStem collapses separators', noteFileStem('  A / B  ') === 'a-b');
+ok('export doc has a doctype, title, and the inner html', (() => {
+  const d = buildNoteHtmlDoc('My Note', '<p>hello</p>');
+  return d.startsWith('<!doctype html>') && d.includes('<title>My Note</title>') && d.includes('<h1>My Note</h1>') && d.includes('<p>hello</p>');
+})());
+ok('export doc escapes the title (no injection)', (() => {
+  const d = buildNoteHtmlDoc('<script>alert(1)</script>', '');
+  return d.includes('&lt;script&gt;') && !d.includes('<script>alert(1)</script>');
+})());
+ok('export doc is self-contained (inline style, no external refs)', (() => {
+  const d = buildNoteHtmlDoc('t', '<p>b</p>');
+  return d.includes('<style>') && !/\b(?:src|href)\s*=|https?:\/\//i.test(d);
+})());
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

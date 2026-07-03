@@ -33,7 +33,7 @@ Local-first notes app (vanilla JS + Vite, no framework). Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 216 Node assertions (`npm test`) + 289 browser feature assertions
+- **Quality** — 223 Node assertions (`npm test`) + 297 browser feature assertions
   (`npm run test:browser`, headless via Playwright), gated in CI on every push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
@@ -184,8 +184,10 @@ for it (see Strategic forks). Keep local-first intact.*
   "own your data" upgrade and a stepping stone to any sync.
 - **Cloud sync / git** — optional: push/pull to a git remote or a sync service; define
   a conflict strategy (last-write-wins → CRDT if real-time is ever needed).
-- **Publish / share** — export a note (or the graph) to a shareable read-only HTML
-  page; already have the renderer to do it.
+- **Publish / share** — ✅ *first slice shipped:* a note exports to a **self-contained,
+  read-only HTML page** (rendered + inline-styled, wikilinks flattened, no external
+  assets) or to raw Markdown, from the command palette. Still open: exporting the graph,
+  and true shareable *links* (needs hosting/sync below).
 
 **Done when:** the same vault is editable on two devices without clobbering, and a
 note can be shared as a link/file.
@@ -195,9 +197,11 @@ note can be shared as a link/file.
 ## Cross-cutting tracks (run continuously, not a "round")
 
 - **Performance** — ✅ *shipped:* the note list **virtualizes** (windows fixed-height
-  rows past ~80 notes) and the graph **caps** a large vault to its most-connected
-  nodes with a scaled iteration count (and always keeps the open note). Still open:
-  incremental graph relayout and finer re-render caps (profile before optimizing).
+  rows past ~80 notes); the graph **caps** a large vault to its most-connected nodes
+  with a scaled iteration count (always keeping the open note) and **caches its force
+  layout** — re-opening the graph or switching the active note reuses positions instead
+  of recomputing the O(n²) layout. Still open: incremental relayout on partial graph
+  changes (profile before optimizing).
 - **Testing & tooling** — grow the feature suite alongside features; consider Vitest +
   jsdom for component logic; keep the adversarial-review step in the loop.
 - **Docs** — keep `README.md` current; add short "how it works" notes for the block

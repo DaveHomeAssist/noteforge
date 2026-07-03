@@ -14,6 +14,8 @@ import { normalizeSettings, FONT_SCALES } from '../ui/settings.js';
 import { sampleNotes } from './seed.js';
 import { TEMPLATES, templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
+import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
+import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils/export.js';
 
 class App {
   constructor() {
@@ -300,6 +302,8 @@ class App {
       cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
       if (cur.parentId) cmds.push({ id: 'unnest', title: 'Move current note to top level', hint: cur.title, icon: '↤', run: () => this.reparent(cur.id, null) });
       cmds.push({ id: 'pin', title: cur.pinned ? 'Unpin current note' : 'Pin current note to top', hint: cur.title, icon: '📌', run: () => this.togglePin(cur.id) });
+      cmds.push({ id: 'export-html', title: 'Export note as HTML', hint: 'Shareable page', icon: '🌐', run: () => this.exportNoteHtml(cur) });
+      cmds.push({ id: 'export-md', title: 'Download note as Markdown', hint: 'Save .md', icon: '⬇', run: () => this.downloadNoteMarkdown(cur) });
       cmds.push({ id: 'del', title: 'Delete current note', hint: cur.title, icon: '🗑', run: () => this.deleteNote(cur.id) });
     }
     return cmds;
@@ -389,14 +393,33 @@ class App {
 
   #export() {
     const data = JSON.stringify(this.db.getAllNotes().map((n) => n.toJSON()), null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    this.#downloadBlob(data, `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+    this.#closeMenu();
+  }
+
+  /** Download arbitrary text as a file (shared by all export paths). */
+  #downloadBlob(text, filename, type) {
+    const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    this.#closeMenu();
+  }
+
+  /** Export one note as a self-contained, shareable HTML page. */
+  exportNoteHtml(note) {
+    if (!note) return;
+    setKnownTitles(this.db.allTitles()); // so renderMarkdown resolves wikilink styling
+    const inner = flattenExportWikilinks(renderMarkdown(note.content));
+    this.#downloadBlob(buildNoteHtmlDoc(note.title, inner), `${noteFileStem(note.title)}.html`, 'text/html');
+  }
+
+  /** Download one note's raw markdown. */
+  downloadNoteMarkdown(note) {
+    if (!note) return;
+    this.#downloadBlob(note.content, `${noteFileStem(note.title)}.md`, 'text/markdown');
   }
 
   async #import(event) {

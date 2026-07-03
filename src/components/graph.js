@@ -62,7 +62,18 @@ export class GraphView {
       degree.set(e.target, degree.get(e.target) + 1);
     }
 
-    const pos = this.#layout(nodes, edges);
+    // Reuse the previous force layout when the graph structure (nodes + edges) is
+    // unchanged — re-opening the graph or switching the active note only changes the
+    // highlight, which the SVG below applies per render. Skips the O(n²) relayout.
+    const sig = nodes.map((n) => n.id).join('|') + '::' + edges.map((e) => e.source + '>' + e.target).join('|');
+    let pos;
+    if (sig === this._layoutSig && this._layoutPos) {
+      pos = this._layoutPos;
+    } else {
+      pos = this.#layout(nodes, edges);
+      this._layoutSig = sig;
+      this._layoutPos = pos;
+    }
 
     const edgeSvg = edges
       .map((e) => {
@@ -105,6 +116,7 @@ export class GraphView {
    * spring attraction + centering for a fixed number of iterations.
    */
   #layout(nodes, edges) {
+    this._layoutComputes = (this._layoutComputes || 0) + 1; // for perf tests / diagnostics
     const cx = WIDTH / 2;
     const cy = HEIGHT / 2;
     const pos = new Map();
