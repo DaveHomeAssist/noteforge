@@ -2,11 +2,21 @@
 // positions notes; edges are resolved [[wikilinks]]. Click a node to open it.
 
 import { escapeHtml } from '../utils/helpers.js';
+import { downloadText } from '../utils/download.js';
 
 const WIDTH = 900;
 const HEIGHT = 640;
 const ITERATIONS = 260;
 const NODE_BUDGET = 300; // beyond this, render only the most-connected nodes (keeps layout responsive)
+
+// Concrete colors for the standalone SVG export (the live graph styles use CSS vars
+// that won't resolve outside the app, so the exported file inlines fixed values).
+const EXPORT_CSS =
+  '.graph__edge{stroke:#c8ccd6;stroke-width:1.2}' +
+  '.graph__node{fill:#3b6ef6;stroke:#ffffff;stroke-width:2}' +
+  '.graph__node--on{fill:#dc2626}' +
+  '.graph__label{fill:#5b6472;font-size:11px;text-anchor:middle;' +
+  'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}';
 
 export class GraphView {
   /**
@@ -19,6 +29,7 @@ export class GraphView {
     this.db = db;
     this.onOpen = onOpen;
     this.container.addEventListener('click', (e) => {
+      if (e.target.closest('.graph__export')) { this.#exportSvg(); return; }
       const node = e.target.closest('[data-id]');
       if (node) this.onOpen(node.dataset.id);
     });
@@ -99,11 +110,39 @@ export class GraphView {
     this.container.innerHTML = `
       <div class="graph__toolbar">
         <span class="graph__stat">${nodes.length} notes · ${edges.length} links${notice}</span>
+        <button class="graph__export" type="button" title="Download this graph as an SVG image">⬇ SVG</button>
       </div>
       <svg class="graph__svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" preserveAspectRatio="xMidYMid meet">
         <g class="graph__edges">${edgeSvg}</g>
         <g class="graph__nodes">${nodeSvg}</g>
       </svg>`;
+  }
+
+  /** Serialize the currently-rendered graph as a standalone, styled SVG document
+   *  (returns null when there's no graph — e.g. an empty vault). */
+  buildSvgExport() {
+    const svg = this.container.querySelector('svg.graph__svg');
+    if (!svg) return null;
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', SVGNS);
+    clone.removeAttribute('class');
+    const style = document.createElementNS(SVGNS, 'style');
+    style.textContent = EXPORT_CSS;
+    const bg = document.createElementNS(SVGNS, 'rect'); // solid backdrop so it stands alone
+    bg.setAttribute('x', '0');
+    bg.setAttribute('y', '0');
+    bg.setAttribute('width', String(WIDTH));
+    bg.setAttribute('height', String(HEIGHT));
+    bg.setAttribute('fill', '#ffffff');
+    clone.insertBefore(bg, clone.firstChild);
+    clone.insertBefore(style, clone.firstChild);
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  }
+
+  #exportSvg() {
+    const doc = this.buildSvgExport();
+    if (doc) downloadText(doc, 'noteforge-graph.svg', 'image/svg+xml');
   }
 
   #short(title) {

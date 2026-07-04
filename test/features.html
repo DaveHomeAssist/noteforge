@@ -1378,6 +1378,29 @@
     check('undo still reverts after the rebuild', before === 'one edited' && be2.serialize() === 'one');
   });
 
+  // ============ graph SVG export ============
+  section('graph export: produces a standalone, self-contained SVG', () => {
+    const db = new Database();
+    db.createNote({ title: 'A', content: '[[B]]' });
+    db.createNote({ title: 'B', content: '' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    gv.render();
+    const svg = gv.buildSvgExport();
+    check('export is an xml svg document', typeof svg === 'string' && svg.startsWith('<?xml') && /<svg[\s>]/.test(svg));
+    check('export inlines the graph styles (no CSS vars)', /<style[\s>]/.test(svg) && svg.includes('.graph__node') && svg.includes('#3b6ef6') && !svg.includes('var(--'));
+    check('export has a solid backdrop + node content', /<rect[^>]*fill="#ffffff"/.test(svg) && /class="graph__node/.test(svg));
+    check('toolbar exposes an export button', !!container.querySelector('.graph__export'));
+  });
+
+  section('graph export: returns null when there is nothing to graph', () => {
+    const db = new Database();
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const gv = new GraphView(container, db, () => {});
+    gv.render(); // empty vault -> empty-state, no <svg>
+    check('no graph -> null export', gv.buildSvgExport() === null);
+  });
+
   // ============ note export (shareable HTML) ============
   section('note export: wikilinks flatten to plain text (no dead links)', () => {
     const flat = flattenExportWikilinks('<p>See <a href="#" class="wikilink" data-wikilink="Alpha">Alpha</a> now</p>');

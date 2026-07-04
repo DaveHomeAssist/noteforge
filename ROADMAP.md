@@ -33,7 +33,7 @@ Local-first notes app (vanilla JS + Vite, no framework). Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 223 Node assertions (`npm test`) + 297 browser feature assertions
+- **Quality** — 223 Node assertions (`npm test`) + 302 browser feature assertions
   (`npm run test:browser`, headless via Playwright), gated in CI on every push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
@@ -184,10 +184,10 @@ for it (see Strategic forks). Keep local-first intact.*
   "own your data" upgrade and a stepping stone to any sync.
 - **Cloud sync / git** — optional: push/pull to a git remote or a sync service; define
   a conflict strategy (last-write-wins → CRDT if real-time is ever needed).
-- **Publish / share** — ✅ *first slice shipped:* a note exports to a **self-contained,
-  read-only HTML page** (rendered + inline-styled, wikilinks flattened, no external
-  assets) or to raw Markdown, from the command palette. Still open: exporting the graph,
-  and true shareable *links* (needs hosting/sync below).
+- **Publish / share** — ✅ *shipped:* a note exports to a **self-contained, read-only
+  HTML page** (rendered + inline-styled, wikilinks flattened, no external assets) or to
+  raw Markdown, and the **graph exports as a standalone SVG** (inlined styles) from its
+  toolbar. Still open: true shareable *links* (needs hosting/sync below).
 
 **Done when:** the same vault is editable on two devices without clobbering, and a
 note can be shared as a link/file.

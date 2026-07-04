@@ -55,6 +55,7 @@ and dark mode — all stored in your browser, no backend required.
   both stay responsive as the vault grows.
 - **Export a note** (from the command palette) — **as a self-contained HTML page**
   (rendered, styled, offline-ready, safe to share) or **as raw Markdown** (`.md`).
+  **Export the graph** as a standalone **SVG** image from the graph toolbar.
 - **Templates** — start a Daily / Meeting / Project note prefilled with a date
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
@@ -128,11 +129,11 @@ and backslash-bearing table cells), exercises the schema-migration runner, the f
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
 nesting tree helpers, the note-export builder, the settings normalizer / theme
 resolver, and the PWA manifest.
-`test/features.html` (297 assertions) drives
+`test/features.html` (302 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
-layout caching, note export, settings, and the keyboard-navigable graph in a real
-browser; `npm run test:browser`
+layout caching, note + graph export, settings, and the keyboard-navigable graph in a
+real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
 `document.title`). Both suites gate every push through GitHub Actions
@@ -169,6 +170,7 @@ src/
 │   ├── blocks.js       # Pure markdown <-> block parse()/serialize() bridge (incl. image / table / toggle blocks)
 │   ├── tree.js         # Pure nesting helpers: build/flatten a note forest, ancestor/descendant checks (cycle-safe)
 │   ├── export.js       # Pure note-export builder: self-contained shareable HTML doc + filename slug
+│   ├── download.js     # Tiny shared blob-download helper (note HTML/MD, graph SVG, JSON backup)
 │   ├── wikilinks.js    # Pure [[wikilink]] extraction (DOM-free; used by the data layer)
 │   ├── markdown.js     # marked + wikilink extension + DOMPurify sanitize + renderInline()
 │   ├── fuzzy.js        # Pure fuzzy subsequence matcher + safe highlight (palette/search)

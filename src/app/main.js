@@ -16,6 +16,7 @@ import { TEMPLATES, templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils/export.js';
+import { downloadText } from '../utils/download.js';
 
 class App {
   constructor() {
@@ -399,13 +400,7 @@ class App {
 
   /** Download arbitrary text as a file (shared by all export paths). */
   #downloadBlob(text, filename, type) {
-    const blob = new Blob([text], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(text, filename, type);
   }
 
   /** Export one note as a self-contained, shareable HTML page. */
