@@ -26,6 +26,7 @@
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
   import { buildNoteHtmlDoc, flattenExportWikilinks } from '/src/utils/export.js';
+  import { vaultFileName, writeVaultToDir } from '/src/utils/vault.js';
   import { renderMarkdown, setKnownTitles } from '/src/utils/markdown.js';
 
   const results = [];
@@ -1416,6 +1417,34 @@
     check('doc embeds the rendered + flattened content', doc.includes('<span class="wikilink">Alpha</span>') && /<strong>bold<\/strong>/.test(doc) && !doc.includes('data-wikilink'));
     check('doc is self-contained (inline style, no external asset refs)', doc.includes('<style>') && !/\ssrc=|https?:\/\//i.test(doc));
   });
+
+  // ============ vault export (save to folder) ============
+  section('vault: filenames keep spaces + sanitize + de-dup', () => {
+    const u = new Set();
+    check('keeps spaces', vaultFileName('My Note', new Set()) === 'My Note.md');
+    check('sanitizes illegal chars', vaultFileName('A/B*C', new Set()) === 'A-B-C.md');
+    check('de-dups collisions (case-insensitive)', vaultFileName('Note', u) === 'Note.md' && vaultFileName('note', u) === 'note 2.md');
+  });
+
+  await (async () => {
+    try {
+      const files = {};
+      const dir = {
+        async getFileHandle(name) {
+          return { async createWritable() { let buf = ''; return { async write(t) { buf = t; }, async close() { files[name] = buf; } }; } };
+        },
+      };
+      const n = await writeVaultToDir(dir, [
+        { title: 'Home', content: '# Home\n[[Ideas]]' },
+        { title: 'Home', content: 'dup' },
+        { title: 'A/B', content: 'slashed' },
+      ]);
+      check('vault: writes each note as a de-duped, safe .md file', n === 3 &&
+        files['Home.md'] === '# Home\n[[Ideas]]' && files['Home 2.md'] === 'dup' && files['A-B.md'] === 'slashed');
+    } catch (e) {
+      results.push('FAIL  vault write — threw: ' + e.message);
+    }
+  })();
 
   const failures = results.filter((r) => r.startsWith('FAIL')).length;
   const summary = failures === 0 ? `ALL PASS (${results.length})` : `FAILURES: ${failures} of ${results.length}`;

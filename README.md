@@ -56,6 +56,9 @@ and dark mode — all stored in your browser, no backend required.
 - **Export a note** (from the command palette) — **as a self-contained HTML page**
   (rendered, styled, offline-ready, safe to share) or **as raw Markdown** (`.md`).
   **Export the graph** as a standalone **SVG** image from the graph toolbar.
+- **Save your vault to a folder** — write every note out as an **Obsidian-compatible
+  `.md` file** into a folder you pick (via the File System Access API, on Chromium
+  browsers), titles preserved so `[[wikilinks]]` keep resolving.
 - **Templates** — start a Daily / Meeting / Project note prefilled with a date
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
@@ -123,17 +126,17 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (223 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (227 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
-nesting tree helpers, the note-export builder, the settings normalizer / theme
-resolver, and the PWA manifest.
-`test/features.html` (302 assertions) drives
+nesting tree helpers, the note-export builder, the vault-export filenames, the
+settings normalizer / theme resolver, and the PWA manifest.
+`test/features.html` (306 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
-layout caching, note + graph export, settings, and the keyboard-navigable graph in a
-real browser; `npm run test:browser`
+layout caching, note + graph + vault export, settings, and the keyboard-navigable
+graph in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
 `document.title`). Both suites gate every push through GitHub Actions
@@ -171,6 +174,7 @@ src/
 │   ├── tree.js         # Pure nesting helpers: build/flatten a note forest, ancestor/descendant checks (cycle-safe)
 │   ├── export.js       # Pure note-export builder: self-contained shareable HTML doc + filename slug
 │   ├── download.js     # Tiny shared blob-download helper (note HTML/MD, graph SVG, JSON backup)
+│   ├── vault.js        # Save-to-folder: safe/de-duped .md filenames + File System Access write loop
 │   ├── wikilinks.js    # Pure [[wikilink]] extraction (DOM-free; used by the data layer)
 │   ├── markdown.js     # marked + wikilink extension + DOMPurify sanitize + renderInline()
 │   ├── fuzzy.js        # Pure fuzzy subsequence matcher + safe highlight (palette/search)

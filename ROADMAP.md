@@ -33,7 +33,7 @@ Local-first notes app (vanilla JS + Vite, no framework). Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 223 Node assertions (`npm test`) + 302 browser feature assertions
+- **Quality** — 227 Node assertions (`npm test`) + 306 browser feature assertions
   (`npm run test:browser`, headless via Playwright), gated in CI on every push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
@@ -179,9 +179,11 @@ keyboard-only + screen-reader smoke test, and exposes real preferences.
 *Theme: multi-device and collaboration. Largest scope; only if the trajectory calls
 for it (see Strategic forks). Keep local-first intact.*
 
-- **File System Access API** — save the vault as real `.md` files in a chosen folder
-  (Obsidian-compatible), with two-way sync to the on-disk copy. Biggest single
-  "own your data" upgrade and a stepping stone to any sync.
+- **File System Access API** — ✅ *first slice shipped:* **Save all notes to a folder**
+  (command palette, Chromium) writes every live note as an Obsidian-compatible `.md`
+  file (title-named, spaces preserved so `[[wikilinks]]` resolve, collisions de-duped).
+  Still open: reading a folder back in and **two-way sync** to the on-disk copy (the
+  bigger lift, and the stepping stone to any real sync).
 - **Cloud sync / git** — optional: push/pull to a git remote or a sync service; define
   a conflict strategy (last-write-wins → CRDT if real-time is ever needed).
 - **Publish / share** — ✅ *shipped:* a note exports to a **self-contained, read-only

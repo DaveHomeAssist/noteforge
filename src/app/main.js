@@ -17,6 +17,7 @@ import { registerServiceWorker } from './pwa.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils/export.js';
 import { downloadText } from '../utils/download.js';
+import { writeVaultToDir } from '../utils/vault.js';
 
 class App {
   constructor() {
@@ -299,6 +300,10 @@ class App {
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
       { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
     ];
+    // Save-to-folder needs the File System Access API (Chromium) — only offer it there.
+    if (window.showDirectoryPicker) {
+      cmds.push({ id: 'save-folder', title: 'Save all notes to a folder…', hint: 'Markdown vault', icon: '📁', run: () => this.saveVaultToFolder() });
+    }
     if (cur) {
       cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
       if (cur.parentId) cmds.push({ id: 'unnest', title: 'Move current note to top level', hint: cur.title, icon: '↤', run: () => this.reparent(cur.id, null) });
@@ -415,6 +420,27 @@ class App {
   downloadNoteMarkdown(note) {
     if (!note) return;
     this.#downloadBlob(note.content, `${noteFileStem(note.title)}.md`, 'text/markdown');
+  }
+
+  /** Save the whole (live) vault to a chosen folder as Obsidian-compatible .md files. */
+  async saveVaultToFolder() {
+    if (!window.showDirectoryPicker) {
+      alert("Saving to a folder needs a Chromium-based browser (Chrome/Edge). Use Export JSON instead.");
+      return;
+    }
+    let dir;
+    try {
+      dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+    } catch {
+      return; // user dismissed the picker
+    }
+    try {
+      const written = await writeVaultToDir(dir, this.db.getAllNotes());
+      alert(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`);
+    } catch (err) {
+      console.warn('[vault] save failed:', err);
+      alert("Couldn't finish saving to that folder. Check the folder's write permission and try again.");
+    }
   }
 
   async #import(event) {

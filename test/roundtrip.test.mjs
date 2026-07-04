@@ -10,6 +10,7 @@ import { normalizeSettings, resolveTheme, DEFAULT_SETTINGS } from '../src/ui/set
 import { Database } from '../src/core/database.js';
 import { buildForest, flattenForest, isDescendant, ancestorChain } from '../src/utils/tree.js';
 import { buildNoteHtmlDoc, noteFileStem } from '../src/utils/export.js';
+import { vaultFileName } from '../src/utils/vault.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -441,6 +442,15 @@ ok('export doc is self-contained (inline style, no external refs)', (() => {
   const d = buildNoteHtmlDoc('t', '<p>b</p>');
   return d.includes('<style>') && !/\b(?:src|href)\s*=|https?:\/\//i.test(d);
 })());
+
+// --- vault export (save-to-folder filenames) ---
+ok('vaultFileName keeps spaces (Obsidian-compatible)', vaultFileName('My Note', new Set()) === 'My Note.md');
+ok('vaultFileName replaces illegal chars with -', vaultFileName('A/B*C:D', new Set()) === 'A-B-C-D.md');
+ok('vaultFileName de-dups collisions case-insensitively', (() => {
+  const u = new Set();
+  return vaultFileName('Note', u) === 'Note.md' && vaultFileName('Note', u) === 'Note 2.md' && vaultFileName('note', u) === 'note 3.md';
+})());
+ok('vaultFileName falls back to Untitled for empty/dot titles', vaultFileName('   ', new Set()) === 'Untitled.md' && vaultFileName('...', new Set()) === 'Untitled.md');
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
