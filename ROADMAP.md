@@ -6,7 +6,9 @@ risk, not a fixed schedule. Reprioritize freely — this is a guide, not a contr
 
 ## Where we are today
 
-Local-first notes app (vanilla JS + Vite, no framework). Shipped:
+Local-first notes app currently using Vite and browser-loaded JS. That current
+shape is not a rule against a framework or stronger architecture if the product
+needs it. Shipped:
 
 - **Block editor** — paragraph, H1–H3, bulleted/numbered/to-do lists, quote, code,
   divider, date blocks; slash menu, markdown shortcuts, full keyboard model,
