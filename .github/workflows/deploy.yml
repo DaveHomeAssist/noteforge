@@ -1,7 +1,7 @@
-name: Deploy My Notes
+name: Deploy NoteForge
 
 # Build + test on every push to main, then publish the static Vite build to
-# GitHub Pages (davehomeassist.github.io/my-notes-app/). Manual runs allowed.
+# GitHub Pages (davehomeassist.github.io/noteforge/). Manual runs allowed.
 on:
   push:
     branches: [main]
@@ -14,7 +14,7 @@ permissions:
 
 # Only one deploy at a time; a newer push supersedes an in-flight run.
 concurrency:
-  group: my-notes-pages
+  group: noteforge-pages
   cancel-in-progress: true
 
 jobs:
