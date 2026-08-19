@@ -128,7 +128,7 @@
     input.value = '2030-01-15';
     input.dispatchEvent(new Event('change', { bubbles: true }));
     check('changing date updates serialize', be.serialize() === '@date(2030-01-15)');
-    check('chip restored after change', !!be.host.querySelector('.blk-date'));
+    check('chip restored once after change', be.host.querySelectorAll('.blk-date').length === 1 && !be.host.querySelector('.blk-date-input'));
   });
 
   // ============ non-text block delete/nav (divider + date) ============

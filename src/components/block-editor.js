@@ -1091,7 +1091,13 @@ export class BlockEditor {
     if (input.showPicker) {
       try { input.showPicker(); } catch { /* not supported / blocked */ }
     }
+    let restored = false;
     const restore = () => {
+      // Replacing a focused date input triggers its blur handler. Guard the
+      // restore so change -> render -> blur cannot re-enter #fillContent while
+      // the browser is already removing that same input node.
+      if (restored) return;
+      restored = true;
       this.datePickerOpen = false;
       this.#fillContent(content, block, false);
     };

@@ -61,7 +61,7 @@ technical risk, lowest user-visible flash — do it first.*
 with lazy localStorage migration + fallback; `schemaVersion` + a pure migration
 runner (`migrations.js`); soft-delete Trash (restore / delete-forever / empty,
 with a menu badge); a strict production Content-Security-Policy (dev-permissive
-for HMR, injected by `vite.config.js`); and CI (`.github/workflows/ci.yml`) that
+for HMR, injected by `vite.config.js`); and CI (`.github/workflows/deploy.yml`) that
 builds and runs both the Node and headless-browser suites on every push.
 
 - **IndexedDB persistence** behind `storage.js`. `localStorage` caps at ~5 MB for
@@ -77,7 +77,7 @@ builds and runs both the Node and headless-browser suites on every push.
   fetch" surface the banner review flagged and hardens `data:`/`img` handling.
 - **CI + automated browser tests.** GitHub Actions: `npm ci && npm run build &&
   npm test`, plus run `test/features.html` headlessly (Playwright or
-  `chrome --headless`) so the 125 assertions gate every push instead of being
+  `chrome --headless`) so the 306 assertions gate every push instead of being
   run by hand.
 
 **Done when:** notes + images persist in IndexedDB with a clean migration, deleting

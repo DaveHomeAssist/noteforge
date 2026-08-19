@@ -96,6 +96,8 @@ export operate on the same `.md` content and are unaffected by the editor.
 
 ## Run it
 
+Node.js 22 is the supported CI/runtime baseline.
+
 ```bash
 npm install
 npm run dev      # http://localhost:5175
@@ -139,7 +141,8 @@ layout caching, note + graph + vault export, settings, and the keyboard-navigabl
 graph in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
-`document.title`). Both suites gate every push through GitHub Actions
+`document.title`, and fails on unexpected browser runtime, console, request, or
+HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
 ## Architecture

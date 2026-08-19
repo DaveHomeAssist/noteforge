@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "NoteForge — local-first note-taking app inspired by Obsidian/Notion: markdown, wikilinks, backlinks, tags, graph view",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

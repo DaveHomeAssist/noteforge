@@ -3,7 +3,8 @@
 // Boots a Vite dev server in-process (so ES-module imports from /src resolve the
 // same way they do during development), drives it with Playwright/Chromium, and
 // reads the pass/fail summary the page publishes to document.title. Exit code is
-// 0 only when every assertion passes — this is what CI gates on.
+// 0 only when every assertion passes without browser errors — this is what CI
+// gates on.
 //
 // Run locally: `npm run test:browser` (requires `npx playwright install chromium`).
 
@@ -37,9 +38,24 @@ async function main() {
   }
   const page = await browser.newPage();
 
-  const consoleErrors = [];
-  page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
-  page.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message || err}`));
+  // Banner/image tests use these reserved hosts to exercise URL handling. Stub
+  // them so the suite stays offline and expected image failures do not obscure
+  // real console, page, or same-origin resource errors.
+  const imageBody = Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64');
+  await page.route(/^https:\/\/(?:example\.com|invalid\.invalid)\//, (route) =>
+    route.fulfill({ status: 200, contentType: 'image/gif', body: imageBody }));
+
+  const runtimeErrors = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') runtimeErrors.push(`console.error: ${msg.text()}`);
+  });
+  page.on('pageerror', (err) => runtimeErrors.push(`pageerror: ${err.stack || err.message || err}`));
+  page.on('requestfailed', (request) => {
+    runtimeErrors.push(`requestfailed: ${request.url()} — ${request.failure()?.errorText || 'unknown error'}`);
+  });
+  page.on('response', (response) => {
+    if (response.status() >= 400) runtimeErrors.push(`http ${response.status()}: ${response.url()}`);
+  });
 
   let title = '';
   let output = '';
@@ -62,12 +78,12 @@ async function main() {
   }
 
   console.log(output);
-  if (consoleErrors.length) {
-    console.log('\nConsole/page errors during run:');
-    for (const e of consoleErrors) console.log('  ' + e);
+  if (runtimeErrors.length) {
+    console.error('\nUnexpected browser errors during run:');
+    for (const error of runtimeErrors) console.error('  ' + error);
   }
 
-  if (failed || !title.startsWith('ALL PASS')) {
+  if (failed || runtimeErrors.length || !title.startsWith('ALL PASS')) {
     console.error(`\n❌ Browser feature tests failed${title ? ` — ${title}` : ''}`);
     process.exit(1);
   }
