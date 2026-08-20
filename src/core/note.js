@@ -68,6 +68,7 @@ export class Note {
     pinned = false,
     parentId = null,
     aliases = [],
+    archivedAt = null,
     ...extra
   } = {}) {
     // Preserve additive/unknown JSON metadata so a portable backup can restore
@@ -90,6 +91,8 @@ export class Note {
     // Alternate human-readable link targets. Canonical title always wins when
     // resolving; collisions across notes are diagnosed by Database.
     this.aliases = normalizeAliases(aliases, title);
+    // Archive is a separate lifecycle state from Trash.
+    this.archivedAt = typeof archivedAt === 'string' ? archivedAt : null;
   }
 
   static fromJSON(data) {
@@ -112,12 +115,17 @@ export class Note {
       pinned: this.pinned,
       parentId: this.parentId,
       aliases: [...this.aliases],
+      archivedAt: this.archivedAt,
     };
   }
 
   /** True while the note is in the Trash (soft-deleted). */
   get isTrashed() {
     return this.deletedAt != null;
+  }
+
+  get isArchived() {
+    return this.archivedAt != null;
   }
 
   /** Move to Trash. Preserves createdAt/updatedAt so restore is lossless. */
@@ -128,6 +136,16 @@ export class Note {
   /** Restore from Trash. */
   restore() {
     this.deletedAt = null;
+  }
+
+  markArchived(when = new Date().toISOString()) {
+    this.archivedAt = when;
+    this.touch();
+  }
+
+  unarchive() {
+    this.archivedAt = null;
+    this.touch();
   }
 
   /** Pin/unpin. Does NOT touch updatedAt, so pinning doesn't reorder by recency. */

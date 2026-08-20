@@ -10,7 +10,7 @@
 // new numbered function whenever the on-disk shape changes; never edit an old
 // one (users may still be on that version).
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 const MIGRATIONS = {
   // v0 -> v1: introduce soft-delete. Every note gains an explicit `deletedAt`
@@ -40,6 +40,14 @@ const MIGRATIONS = {
   4: (payload) => {
     const notes = Array.isArray(payload.notes)
       ? payload.notes.map((n) => ({ ...n, aliases: Array.isArray(n?.aliases) ? n.aliases : [] }))
+      : payload.notes;
+    return { ...payload, notes };
+  },
+  // v4 -> v5: Archive is distinct from Trash. Active notes receive an explicit
+  // null timestamp; imported forward-shaped timestamps remain intact.
+  5: (payload) => {
+    const notes = Array.isArray(payload.notes)
+      ? payload.notes.map((n) => ({ ...n, archivedAt: typeof n?.archivedAt === 'string' ? n.archivedAt : null }))
       : payload.notes;
     return { ...payload, notes };
   },

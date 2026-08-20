@@ -130,6 +130,10 @@ function assertNote(note, index, schemaVersion) {
       reject('INVALID_NOTE', `${path}.aliases must be an array of strings.`);
     }
   }
+  if (schemaVersion >= 5) {
+    if (!Object.hasOwn(note, 'archivedAt')) reject('INCOMPLETE_NOTE', `${path} is missing archivedAt.`);
+    if (note.archivedAt !== null) assertIsoTimestamp(note.archivedAt, `${path}.archivedAt`);
+  }
 }
 
 function validateVaultState(state) {
@@ -304,7 +308,7 @@ function notePreview(note, fields) {
   return {
     id: note.id,
     title: note.title,
-    state: note.deletedAt === null ? 'live' : 'trashed',
+    state: note.deletedAt !== null ? 'trashed' : note.archivedAt !== null ? 'archived' : 'live',
     ...(fields ? { fields } : {}),
   };
 }

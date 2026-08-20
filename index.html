@@ -57,6 +57,8 @@
               <button id="settings-btn" class="menu__item">⚙ Settings</button>
               <button id="history-btn" class="menu__item" disabled>↶ Revision history</button>
               <button id="backup-btn" class="menu__item">🛟 Backup center</button>
+              <button id="find-replace-btn" class="menu__item">⌕ Find and replace <span class="menu__hint">Ctrl/⌘ F</span></button>
+              <button id="archive-btn" class="menu__item">🗄 Archive</button>
               <button id="link-report-btn" class="menu__item">🔗 Link integrity report</button>
               <button id="export-btn" class="menu__item">⬇ Export JSON</button>
               <button id="import-btn" class="menu__item">⬆ Import JSON</button>
@@ -96,46 +98,6 @@
       <section id="editor" class="editor"></section>
       <section id="graph" class="graph" hidden></section>
     </main>
-  </div>
-
-  <!-- Command palette (Ctrl/⌘+P) -->
-  <div class="modal palette" id="palette-overlay" hidden>
-    <div class="modal__backdrop" data-close></div>
-    <div class="modal__panel palette__panel" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1">
-      <input id="palette-input" class="palette__input" type="text" autocomplete="off" spellcheck="false"
-             placeholder="Search notes…   ·   &gt; commands   ·   # headings"
-             role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" />
-      <div id="palette-list" class="palette__list" role="listbox" aria-label="Results"></div>
-    </div>
-  </div>
-
-  <!-- Trash (soft-deleted notes) -->
-  <div class="modal" id="trash-overlay" hidden>
-    <div class="modal__backdrop" data-close></div>
-    <div class="modal__panel" role="dialog" aria-modal="true" aria-label="Trash" tabindex="-1">
-      <header class="modal__header">
-        <h2 class="modal__title">🗑 Trash</h2>
-        <div class="modal__actions">
-          <button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button>
-          <button class="btn btn--ghost" data-close title="Close">✕</button>
-        </div>
-      </header>
-      <div id="trash-list" class="trash-list"></div>
-    </div>
-  </div>
-
-  <!-- Settings -->
-  <div class="modal" id="settings-overlay" hidden>
-    <div class="modal__backdrop" data-close></div>
-    <div class="modal__panel" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
-      <header class="modal__header">
-        <h2 class="modal__title">⚙ Settings</h2>
-        <div class="modal__actions">
-          <button class="btn btn--ghost" data-close title="Close" aria-label="Close settings">✕</button>
-        </div>
-      </header>
-      <div id="settings-form" class="settings"></div>
-    </div>
   </div>
 
   <script type="module" src="/src/app/main.js"></script>

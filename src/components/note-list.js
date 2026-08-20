@@ -7,6 +7,7 @@ import { escapeHtml, truncate, formatDate } from '../utils/helpers.js';
 import { parseQuery, noteMatchesFilters, scoreNote } from '../utils/search-query.js';
 import { fuzzyHighlight } from '../utils/fuzzy.js';
 import { buildForest, flattenForest } from '../utils/tree.js';
+import { createSelection, toggleSelection, pruneSelection } from '../utils/selection.js';
 
 const SORT_MODES = ['updated', 'created', 'title'];
 const ROW_STRIDE = 72; // px per row — MUST equal the fixed .note-item height in styles.css
@@ -18,19 +19,23 @@ export class NoteList {
    * @param {{ list:HTMLElement, tags:HTMLElement, count:HTMLElement, search:HTMLInputElement, sort?:HTMLSelectElement }} els
    * @param {import('../core/database.js').Database} db
    * @param {{ onOpen:(id:string)=>void, onTogglePin:(id:string)=>void,
-   *           onReparent?:(id:string, parentId:string|null)=>void, onNewChild?:(parentId:string)=>void }} handlers
+   *           onOpenArchived?:(id:string)=>void, onReparent?:(id:string, parentId:string|null)=>void,
+   *           onNewChild?:(parentId:string)=>void, onSelectionChange?:(ids:string[])=>void }} handlers
    */
   constructor(els, db, handlers) {
     this.els = els;
     this.db = db;
     this.onOpen = handlers.onOpen;
+    this.onOpenArchived = handlers.onOpenArchived || handlers.onOpen;
     this.onTogglePin = handlers.onTogglePin;
     this.onReparent = handlers.onReparent;
     this.onNewChild = handlers.onNewChild;
+    this.onSelectionChange = handlers.onSelectionChange || (() => {});
     this.query = '';
     this.activeTag = null;
     this.activeId = null;
     this.dragId = null;
+    this.selection = createSelection();
     this.collapsed = new Set(Array.isArray(db.config.collapsed) ? db.config.collapsed : []);
 
     this.els.search.addEventListener('input', () => {
@@ -38,6 +43,7 @@ export class NoteList {
       this.#renderList();
     });
     this.els.list.addEventListener('click', (e) => this.#onListClick(e));
+    this.els.list.addEventListener('keydown', (e) => this.#onListKeydown(e));
     this.els.tags.addEventListener('click', (e) => this.#onTagClick(e));
     this.els.list.addEventListener('dragstart', (e) => this.#onDragStart(e));
     this.els.list.addEventListener('dragover', (e) => this.#onDragOver(e));
@@ -62,6 +68,40 @@ export class NoteList {
   focusSearch() {
     this.els.search.focus();
     this.els.search.select();
+  }
+
+  getSearchState() {
+    return { query: this.query, sortMode: this.#sortMode(), activeTag: this.activeTag };
+  }
+
+  applySearchState({ query = '', sortMode = 'updated', activeTag = null } = {}) {
+    this.query = String(query ?? '');
+    this.activeTag = typeof activeTag === 'string' && activeTag ? activeTag : null;
+    this.els.search.value = this.query;
+    const mode = SORT_MODES.includes(sortMode) ? sortMode : 'updated';
+    if (this.db.config.sortMode !== mode) this.db.setConfig({ sortMode: mode });
+    if (this.els.sort) this.els.sort.value = mode;
+    this.render();
+    return this._rows?.length || 0;
+  }
+
+  getSelection() {
+    return [...this.selection.ids];
+  }
+
+  clearSelection() {
+    if (!this.selection.ids.size) return;
+    this.selection = createSelection();
+    this.#paintWindow();
+    this.onSelectionChange([]);
+  }
+
+  focusSelectionControl(id) {
+    if (!id || !(this._rows || []).some((row) => row.note.id === id)) return false;
+    this.reveal(id);
+    const control = this.els.list.querySelector(`.note-item[data-id="${CSS.escape(id)}"] [data-select]`);
+    control?.focus();
+    return Boolean(control);
   }
 
   render() {
@@ -113,12 +153,12 @@ export class NoteList {
 
   /** @returns {{ rows:{note,depth,hasChildren,collapsed,titlePositions}[], searching:boolean }} */
   #currentRows() {
-    const live = this.db.getAllNotes();
     const { text, filters } = parseQuery(this.query);
+    const live = filters.archived === true ? this.db.getArchived() : this.db.getAllNotes();
     const q = text.trim();
     // A scoped filter (tag:/has:banner/is:pinned/in:title) counts as searching even
     // with no free text — otherwise the tree view would ignore the filter.
-    const hasFilters = filters.tags.length > 0 || filters.hasBanner === true || filters.pinned === true || filters.inTitle === true;
+    const hasFilters = filters.tags.length > 0 || filters.hasBanner === true || filters.pinned === true || filters.inTitle === true || filters.archived === true;
     const searching = !!q || !!this.activeTag || hasFilters;
 
     if (searching) {
@@ -156,7 +196,11 @@ export class NoteList {
     if (this.dragId) { this._pendingRender = true; return; }
     const { rows, searching } = this.#currentRows();
     this._rows = rows;
-    const total = this.db.getAllNotes().length;
+    const visibleIds = new Set(rows.map((row) => row.note.id));
+    const selectedBefore = this.selection.ids.size;
+    this.selection = pruneSelection(this.selection, (id) => visibleIds.has(id));
+    if (this.selection.ids.size !== selectedBefore) this.onSelectionChange(this.getSelection());
+    const total = parseQuery(this.query).filters.archived === true ? this.db.getArchived().length : this.db.getAllNotes().length;
     this.els.count.textContent = searching
       ? `${rows.length} match${rows.length === 1 ? '' : 'es'}`
       : `${total} note${total === 1 ? '' : 's'}`;
@@ -219,8 +263,9 @@ export class NoteList {
       ? `<button class="note-item__twist" data-twist aria-label="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`
       : `<span class="note-item__twist note-item__twist--leaf" aria-hidden="true"></span>`;
     return `
-        <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''}"
+        <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''} ${note.isArchived ? 'note-item--archived' : ''} ${this.selection.ids.has(note.id) ? 'note-item--selected' : ''}"
              data-id="${escapeHtml(note.id)}" draggable="true" style="--depth:${depth}">
+          <button type="button" class="note-item__select" data-select role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? '✓' : ''}</button>
           ${twist}
           <button class="note-item__main" data-open>
             <span class="note-item__title">${title}</span>
@@ -230,8 +275,7 @@ export class NoteList {
               ${note.tags.length ? `· ${note.tags.map((t) => '#' + escapeHtml(t)).join(' ')}` : ''}
             </span>
           </button>
-          <button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button>
-          <button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-pressed="${note.pinned}">📌</button>
+          ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-pressed="${note.pinned}">📌</button>`}
         </div>`;
   }
 
@@ -239,10 +283,44 @@ export class NoteList {
     const item = e.target.closest('.note-item');
     if (!item) return;
     const id = item.dataset.id;
+    if (e.target.closest('[data-select]')) { this.#toggleSelected(id, e.shiftKey); return; }
     if (e.target.closest('[data-twist]')) { this.#toggleCollapse(id); return; }
     if (e.target.closest('[data-pin]')) { this.onTogglePin?.(id); return; }
     if (e.target.closest('[data-add]')) { this.onNewChild?.(id); return; }
-    this.onOpen(id);
+    const note = this.db.notes.get(id);
+    if (note?.isArchived) this.onOpenArchived(id);
+    else this.onOpen(id);
+  }
+
+  #toggleSelected(id, range = false) {
+    const ordered = (this._rows || []).map((row) => row.note.id);
+    this.selection = toggleSelection(this.selection, id, ordered, { range });
+    this.#paintWindow();
+    this.onSelectionChange(this.getSelection());
+    this.focusSelectionControl(id);
+  }
+
+  #onListKeydown(event) {
+    const select = event.target.closest('[data-select]');
+    const item = select?.closest('.note-item');
+    const ordered = (this._rows || []).map((row) => row.note.id);
+    if (select && event.shiftKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      const index = ordered.indexOf(item.dataset.id);
+      const target = ordered[Math.max(0, Math.min(ordered.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))];
+      if (!this.selection.ids.has(item.dataset.id)) this.#toggleSelected(item.dataset.id);
+      this.#toggleSelected(target, true);
+      this.els.list.querySelector(`.note-item[data-id="${CSS.escape(target)}"] [data-select]`)?.focus();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && this.els.list.contains(event.target)) {
+      event.preventDefault();
+      const focusId = item?.dataset.id || ordered[0] || null;
+      this.selection = createSelection(ordered, ordered[0] || null);
+      this.#paintWindow();
+      this.onSelectionChange(this.getSelection());
+      this.focusSelectionControl(focusId);
+    }
   }
 
   #toggleCollapse(id) {
@@ -287,6 +365,7 @@ export class NoteList {
   #onDragStart(e) {
     const item = e.target.closest('.note-item');
     if (!item) return;
+    if (e.target.closest('[data-select]')) { e.preventDefault(); return; }
     this.dragId = item.dataset.id;
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('text/plain', this.dragId); } catch { /* some browsers */ }

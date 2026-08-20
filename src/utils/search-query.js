@@ -1,5 +1,6 @@
 // Pure scoped-search parsing + note ranking. Supports free text plus filter
-// tokens: `tag:<name>` (repeatable), `in:title`, `has:banner`, `is:pinned`.
+// tokens: `tag:<name>` (repeatable), `in:title`, `has:banner`, `is:pinned`,
+// and explicit `is:archived` scope.
 // Unknown `word:word` tokens are treated as plain text so the box never eats a
 // query. No DOM dependency — unit-testable in Node.
 
@@ -9,10 +10,10 @@ const FILTER_RE = /(?:^|\s)(tag|in|has|is):([^\s]+)/gi;
 
 /**
  * @param {string} raw
- * @returns {{ text:string, filters:{ tags:string[], inTitle:boolean, hasBanner:boolean|null, pinned:boolean|null } }}
+ * @returns {{ text:string, filters:{ tags:string[], inTitle:boolean, hasBanner:boolean|null, pinned:boolean|null, archived:boolean|null } }}
  */
 export function parseQuery(raw) {
-  const filters = { tags: [], inTitle: false, hasBanner: null, pinned: null };
+  const filters = { tags: [], inTitle: false, hasBanner: null, pinned: null, archived: null };
   let text = String(raw ?? '');
   text = text.replace(FILTER_RE, (match, key, val) => {
     const k = key.toLowerCase();
@@ -21,6 +22,7 @@ export function parseQuery(raw) {
     else if (k === 'in' && v === 'title') filters.inTitle = true;
     else if (k === 'has' && v === 'banner') filters.hasBanner = true;
     else if (k === 'is' && v === 'pinned') filters.pinned = true;
+    else if (k === 'is' && v === 'archived') filters.archived = true;
     else return match; // unknown filter — leave it as searchable text
     return ' ';
   });
@@ -35,6 +37,7 @@ export function noteMatchesFilters(note, filters) {
   }
   if (filters.hasBanner === true && !note.banner) return false;
   if (filters.pinned === true && !note.pinned) return false;
+  if (filters.archived === true && !note.archivedAt) return false;
   return true;
 }
 

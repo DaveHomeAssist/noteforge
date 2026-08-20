@@ -9,6 +9,7 @@
 // Run locally: `npm run test:browser` (requires `npx playwright install chromium`).
 
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createServer, preview } from 'vite';
@@ -46,20 +47,45 @@ function captureRuntimeErrors(page, errors) {
 async function warmLazyAppModules(browser, base) {
   const context = await browser.newContext();
   const page = await context.newPage();
+  const modules = [
+    '/src/components/history-view.js',
+    '/src/components/backup-view.js',
+    '/src/components/link-tools-view.js',
+    '/src/components/outline-view.js',
+    '/src/components/archive-view.js',
+    '/src/components/bulk-actions-view.js',
+    '/src/components/command-palette.js',
+    '/src/components/find-replace-view.js',
+    '/src/components/graph.js',
+    '/src/components/saved-searches-view.js',
+    '/src/components/settings-view.js',
+    '/src/components/trash-view.js',
+    '/src/core/revision-store.js',
+    '/src/core/recovery-service.js',
+    '/src/core/backup.js',
+    '/src/core/knowledge-index.js',
+    '/src/core/knowledge-index.css',
+    '/src/utils/navigation.js',
+  ];
   try {
     await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    for (const modulePath of modules) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+          await page.evaluate(() => window.app.ready);
+          await page.evaluate((path) => import(path), modulePath);
+          break;
+        } catch (error) {
+          if (!/Execution context was destroyed|navigation/i.test(error?.message || '') || attempt === 2) throw error;
+          await page.waitForLoadState('load', { timeout: TIMEOUT }).catch(() => {});
+        }
+      }
+    }
+    // Vite may schedule its one-time optimizer reload just after the import
+    // promise resolves. Let it settle while this throwaway page still exists.
+    await page.waitForTimeout(500);
     await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
-    await page.evaluate(() => window.app.ready);
-    await page.evaluate(() => Promise.all([
-      import('/src/components/history-view.js'),
-      import('/src/components/backup-view.js'),
-      import('/src/components/link-tools-view.js'),
-      import('/src/core/revision-store.js'),
-      import('/src/core/recovery-service.js'),
-      import('/src/core/backup.js'),
-      import('/src/core/knowledge-index.js'),
-      import('/src/utils/navigation.js'),
-    ]));
   } finally {
     await context.close();
   }
@@ -276,6 +302,11 @@ async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
       window.app.db.initializeKnowledgeIndex(),
       window.app.editor.enableOutline(),
     ]));
+    // Both helpers are idle-loaded in the real app. Vite may complete their
+    // promises just before its dependency optimizer issues a one-time reload.
+    await page.waitForTimeout(500);
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
 
     stage = 'creating the Phase 2 fixture';
     await page.evaluate(async () => {
@@ -433,6 +464,223 @@ async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runPhase3Smoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Phase 3 smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  const openSidebar = async () => {
+    if (!await page.evaluate(() => document.querySelector('#app')?.classList.contains('sidebar-open'))) {
+      await page.locator('#sidebar-toggle').click();
+      await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+    }
+  };
+  let stage = 'booting the app';
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.recovery && window.app?.savedSearches), undefined, { timeout: TIMEOUT });
+
+    stage = 'creating the Phase 3 fixture';
+    await page.evaluate(async () => {
+      const db = window.app.db;
+      db.createNote({ id: 'phase3-current', title: 'Phase3 Current', content: 'alpha $& alpha' });
+      db.createNote({ id: 'phase3-vault', title: 'Phase3 Vault', content: 'needle needle' });
+      db.createNote({ id: 'phase3-unchanged', title: 'Phase3 Unchanged', content: 'other' });
+      db.createNote({ id: 'phase3-archived', title: 'Phase3 Archived', content: 'needle', archivedAt: '2026-08-20T12:00:00.000Z' });
+      const trash = db.createNote({ id: 'phase3-trash', title: 'Phase3 Trash', content: 'needle' });
+      db.deleteNote(trash.id);
+      db.createNote({ id: 'phase3-batch-a', title: 'Phase3 Batch A', content: 'batch one' });
+      db.createNote({ id: 'phase3-batch-b', title: 'Phase3 Batch B', content: 'batch two' });
+      db.createNote({ id: 'phase3-parent', title: 'Phase3 Parent', content: 'parent' });
+      db.createNote({ id: 'phase3-child', title: 'Phase3 Child', content: 'child', parentId: 'phase3-parent' });
+      await db.flush();
+      window.app.openNote('phase3-current');
+    });
+    await page.locator('.editor__title').waitFor({ state: 'visible' });
+
+    stage = 'previewing current-note replacement';
+    await page.keyboard.press('Control+f');
+    await page.locator('#find-replace-panel').waitFor({ state: 'visible' });
+    await page.locator('#find-input').fill('alpha');
+    await page.locator('#replace-input').fill('$&\\done');
+    await page.locator('[data-find-preview]').click();
+    check('integrated current-note replace previews exact source count without mutation',
+      /2 source matches/.test(await page.locator('.find-replace__preview').innerText())
+      && await page.evaluate(() => window.app.db.getNote('phase3-current')?.content === 'alpha $& alpha'));
+    await page.locator('[data-find-apply]').click();
+    await page.waitForFunction(() => window.app.db.getNote('phase3-current')?.content === '$&\\done $& $&\\done');
+    check('integrated current-note replace keeps replacement syntax literal and announces completion',
+      /2 replacements applied/.test(await page.locator('.find-replace__status').innerText()));
+    await page.locator('[data-find-close]').click();
+    await page.locator('.blk[contenteditable="true"]').first().focus();
+    await page.keyboard.press('Control+z');
+    await page.evaluate(async () => { window.app.editor.flushPending(); await window.app.db.flush(); });
+    check('integrated current-note replace remains one undo step',
+      await page.evaluate(() => window.app.db.getNote('phase3-current')?.content === 'alpha $& alpha'));
+
+    stage = 'previewing and applying vault replacement';
+    await page.keyboard.press('Control+f');
+    await page.locator('[data-scope="vault"]').click();
+    await page.locator('#find-input').fill('needle');
+    await page.locator('#replace-input').fill('done');
+    await page.locator('[data-find-preview]').click();
+    const previewText = await page.locator('.find-replace__preview').innerText();
+    check('integrated vault replace preview reports active changes and Archive/Trash skips',
+      /1 changed/.test(previewText) && /2 skipped/.test(previewText)
+      && await page.evaluate(() => window.app.db.getNote('phase3-vault')?.content === 'needle needle'));
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('[data-find-apply]').click();
+    await page.waitForFunction(() => /0 failed/.test(document.querySelector('.find-replace__status')?.textContent || ''));
+    check('integrated vault replace applies atomically with a pre-change revision',
+      await page.evaluate(async () => {
+        const revisions = await window.app.recovery.listRevisions('phase3-vault');
+        return window.app.db.getNote('phase3-vault')?.content === 'done done'
+          && window.app.db.getArchivedNote('phase3-archived')?.content === 'needle'
+          && window.app.db.notes.get('phase3-trash')?.content === 'needle'
+          && revisions.some((revision) => revision.reason === 'pre_bulk_replace');
+      }));
+    await page.locator('[data-find-close]').click();
+
+    stage = 'exporting Archive metadata through the merge-export flow';
+    await openSidebar();
+    await page.locator('#menu-btn').click();
+    const [mergeExport] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#export-btn').click(),
+    ]);
+    const exportedNotes = JSON.parse(await readFile(await mergeExport.path(), 'utf8'));
+    check('legacy JSON export preserves archivedAt while leaving Trash to portable backup',
+      exportedNotes.some((note) => note.id === 'phase3-archived' && note.archivedAt === '2026-08-20T12:00:00.000Z')
+      && !exportedNotes.some((note) => note.id === 'phase3-trash'));
+
+    stage = 'creating and running a saved view';
+    await openSidebar();
+    await page.locator('#search-input').fill('phase3 batch');
+    await page.locator('#sort-select').selectOption('title');
+    await page.locator('[data-saved-create]').click();
+    await page.locator('#saved-searches-overlay').waitFor({ state: 'visible' });
+    await page.locator('.saved-searches-form [name="name"]').fill('Phase3 batch work');
+    await page.locator('.saved-searches-form [name="icon"]').fill('🧭');
+    await page.locator('.saved-searches-form button[type="submit"]').click();
+    check('integrated saved view persists stable query, sort, icon, and order',
+      await page.evaluate(() => {
+        const record = window.app.db.config.savedSearches?.[0];
+        return Boolean(record?.id) && record.name === 'Phase3 batch work' && record.icon === '🧭'
+          && record.query === 'phase3 batch' && record.sortMode === 'title' && record.order === 0;
+      }));
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+p');
+    await page.locator('#palette-input').fill('> run saved view phase3');
+    await page.locator('.palette__item').first().waitFor({ state: 'visible' });
+    check('integrated command palette exposes the saved view',
+      /Run saved view: Phase3 batch work/.test(await page.locator('.palette__item').first().innerText()));
+    await page.locator('#palette-input').press('Enter');
+    await page.waitForFunction(() => document.querySelector('#search-input')?.value === 'phase3 batch');
+    check('running a saved view restores its complete search state',
+      await page.evaluate(() => window.app.noteList.getSearchState().query === 'phase3 batch'
+        && window.app.noteList.getSearchState().sortMode === 'title'));
+
+    stage = 'importing archived hierarchy';
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('#import-file').setInputFiles({
+      name: 'phase3-archive-import.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([
+        { id: 'external-archive-parent', title: 'Phase3 Imported Archive Parent', content: '', archivedAt: '2026-08-20T12:00:00.000Z' },
+        { id: 'external-archive-child', title: 'Phase3 Imported Archive Child', content: '', parentId: 'external-archive-parent', archivedAt: '2026-08-20T12:00:00.000Z' },
+      ])),
+    });
+    await page.waitForFunction(() => window.app.db.getArchived().some((note) => note.title === 'Phase3 Imported Archive Child'));
+    check('merge import preserves archivedAt and remaps archived parent-child hierarchy',
+      await page.evaluate(() => {
+        const parent = window.app.db.getArchived().find((note) => note.title === 'Phase3 Imported Archive Parent');
+        const child = window.app.db.getArchived().find((note) => note.title === 'Phase3 Imported Archive Child');
+        return Boolean(parent && child && child.parentId === parent.id);
+      }));
+
+    stage = 'applying batch tag and Trash actions';
+    await openSidebar();
+    await page.locator('.note-item[data-id="phase3-batch-a"] [data-select]').click();
+    await page.locator('.note-item[data-id="phase3-batch-b"] [data-select]').click();
+    await page.locator('.bulk-actions').waitFor({ state: 'visible' });
+    await page.locator('[data-bulk-tag]').fill('reviewed');
+    await page.locator('[data-bulk-action="tag"]').click();
+    await page.waitForFunction(() => window.app.db.getNote('phase3-batch-a')?.tags.includes('reviewed')
+      && window.app.db.getNote('phase3-batch-b')?.tags.includes('reviewed'));
+    check('integrated multi-select batch tag updates exact IDs with safety revisions',
+      await page.evaluate(async () => {
+        const revisions = await window.app.recovery.listRevisions('phase3-batch-a');
+        return revisions.some((revision) => revision.reason === 'pre_bulk_action');
+      }));
+    await page.locator('.note-item[data-id="phase3-batch-a"] [data-select]').click();
+    await page.locator('.note-item[data-id="phase3-batch-b"] [data-select]').click();
+    await page.locator('.bulk-actions').waitFor({ state: 'visible' });
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('[data-bulk-action="trash"]').click();
+    await page.waitForFunction(() => !window.app.db.getNote('phase3-batch-a') && !window.app.db.getNote('phase3-batch-b'));
+    check('integrated destructive batch requires confirmation and moves only selected notes to Trash',
+      await page.evaluate(() => window.app.db.notes.get('phase3-batch-a')?.isTrashed
+        && window.app.db.notes.get('phase3-batch-b')?.isTrashed
+        && Boolean(window.app.db.getNote('phase3-current'))));
+
+    stage = 'archiving and restoring a parent note';
+    await page.evaluate(() => {
+      window.app.noteList.applySearchState({ query: '', sortMode: 'updated' });
+      window.app.openNote('phase3-parent');
+    });
+    await page.keyboard.press('Control+p');
+    await page.locator('#palette-input').fill('> archive current note');
+    await page.locator('#palette-input').press('Enter');
+    await page.waitForFunction(() => Boolean(window.app.db.getArchivedNote('phase3-parent')));
+    check('integrated Archive removes the parent from active identity while promoting its child',
+      await page.evaluate(() => window.app.db.resolveTitle('Phase3 Parent') === null
+        && window.app.db.getNote('phase3-child')?.parentId === 'phase3-parent'));
+    await openSidebar();
+    await page.locator('#menu-btn').click();
+    await page.locator('#archive-btn').click();
+    await page.locator('#archive-overlay').waitFor({ state: 'visible' });
+    await page.locator('.archive-item[data-id="phase3-parent"] [data-preview]').click();
+    check('integrated Archive view previews the exact selected note in a labelled modal',
+      /Phase3 Parent/.test(await page.locator('#archive-preview').innerText())
+      && await page.evaluate(() => document.querySelector('#archive-overlay')?.contains(document.activeElement)));
+    await page.locator('#archive-preview [data-unarchive-preview]').click();
+    await page.waitForFunction(() => window.app.currentId === 'phase3-parent' && Boolean(window.app.db.getNote('phase3-parent')));
+    check('integrated Unarchive restores the retained parent-child hierarchy and opens the note',
+      await page.evaluate(() => window.app.db.ancestorsOf('phase3-child').map((note) => note.id).join(',') === 'phase3-parent'));
+
+    stage = 'verifying persistence and mobile layout';
+    await page.evaluate(() => window.app.db.flush());
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.savedSearches), undefined, { timeout: TIMEOUT });
+    check('saved views and Phase 3 lifecycle state survive reload exactly',
+      await page.evaluate(() => window.app.db.config.savedSearches?.[0]?.name === 'Phase3 batch work'
+        && window.app.db.notes.get('phase3-batch-a')?.isTrashed
+        && Boolean(window.app.db.getNote('phase3-parent'))));
+    check('390px Phase 3 controls have no horizontal document overflow',
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      query: document.querySelector('#search-input')?.value || '',
+      findStatus: document.querySelector('.find-replace__status')?.textContent || '',
+      bulkStatus: document.querySelector('.bulk-actions__status')?.textContent || '',
+      archiveStatus: document.querySelector('#archive-status')?.textContent || '',
+    })).catch(() => null);
+    throw new Error(`Phase 3 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -533,6 +781,23 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     await page.locator('#link-report-btn').click();
     await page.locator('#link-tools-overlay').waitFor({ state: 'visible' });
     checks.push('PASS  production Link tools lazy chunk opens on first use offline');
+    await page.keyboard.press('Escape');
+
+    stage = 'opening Phase 3 retrieval and lifecycle tools for the first time offline';
+    await page.locator('#menu-btn').click();
+    await page.locator('#archive-btn').click();
+    await page.locator('#archive-overlay').waitFor({ state: 'visible' });
+    checks.push('PASS  production Archive lazy chunk opens on first use offline');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+f');
+    await page.locator('#find-replace-panel').waitFor({ state: 'visible' });
+    if (!await page.locator('.saved-searches').count()) throw new Error('Saved views did not initialize offline');
+    checks.push('PASS  production find/replace and saved-view chunks work on first use offline');
+    await page.locator('[data-find-close]').click();
+    await page.locator('#sidebar-toggle').click();
+    await page.locator('.note-item [data-select]').first().click();
+    await page.locator('.bulk-actions').waitFor({ state: 'visible' });
+    checks.push('PASS  production multi-select bulk-action chunk opens on first use offline');
     return checks.join('\n');
   } catch (error) {
     throw new Error(`Production offline smoke failed while ${stage}: ${error?.message || error}`);
@@ -611,11 +876,12 @@ async function main() {
     output = await page.locator('#out').textContent({ timeout: TIMEOUT });
     const recoveryOutput = await runRecoverySmoke(browser, base, runtimeErrors);
     const linkIntegrityOutput = await runLinkIntegritySmoke(browser, base, runtimeErrors);
+    const phase3Output = await runPhase3Smoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
     output = `Runner error: ${err.message || err}`;

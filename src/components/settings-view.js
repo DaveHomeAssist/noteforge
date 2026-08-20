@@ -13,6 +13,16 @@ const field = (id, label, options, value) => `
     </select>
   </label>`;
 
+export function createSettingsElements(root = document.body) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal';
+  overlay.id = 'settings-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1"><header class="modal__header"><h2 class="modal__title">⚙ Settings</h2><div class="modal__actions"><button class="btn btn--ghost" data-close title="Close" aria-label="Close settings">✕</button></div></header><div id="settings-form" class="settings"></div></div>`;
+  root.appendChild(overlay);
+  return { overlay, form: overlay.querySelector('#settings-form') };
+}
+
 export class SettingsView {
   /**
    * @param {{ overlay:HTMLElement, form:HTMLElement }} els

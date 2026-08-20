@@ -61,6 +61,17 @@ and dark mode — all stored in your browser, no backend required.
   plain-text mentions can be previewed and converted to exact wikilinks.
 - **Knowledge navigation** — labelled Back/Forward controls keep bounded session
   history, while the command palette presents 50 persisted unique recent notes.
+- **Saved views and Archive** — save a complete query, tag scope, and sort order,
+  then run it from the sidebar or command palette. Archive keeps inactive notes
+  and their hierarchy out of normal lists, graph, autocomplete, and backlinks
+  without moving them to Trash; `is:archived` and the Archive view expose them
+  explicitly.
+- **Find, replace, and note batches** — current-note find/replace includes
+  next/previous, case, whole-word, source preview, match counts, and one-step
+  undo. Vault-wide replacement previews every result and scope before a confirmed
+  revision-protected apply. ID-based sidebar selection remains exact across
+  virtualized rows and supports batch tag, Archive/Unarchive, reparent, export,
+  and confirmed move to Trash.
 - **Graph view** (🕸️) — a force-directed map of how your notes connect.
 - **Tags** — add `#tags` as chips; filter the sidebar by tag.
 - **Pin & sort** — pin notes to float them to the top; sort the sidebar by
@@ -77,7 +88,8 @@ and dark mode — all stored in your browser, no backend required.
 - **Templates** — start a Daily / Meeting / Project note prefilled with a date
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
-  plus filters: `tag:<name>`, `in:title`, `has:banner`, `is:pinned`.
+  plus filters: `tag:<name>`, `in:title`, `has:banner`, `is:pinned`,
+  `is:archived`.
 - **Theme** — light / dark / **system** (follows your OS), persisted.
 - **Settings** (⚙ in the ⋯ menu) — theme, editor font size & width, autosave delay,
   and the default template for new notes.
@@ -102,6 +114,7 @@ export operate on the same `.md` content and are unaffected by the editor.
 | `Ctrl/⌘ + P` | Command palette (notes · `>` commands · `#` headings) |
 | `Ctrl/⌘ + N` | New note |
 | `Ctrl/⌘ + K` | Focus search |
+| `Ctrl/⌘ + F` | Find and replace in the current note or vault |
 | `Ctrl/⌘ + G` | Toggle graph view |
 | `Alt + Left` / `Alt + Right` | Back / forward through opened notes |
 | `Ctrl/⌘ + Z` / `Shift+Ctrl/⌘ + Z` | Undo / redo (within the editor) |
@@ -140,6 +153,10 @@ Schema version 4 adds normalized note aliases without changing the permanent not
 ID or Markdown authority. Canonical titles always outrank aliases; ambiguous
 imported identities remain intact but are reported for explicit repair.
 
+Schema version 5 adds nullable `archivedAt` lifecycle metadata. Existing
+schema-version-3 and schema-version-4 vaults migrate additively without changing
+IDs, Markdown, hierarchy, Trash state, or settings.
+
 Revision history and rolling snapshots use namespaced keys in the same unchanged
 `my-notes-app` IndexedDB database and share content-addressed blobs. They are
 browser-local recovery aids, not independent backups. If IndexedDB is unavailable,
@@ -157,7 +174,7 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (260 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (261 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
@@ -170,9 +187,12 @@ collection, quota/fallback behavior, rolling snapshots, malformed backups, resto
 safety, large embedded images, and atomic full-vault replacement. The 12-check
 link-integrity suite covers schema-v4 aliases, parser ranges/exclusions, atomic
 rename and repair plans, heading anchors, contextual indexes, navigation, backup
-fidelity, and a 1,000-note incremental-update budget. The complete Node gate is
-360 checks.
-`test/features.html` (339 assertions) drives
+fidelity, and a 1,000-note incremental-update budget. A 10-check Phase 3 suite
+covers schema v5, Archive scopes, saved views,
+literal source replacement, ID-based selection, atomic batch planning, stale-plan
+rejection, rollback, and lifecycle-complete backup fidelity. The complete Node gate
+is 371 checks.
+`test/features.html` (355 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
@@ -180,8 +200,9 @@ graph and recovery views in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
 `document.title`, then runs 15 integrated recovery checks and 16 Phase 2 link and
-navigation checks at 390 px, plus four production/offline checks (including
-first-use Link tools) and fails on
+navigation checks, 17 integrated Phase 3 checks at 390 px, and seven production/
+offline checks (including first-use recovery, Link tools, Archive, saved view,
+find/replace, and bulk-action chunks), and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -204,12 +225,16 @@ src/
 │   ├── backup-view.js     # Storage health, local snapshots, portable verify/restore UI
 │   ├── outline-view.js    # Keyboard H1-H6 outline and deterministic heading jumps
 │   ├── link-tools-view.js # Previewed rename, mention conversion, ambiguity repair
+│   ├── archive-view.js    # Explicit Archive list, preview, and collision-safe restore
+│   ├── saved-searches-view.js # Saved-view create, rename, reorder, run, and delete
+│   ├── find-replace-view.js # Current-note and previewed vault-wide source replacement
+│   ├── bulk-actions-view.js # ID-based multi-note action bar and result announcements
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
 │   ├── note-list.js    # Sidebar: nested outline tree, sort, pin, tag filter, scoped + fuzzy-ranked search, virtualized
 │   └── graph.js        # Self-contained force-directed SVG link graph (keyboard-navigable)
 ├── core/
-│   ├── note.js         # Note model: content + metadata (aliases, tags, banner, Trash, hierarchy)
+│   ├── note.js         # Note model: content + metadata (aliases, tags, banner, Archive, Trash, hierarchy)
 │   ├── database.js     # In-memory store + pub/sub + coalesced async persistence + soft-delete/Trash
 │   ├── migrations.js   # Pure schema-version migration runner (Node-testable)
 │   ├── storage.js      # IndexedDB + fallback, namespaced keys, atomic batch/status APIs
@@ -217,7 +242,8 @@ src/
 │   ├── recovery-service.js # Durable history and verified restore application boundary
 │   ├── backup.js       # Deterministic portable envelope, SHA-256 verify, restore preview
 │   ├── knowledge-index.js # Rebuildable contextual backlinks and unlinked mentions
-│   └── link-operations.js # Atomic rename/repair/conversion plans with revision gates
+│   ├── link-operations.js # Atomic rename/repair/conversion plans with revision gates
+│   └── bulk-operations.js # Previewed/stale-safe replace and multi-note transaction plans
 ├── ui/
 │   ├── theme.js        # Resolved data-theme from light/dark/system (matchMedia), persisted
 │   └── settings.js     # Pure settings defaults / normalize / theme resolution
@@ -234,6 +260,9 @@ src/
 │   ├── markdown.js     # marked + wikilink extension + DOMPurify sanitize + renderInline()
 │   ├── fuzzy.js        # Pure fuzzy subsequence matcher + safe highlight (palette/search)
 │   ├── search-query.js # Pure scoped-search parsing (tag:/in:title/…) + note ranking
+│   ├── saved-searches.js # Normalized stable saved-view records and CRUD ordering
+│   ├── find-replace.js # Literal Unicode-aware source match and replacement plans
+│   ├── selection.js    # ID-based range selection independent of rendered windows
 │   ├── image.js        # Client-side image downscale/compress (banners + inline images)
 │   └── helpers.js      # ids, escaping, debounce, dates
 └── styles.css          # Tokenized light/dark theme
@@ -242,6 +271,7 @@ test/roundtrip.test.mjs # Node invariants: blocks, migrations, note model, fuzzy
 test/features.html      # Browser feature suite (editor, banner, Trash, palette, settings, graph)
 test/run-features.mjs   # Headless runner for features.html (npm run test:browser)
 test/link-integrity.test.mjs # Node invariants for Phase 2 identity/link/navigation behavior
+test/phase3.test.mjs     # Node invariants for Archive, saved views, replacement, and batches
 vite.config.js          # Build + dev server; injects the Content-Security-Policy
 ```
 

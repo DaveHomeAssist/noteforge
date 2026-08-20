@@ -316,7 +316,7 @@ ok('fuzzyHighlight escapes + no positions', fuzzyHighlight('<x>', []) === '&lt;x
 ok('fuzzyHighlight escapes matched chars too', fuzzyHighlight('<b>', [0]) === '<mark>&lt;</mark>b&gt;');
 
 // --- scoped search parsing ---
-ok('parseQuery: plain text', JSON.stringify(parseQuery('hello world')) === JSON.stringify({ text: 'hello world', filters: { tags: [], inTitle: false, hasBanner: null, pinned: null } }));
+ok('parseQuery: plain text', JSON.stringify(parseQuery('hello world')) === JSON.stringify({ text: 'hello world', filters: { tags: [], inTitle: false, hasBanner: null, pinned: null, archived: null } }));
 ok('parseQuery: tag filter extracted', (() => { const p = parseQuery('tag:work notes'); return p.text === 'notes' && p.filters.tags.length === 1 && p.filters.tags[0] === 'work'; })());
 ok('parseQuery: multiple tags', (() => { const p = parseQuery('tag:a tag:b'); return p.text === '' && p.filters.tags.join(',') === 'a,b'; })());
 ok('parseQuery: in:title', parseQuery('in:title foo').filters.inTitle === true);
@@ -438,10 +438,11 @@ ok('parentId round-trips through JSON', Note.fromJSON(new Note({ title: 'x', par
 ok('self parentId coerced to null', new Note({ id: 'z', parentId: 'z' }).parentId === null);
 ok('legacy note (no parentId) loads null', Note.fromJSON({ id: 'q', title: 't', content: 'c' }).parentId === null);
 const migT = runMigrations({ notes: [{ id: '1', title: 'A', content: 'x' }], config: {} }, 0);
-ok('migration reaches v4', migT.version === 4 && CURRENT_SCHEMA_VERSION === 4);
+ok('migration reaches v5', migT.version === 5 && CURRENT_SCHEMA_VERSION === 5);
 ok('v3 migration adds parentId:null', migT.data.notes[0].parentId === null);
 ok('v3 migration preserves an existing parentId', runMigrations({ notes: [{ id: '2', parentId: 'p' }], config: {} }, 2).data.notes[0].parentId === 'p');
 ok('v4 migration adds aliases:[]', migT.data.notes[0].aliases.length === 0);
+ok('v5 migration adds archivedAt:null', migT.data.notes[0].archivedAt === null);
 
 const dbt = new Database({ storageBackend: inertStorage });
 const pa = dbt.createNote({ title: 'Parent', content: '' });
@@ -490,13 +491,14 @@ const comprehensive = JSON.parse(comprehensiveRaw);
 const comprehensiveBefore = JSON.stringify(comprehensive);
 const comprehensivePayload = { notes: comprehensive.notes, config: comprehensive.config };
 const comprehensiveMigration = runMigrations(comprehensivePayload, comprehensive.schemaVersion);
-ok('schema-v3 fixture remains the immutable pre-alias contract', comprehensive.schemaVersion === 3 && CURRENT_SCHEMA_VERSION === 4);
-ok('schema-v3 migration advances exactly once', comprehensiveMigration.migrated === true && comprehensiveMigration.version === 4);
-ok('schema-v3 migration preserves the complete payload while adding aliases', comprehensiveMigration.data.notes.every((note, index) => (
-  note.aliases.length === 0 && eq({ ...note, aliases: undefined }, { ...comprehensive.notes[index], aliases: undefined })
+ok('schema-v3 fixture remains the immutable pre-alias contract', comprehensive.schemaVersion === 3 && CURRENT_SCHEMA_VERSION === 5);
+ok('schema-v3 migration advances to the current schema', comprehensiveMigration.migrated === true && comprehensiveMigration.version === 5);
+ok('schema-v3 migration preserves the complete payload while adding aliases and Archive state', comprehensiveMigration.data.notes.every((note, index) => (
+  note.aliases.length === 0 && note.archivedAt === null
+    && eq({ ...note, aliases: undefined, archivedAt: undefined }, { ...comprehensive.notes[index], aliases: undefined, archivedAt: undefined })
 )) && eq(comprehensiveMigration.data.config, comprehensive.config));
 ok('schema-v3 migration does not mutate its fixture', JSON.stringify(comprehensive) === comprehensiveBefore);
-ok('schema-v3 canonical notes hydrate losslessly with the additive alias default', comprehensive.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [] })));
+ok('schema-v3 canonical notes hydrate losslessly with additive defaults', comprehensive.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })));
 ok('schema-v3 Markdown contents are exact fixed points', comprehensive.notes.every((note) => serialize(parse(note.content)) === note.content));
 ok('schema-v3 fixture preserves stable unique note IDs', new Set(comprehensive.notes.map((note) => note.id)).size === comprehensive.notes.length);
 ok('schema-v3 fixture parent IDs resolve without self-parenting', (() => {
@@ -532,7 +534,7 @@ const fixtureBackend = {
 const loadedV3 = await new Database({ storageBackend: fixtureBackend }).init();
 ok('Database.init loads every canonical schema-v3 note without loss', eq(
   [...loadedV3.notes.values()].map((note) => note.toJSON()),
-  comprehensive.notes.map((note) => ({ ...note, aliases: [] })),
+  comprehensive.notes.map((note) => ({ ...note, aliases: [], archivedAt: null })),
 ));
 ok('Database.init preserves schema-v3 config and Trash state', eq(loadedV3.config, comprehensive.config)
   && loadedV3.getTrash().map((note) => note.id).join() === 'v3-trash');
@@ -546,8 +548,9 @@ ok('large schema-v3 fixture regenerates byte-for-byte', largeRaw === regenerated
 ok('large schema-v3 fixture contains exactly 1,000 notes', large.notes.length === 1000);
 ok('large schema-v3 fixture migrates additively without mutation', largeMigration.migrated === true
   && largeMigration.data.notes.every((note) => Array.isArray(note.aliases) && note.aliases.length === 0)
+  && largeMigration.data.notes.every((note) => note.archivedAt === null)
   && JSON.stringify(large) === largeBefore);
-ok('large schema-v3 notes hydrate losslessly with the additive alias default', large.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [] })));
+ok('large schema-v3 notes hydrate losslessly with additive defaults', large.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })));
 ok('large schema-v3 Markdown contents are exact fixed points', large.notes.every((note) => serialize(parse(note.content)) === note.content));
 ok('large schema-v3 IDs are unique and every parent exists', (() => {
   const ids = new Set(large.notes.map((note) => note.id));

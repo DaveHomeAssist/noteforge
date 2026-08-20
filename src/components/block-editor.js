@@ -163,6 +163,51 @@ export class BlockEditor {
     if (first) this.#focusBlock(first.id, 'start');
   }
 
+  /** Plain editable text per block for modeless find navigation. */
+  findEntries() {
+    this.#syncFocused();
+    return this.blocks.map((block) => ({ id: block.id, text: block.text }));
+  }
+
+  /** Focus one raw block and select an exact UTF-16 text range. */
+  selectTextRange(blockId, start, end) {
+    const block = this.#byId(blockId);
+    if (!block || NONTEXT.has(block.type) || block.type === 'table') return false;
+    this.#focusBlock(blockId, start);
+    const content = this.#contentEl(blockId);
+    const node = content?.firstChild;
+    if (!content || !node || node.nodeType !== Node.TEXT_NODE) return false;
+    const from = Math.max(0, Math.min(Number(start) || 0, node.textContent.length));
+    const to = Math.max(from, Math.min(Number(end) || from, node.textContent.length));
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(node, from);
+    range.setEnd(node, to);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    content.scrollIntoView({ block: 'center' });
+    return true;
+  }
+
+  /** Replace the complete Markdown model as one undoable editor action. */
+  applyMarkdown(markdown) {
+    this.#syncFocused();
+    const previous = this.#clone(this.blocks);
+    const next = parse(String(markdown ?? ''));
+    if (serialize(previous) === serialize(next)) return false;
+    this.undoStack.push(previous);
+    if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
+    this.redoStack = [];
+    this.blocks = next;
+    this.baseline = this.#clone(next);
+    this.focusedId = null;
+    this.selectedId = null;
+    this.#clearMultiSelectState();
+    this.#render();
+    this.onChange();
+    return true;
+  }
+
   jumpToHeading(anchor, { focus = true } = {}) {
     const row = [...this.host.querySelectorAll('[data-heading-anchor]')]
       .find((element) => element.dataset.headingAnchor === anchor);

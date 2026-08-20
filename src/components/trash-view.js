@@ -6,6 +6,16 @@
 import { escapeHtml, truncate, formatDate } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 
+export function createTrashElements({ badge = document.getElementById('trash-badge'), root = document.body } = {}) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal';
+  overlay.id = 'trash-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Trash" tabindex="-1"><header class="modal__header"><h2 class="modal__title">🗑 Trash</h2><div class="modal__actions"><button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button><button class="btn btn--ghost" data-close title="Close">✕</button></div></header><div id="trash-list" class="trash-list"></div></div>`;
+  root.appendChild(overlay);
+  return { overlay, list: overlay.querySelector('#trash-list'), empty: overlay.querySelector('#trash-empty'), badge };
+}
+
 export class TrashView {
   /**
    * @param {{ overlay:HTMLElement, list:HTMLElement, empty:HTMLButtonElement, badge:HTMLElement }} els
@@ -97,7 +107,8 @@ export class TrashView {
     if (btn.dataset.act === 'restore') {
       if (this.db.restoreNote(id)) {
         this.close();
-        this.onOpenNote?.(id);
+        const restored = this.db.notes.get(id);
+        this.onOpenNote?.(id, { archived: Boolean(restored?.isArchived) });
       }
     } else if (btn.dataset.act === 'purge') {
       const note = this.db.getTrash().find((n) => n.id === id);

@@ -405,6 +405,7 @@ export class Database {
       normalizeTitle(note?.title),
       ...(Array.isArray(note?.aliases) ? note.aliases.map(normalizeTitle) : []),
       Boolean(note?.isTrashed),
+      Boolean(note?.isArchived),
     ]);
   }
 
@@ -526,18 +527,26 @@ export class Database {
 
   /**
    * Reparent a note (parentId = null for top level). Rejects self-parenting,
-   * cycles (parent can't be a descendant), and parents that aren't live notes.
+   * cycles (parent can't be a descendant), and parents outside the requested
+   * lifecycle scope. Merge import may explicitly include archived notes.
+   * @param {{ includeArchived?:boolean }} options
    * @returns {boolean} whether the move was applied.
    */
-  setParent(id, parentId) {
-    const note = this.getNote(id);
+  setParent(id, parentId, { includeArchived = false } = {}) {
+    const inScope = (noteId) => {
+      if (!includeArchived) return this.getNote(noteId);
+      const candidate = this.notes.get(noteId);
+      return candidate && !candidate.isTrashed ? candidate : null;
+    };
+    const note = inScope(id);
     if (!note) return false;
     const next = parentId || null;
     if (next === note.parentId) return true; // no-op
     if (next !== null) {
       if (next === id) return false;
-      if (!this.getNote(next)) return false; // parent must be a live note
-      if (isDescendant(this.getAllNotes(), id, next)) return false; // would create a cycle
+      if (!inScope(next)) return false; // parent must be available in the same lifecycle scope
+      const candidates = includeArchived ? this.getNotesInScope('nontrash') : this.getAllNotes();
+      if (isDescendant(candidates, id, next)) return false; // would create a cycle
     }
     note.parentId = next; // structural change only — don't touch updatedAt
     this.#persist();
@@ -577,6 +586,36 @@ export class Database {
     return true;
   }
 
+  /** Move one active note to Archive while retaining hierarchy and identity. */
+  archiveNote(id) {
+    const note = this.getNote(id);
+    if (!note) return false;
+    const before = note.toJSON();
+    note.markArchived();
+    this.#rebuildLinkState();
+    this.#persist([{ note: before, reason: 'pre_archive' }]);
+    this.#emit();
+    return true;
+  }
+
+  /** Restore one archived note to active scope, rejecting identity ambiguity. */
+  unarchiveNote(id) {
+    const note = this.getArchivedNote(id);
+    if (!note) return false;
+    const identity = this.validateNewLinkIdentity(note.title, note.aliases);
+    if (!identity.valid) {
+      const error = new Error(identity.message);
+      error.code = identity.code;
+      throw error;
+    }
+    const before = note.toJSON();
+    note.unarchive();
+    this.#rebuildLinkState();
+    this.#persist([{ note: before, reason: 'pre_unarchive' }]);
+    this.#emit();
+    return true;
+  }
+
   /** Permanently remove a single note (from the Trash or otherwise). */
   purgeNote(id) {
     const existed = this.notes.delete(id);
@@ -607,15 +646,34 @@ export class Database {
     return purged;
   }
 
-  /** A live note by id, or null (trashed notes are treated as absent). */
+  /** An active note by id, or null (Archive and Trash require explicit scope). */
   getNote(id) {
     const note = this.notes.get(id);
-    return note && !note.isTrashed ? note : null;
+    return note && !note.isTrashed && !note.isArchived ? note : null;
   }
 
-  /** All live notes (excludes the Trash). */
+  /** All active notes (excludes Archive and Trash). */
   getAllNotes() {
-    return this.#rawNotes().filter((n) => !n.isTrashed);
+    return this.#rawNotes().filter((n) => !n.isTrashed && !n.isArchived);
+  }
+
+  getArchivedNote(id) {
+    const note = this.notes.get(id);
+    return note && !note.isTrashed && note.isArchived ? note : null;
+  }
+
+  getArchived() {
+    return this.#rawNotes()
+      .filter((note) => !note.isTrashed && note.isArchived)
+      .sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+  }
+
+  getNotesInScope(scope = 'active') {
+    if (scope === 'archived') return this.getArchived();
+    if (scope === 'trash') return this.getTrash();
+    if (scope === 'nontrash') return this.#rawNotes().filter((note) => !note.isTrashed);
+    if (scope === 'all') return this.#rawNotes();
+    return this.getAllNotes();
   }
 
   /** Trashed notes, most-recently-deleted first. */

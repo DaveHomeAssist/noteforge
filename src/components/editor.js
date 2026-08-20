@@ -345,6 +345,28 @@ export class Editor {
     this.autosave.flush();
   }
 
+  findEntries() {
+    return this.blockEditor?.findEntries() || [];
+  }
+
+  getSourceMarkdown() {
+    if (this.blockEditor) return this.blockEditor.serialize();
+    return this.currentId ? this.db.getNote(this.currentId)?.content ?? '' : '';
+  }
+
+  selectFindRange(blockId, start, end) {
+    return this.blockEditor?.selectTextRange(blockId, start, end) || false;
+  }
+
+  applyFindReplacement(markdown) {
+    const changed = this.blockEditor?.applyMarkdown(markdown) || false;
+    if (changed) {
+      this.outline?.update(markdown);
+      this.autosave.flush();
+    }
+    return changed;
+  }
+
   // --- persistence --------------------------------------------------------
 
   #save() {

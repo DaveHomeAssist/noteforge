@@ -54,8 +54,8 @@ async function rejectsCode(run, code) {
 
 const makeBackup = (state = fixture, options = {}) => createBackup(state, { createdAt: CREATED_AT, ...options });
 const asCurrentState = (state) => ({
-  schemaVersion: 4,
-  notes: state.notes.map((note) => ({ ...structuredClone(note), aliases: [...(note.aliases || [])] })),
+  schemaVersion: 5,
+  notes: state.notes.map((note) => ({ ...structuredClone(note), aliases: [...(note.aliases || [])], archivedAt: note.archivedAt || null })),
   config: structuredClone(state.config),
 });
 

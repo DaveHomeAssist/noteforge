@@ -36,7 +36,11 @@ No row exits its phase with failing Node/browser/build/audit checks, unexplained
 - Phase 1 rows 1 and 18 are released from NoteForge
   `bbb68703364a0290d3dae93126bcb821633ebc8f`; exact-SHA Pages run `32334248579`
   passed before live mirror verification.
-- Phase 2 rows 2, 6, 9, 10, and 15 are implemented and locally verified with 360
-  Node checks, 339 browser assertions, 31 integrated recovery/Phase 2 checks, four
-  production/offline checks, a 257,079-byte initial shell, and zero high-severity
-  audit findings. Exact-SHA release evidence is recorded after the phase commit.
+- Phase 2 rows 2, 6, 9, 10, and 15 are released from NoteForge
+  `cbba94c621de57cdbe926029118a3dddeb063be3`; exact-SHA Pages run `32339251100`
+  passed before live mirror verification.
+- Phase 3 rows 3, 7, 8, and 17 are implemented and locally verified with 371 Node
+  checks, 355 browser assertions, 48 integrated recovery/Phase 2/Phase 3 checks,
+  seven production/offline checks, a 253,335-byte initial shell, and zero
+  high-severity audit findings. Exact-SHA release evidence is recorded after the
+  phase commit.

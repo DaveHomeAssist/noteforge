@@ -10,6 +10,16 @@ import { extractHeadings } from '../utils/headings.js';
 const RECENT_LIMIT = 6;
 const MAX_RESULTS = 50;
 
+export function createCommandPaletteElements(root = document.body) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal palette';
+  overlay.id = 'palette-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel palette__panel" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1"><input id="palette-input" class="palette__input" type="text" autocomplete="off" spellcheck="false" placeholder="Search notes…   ·   &gt; commands   ·   # headings" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"><div id="palette-list" class="palette__list" role="listbox" aria-label="Results"></div></div>`;
+  root.appendChild(overlay);
+  return { overlay, input: overlay.querySelector('#palette-input'), list: overlay.querySelector('#palette-list') };
+}
+
 export class CommandPalette {
   /**
    * @param {{ overlay:HTMLElement, input:HTMLInputElement, list:HTMLElement }} els

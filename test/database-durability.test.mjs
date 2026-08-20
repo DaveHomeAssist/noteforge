@@ -222,7 +222,7 @@ function memoryBackend({ failNotes = false } = {}) {
       id: 'restored', title: 'Restored', content: 'exact', tags: [],
       banner: { position: 25, type: 'gradient', value: 'linear-gradient(90deg, #111, #222)' },
       createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T11:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null, aliases: ['Previous restored title'],
+      deletedAt: null, pinned: false, parentId: null, aliases: ['Previous restored title'], archivedAt: null,
       futureMetadata: { kept: true, order: ['z', 'a'] },
       ...JSON.parse('{"__proto__":{"polluted":true}}'),
     }],
@@ -266,7 +266,7 @@ function memoryBackend({ failNotes = false } = {}) {
     id: 'unsafe', title: 'Unsafe', content: '', tags: [],
     banner: { type: 'image', value: 'javascript:alert(1)', position: 50 },
     createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T10:00:00.000Z',
-    deletedAt: null, pinned: false, parentId: null, aliases: [],
+    deletedAt: null, pinned: false, parentId: null, aliases: [], archivedAt: null,
   };
   let rejected = false;
   try {
@@ -374,7 +374,7 @@ function memoryBackend({ failNotes = false } = {}) {
     notes: [{
       id: 'new-vault', title: 'New vault', content: 'restored', tags: [], banner: null,
       createdAt: '2026-08-20T00:00:00.000Z', updatedAt: '2026-08-20T00:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null, aliases: [],
+      deletedAt: null, pinned: false, parentId: null, aliases: [], archivedAt: null,
     }],
     config: {},
   });

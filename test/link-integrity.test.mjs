@@ -55,6 +55,7 @@ function rawNote(id, title, content = '', extra = {}) {
     pinned: false,
     parentId: null,
     aliases: [],
+    archivedAt: null,
     ...extra,
   };
 }

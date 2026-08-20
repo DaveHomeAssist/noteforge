@@ -113,7 +113,7 @@ function restoreChangeDetails(plan, limit = 20) {
   return `<div class="backup-restore-preview__changes">${categories.map(([label, notes]) => {
     const visible = notes.slice(0, limit);
     return `<section><h4>${escapeHtml(label)} (${notes.length})</h4>${visible.length
-      ? `<ul>${visible.map((note) => `<li><span>${escapeHtml(note.title || 'Untitled')}</span> <code>${escapeHtml(note.id)}</code>${note.fields?.length ? ` <span class="muted">${escapeHtml(note.fields.join(', '))}</span>` : ''}</li>`).join('')}</ul>`
+      ? `<ul>${visible.map((note) => `<li><span>${escapeHtml(note.title || 'Untitled')}</span> <code>${escapeHtml(note.id)}</code>${note.state === 'archived' ? ' <span class="muted">Archive</span>' : note.state === 'trashed' ? ' <span class="muted">Trash</span>' : ''}${note.fields?.length ? ` <span class="muted">${escapeHtml(note.fields.join(', '))}</span>` : ''}</li>`).join('')}</ul>`
       : '<p class="muted">None</p>'}${notes.length > visible.length ? `<p class="muted">${notes.length - visible.length} more not shown.</p>` : ''}</section>`;
   }).join('')}</div>`;
 }

@@ -26,6 +26,10 @@
   import { LinkToolsView } from '/src/components/link-tools-view.js';
   import { OutlineView } from '/src/components/outline-view.js';
   import { GraphView } from '/src/components/graph.js';
+  import { ArchiveView, createArchiveElements } from '/src/components/archive-view.js';
+  import { FindReplaceView, createFindReplaceElements } from '/src/components/find-replace-view.js';
+  import { SavedSearchesView, createSavedSearchElements } from '/src/components/saved-searches-view.js';
+  import { BulkActionsView, createBulkActionElements } from '/src/components/bulk-actions-view.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
@@ -1192,6 +1196,16 @@
     check('windowing is active', !!nl._window && nl._window.virtualize === true);
     check('a spacer pad reserves the off-screen height', !!els.list.querySelector('.note-list__pad'));
     check('footer count reflects the full total', els.count.textContent === '200 notes');
+    const lastRendered = [...els.list.querySelectorAll('.note-item')].at(-1);
+    const lastIndex = nl._rows.findIndex((row) => row.note.id === lastRendered.dataset.id);
+    const nextId = nl._rows[lastIndex + 1].note.id;
+    const select = lastRendered.querySelector('[data-select]');
+    select.focus();
+    select.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true }));
+    check('Shift+Arrow range selection crosses a virtualized window edge', nl.getSelection().includes(lastRendered.dataset.id) && nl.getSelection().includes(nextId));
+    check('virtualized range selection scrolls and preserves focus on the target checkbox', document.activeElement?.closest('.note-item')?.dataset.id === nextId);
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }));
+    check('Ctrl+A selects the full virtualized scope without dropping keyboard focus', nl.getSelection().length === 200 && document.activeElement?.closest('.note-item')?.dataset.id === nextId);
   });
 
   section('note list: small lists are not virtualized (all rendered)', () => {
@@ -1797,6 +1811,143 @@
         mentionPreview?.sourceId === source.id && mentionPreview?.targetId === target.id);
     } catch (e) {
       results.push('FAIL  Phase 2 contextual backlink editor — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 3 retrieval, Archive, and safe source replacement ============
+  await (async () => {
+    try {
+      const values = new Map();
+      const captures = [];
+      const backend = {
+        async load(name, fallback) { return values.has(name) ? structuredClone(values.get(name)) : fallback; },
+        async save(name, value) { values.set(name, structuredClone(value)); return true; },
+        async saveMany(entries) { entries.forEach(([name, value]) => values.set(name, structuredClone(value))); return true; },
+        async getStatus() { return { backend: 'indexeddb' }; },
+      };
+      const db = new Database({ storageBackend: backend, onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)) });
+      const current = db.createNote({ id: 'phase3-current', title: 'Phase 3 current', content: 'alpha $& alpha' });
+      const editorHost = document.createElement('section'); scratch.appendChild(editorHost);
+      const editor = new Editor(editorHost, db, {
+        openNote: () => {}, openOrCreateByTitle: () => {}, deleteNote: () => {}, togglePin: () => {},
+      });
+      editor.open(current.id);
+      const findElements = createFindReplaceElements(scratch);
+      const findView = new FindReplaceView(findElements, db, editor, { confirmVaultApply: () => true });
+      findView.show();
+      findElements.find.value = 'alpha';
+      findElements.replacement.value = '$&\\done';
+      findElements.panel.querySelector('[data-find-preview]').click();
+      check('Phase 3 current-note replace preview counts source matches without mutation',
+        /2 source matches/.test(findElements.preview.textContent) && db.getNote(current.id).content === 'alpha $& alpha');
+      findElements.apply.click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 3 current-note replace keeps dollars and backslashes literal',
+        db.getNote(current.id).content === '$&\\done $& $&\\done'
+        && /2 replacements applied/.test(findElements.status.textContent));
+      findView.close();
+      const block = editorHost.querySelector('.blk[contenteditable="true"]');
+      key(block, 'z', { ctrlKey: true });
+      editor.flushPending();
+      await db.flush();
+      check('Phase 3 current-note replacement is one editor undo step', db.getNote(current.id).content === 'alpha $& alpha');
+      findView.show();
+      findElements.find.value = 'alpha';
+      findElements.replacement.value = 'stale';
+      findElements.panel.querySelector('[data-find-preview]').click();
+      editor.blockEditor.applyMarkdown('fresh alpha');
+      findElements.apply.click();
+      const staleRejected = editor.getSourceMarkdown() === 'fresh alpha'
+        && /changed after Preview/.test(findElements.status.textContent);
+      editor.flushPending();
+      await db.flush();
+      check('Phase 3 current-note Apply rejects a preview made before a newer edit',
+        staleRejected && db.getNote(current.id).content === 'fresh alpha');
+      findView.close();
+
+      db.createNote({ id: 'phase3-vault', title: 'Vault match', content: 'needle needle' });
+      db.createNote({ id: 'phase3-archive', title: 'Archived match', content: 'needle', archivedAt: '2026-08-20T12:00:00.000Z' });
+      const trash = db.createNote({ id: 'phase3-trash', title: 'Trash match', content: 'needle' });
+      db.deleteNote(trash.id);
+      await db.flush();
+      captures.length = 0;
+      findView.show({ scope: 'vault' });
+      findElements.find.value = 'needle';
+      findElements.replacement.value = 'done';
+      findElements.panel.querySelector('[data-find-preview]').click();
+      check('Phase 3 vault preview reports changed, unchanged, and skipped scopes before Apply',
+        /1 changed/.test(findElements.preview.textContent)
+        && /2 skipped/.test(findElements.preview.textContent)
+        && db.getNote('phase3-vault').content === 'needle needle');
+      findElements.apply.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      check('Phase 3 vault Apply rewrites only active Markdown with a safety revision',
+        db.getNote('phase3-vault').content === 'done done'
+        && db.getArchivedNote('phase3-archive').content === 'needle'
+        && db.notes.get('phase3-trash').content === 'needle'
+        && captures.some((capture) => capture.reason === 'pre_bulk_replace')
+        && /0 failed/.test(findElements.status.textContent));
+      findView.close();
+
+      let opened = null;
+      const archiveElements = createArchiveElements(scratch);
+      const archiveView = new ArchiveView(archiveElements, db, { onRestored: (id) => { opened = id; } });
+      archiveView.show({ selectedId: 'phase3-archive' });
+      check('Phase 3 Archive view is labelled, focused, and previews retained hierarchy state',
+        archiveView.open
+        && archiveElements.overlay.contains(document.activeElement)
+        && /Archived match/.test(archiveElements.preview.textContent));
+      archiveElements.preview.querySelector('[data-unarchive-preview]').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 3 Archive restores and opens the selected note',
+        opened === 'phase3-archive' && db.getNote('phase3-archive') !== null && !archiveView.open);
+
+      const shell = document.createElement('section');
+      shell.innerHTML = '<input class="saved-search-input"><select class="saved-search-sort"><option value="updated">updated</option><option value="created">created</option><option value="title">title</option></select><div class="saved-search-tags"></div><div class="saved-search-list" style="height:360px;overflow:auto"></div><span class="saved-search-count"></span>';
+      scratch.appendChild(shell);
+      const noteList = new NoteList({
+        search: shell.querySelector('.saved-search-input'), sort: shell.querySelector('.saved-search-sort'),
+        tags: shell.querySelector('.saved-search-tags'), list: shell.querySelector('.saved-search-list'),
+        count: shell.querySelector('.saved-search-count'),
+      }, db, { onOpen: () => {}, onTogglePin: () => {} });
+      noteList.applySearchState({ query: 'is:archived', sortMode: 'title' });
+      const savedElements = createSavedSearchElements({ sidebarAnchor: shell.querySelector('.saved-search-tags'), root: scratch });
+      const savedView = new SavedSearchesView(savedElements, db, noteList);
+      savedView.show({ seedCurrent: true });
+      savedElements.form.elements.name.value = 'Archived work';
+      savedElements.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      check('Phase 3 saved view creates a stable persisted query and palette command',
+        db.config.savedSearches?.length === 1
+        && db.config.savedSearches[0].query === 'is:archived'
+        && savedView.commands()[0]?.title === 'Run saved view: Archived work');
+      noteList.applySearchState({ query: '', sortMode: 'updated' });
+      savedView.run(db.config.savedSearches[0].id);
+      check('Phase 3 saved view restores query and sort as one reusable workflow',
+        noteList.getSearchState().query === 'is:archived'
+        && noteList.getSearchState().sortMode === 'title');
+      savedView.show();
+      const nameInput = savedElements.manageList.querySelector('[data-saved-name]');
+      nameInput.value = 'Renamed archive';
+      nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+      check('Phase 3 saved view supports keyboard-accessible rename controls',
+        db.config.savedSearches[0].name === 'Renamed archive'
+        && !!savedElements.manageList.querySelector('[data-saved-up]'));
+      savedElements.manageList.querySelector('[data-saved-delete]').click();
+      check('Phase 3 saved view delete returns to its explicit empty state',
+        db.config.savedSearches.length === 0 && /No saved views yet/.test(savedElements.list.textContent));
+      savedView.modal.close();
+
+      noteList.applySearchState({ query: '', sortMode: 'updated' });
+      const bulkElements = createBulkActionElements({ anchor: noteList.els.list });
+      const bulkView = new BulkActionsView(bulkElements, db, noteList);
+      noteList.els.list.querySelector('.note-item[data-id="phase3-current"] [data-select]').click();
+      bulkView.update(noteList.getSelection());
+      bulkElements.bar.querySelector('[data-bulk-clear]').click();
+      check('Phase 3 clearing the bulk bar restores focus to the selected note control',
+        document.activeElement?.closest('.note-item')?.dataset.id === 'phase3-current'
+        && noteList.getSelection().length === 0);
+    } catch (e) {
+      results.push('FAIL  Phase 3 component flows — threw: ' + e.message);
     }
   })();
 

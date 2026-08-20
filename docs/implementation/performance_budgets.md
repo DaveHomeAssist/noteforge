@@ -47,6 +47,17 @@ and recovery remain genuinely post-usable chunks. Deferred CSS/JavaScript totals
 101,990 bytes and is build-time precached for offline first use; full HTML/CSS/
 JavaScript output is 359,069 bytes. No dependency was added in this phase.
 
+Phase 3 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+5,094 bytes + directly referenced CSS 31,941 bytes + directly referenced JavaScript
+216,300 bytes = 253,335-byte initial shell, 3,845 bytes below the authoritative
+257,180-byte ceiling. CSS is 448 bytes above its diagnostic ceiling, offset by HTML
+being 3,406 bytes below its diagnostic ceiling and JavaScript being 887 bytes
+below; the combined budget remains green without an exception. Archive, saved-view,
+find/replace, bulk-action, graph, settings, Trash, Link tools, and recovery UI remain
+post-usable chunks and are build-time precached for offline first use. Deferred CSS/
+JavaScript plus the service worker total 165,998 bytes; full HTML/CSS/JavaScript
+output is 419,333 bytes. No dependency was added in this phase.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

@@ -6,12 +6,8 @@ import { Database } from '../core/database.js';
 import { storage } from '../core/storage.js';
 import { Editor } from '../components/editor.js';
 import { NoteList } from '../components/note-list.js';
-import { GraphView } from '../components/graph.js';
-import { TrashView } from '../components/trash-view.js';
-import { CommandPalette } from '../components/command-palette.js';
-import { SettingsView } from '../components/settings-view.js';
 import { Theme } from '../ui/theme.js';
-import { normalizeSettings, FONT_SCALES } from '../ui/settings.js';
+import { normalizeSettings } from '../ui/settings.js';
 import { sampleNotes } from './seed.js';
 import { TEMPLATES, templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
@@ -36,6 +32,22 @@ class App {
     this.navigationReady = null;
     this.linkTools = null;
     this.linkToolsReady = null;
+    this.graph = null;
+    this.graphReady = null;
+    this.trash = null;
+    this.trashReady = null;
+    this.palette = null;
+    this.paletteReady = null;
+    this.settings = null;
+    this.settingsReady = null;
+    this.archive = null;
+    this.archiveReady = null;
+    this.findReplace = null;
+    this.findReplaceReady = null;
+    this.savedSearches = null;
+    this.savedSearchesReady = null;
+    this.bulkActions = null;
+    this.bulkActionsReady = null;
 
     this.el = {
       editor: document.getElementById('editor'),
@@ -48,9 +60,6 @@ class App {
       newBtn: document.getElementById('new-note-btn'),
       paletteBtn: document.getElementById('palette-btn'),
       templateBtn: document.getElementById('template-btn'),
-      paletteOverlay: document.getElementById('palette-overlay'),
-      paletteInput: document.getElementById('palette-input'),
-      paletteList: document.getElementById('palette-list'),
       themeBtn: document.getElementById('theme-btn'),
       graphBtn: document.getElementById('graph-btn'),
       menuBtn: document.getElementById('menu-btn'),
@@ -61,15 +70,12 @@ class App {
       seedBtn: document.getElementById('seed-btn'),
       trashBtn: document.getElementById('trash-btn'),
       trashBadge: document.getElementById('trash-badge'),
-      trashOverlay: document.getElementById('trash-overlay'),
-      trashList: document.getElementById('trash-list'),
-      trashEmpty: document.getElementById('trash-empty'),
       settingsBtn: document.getElementById('settings-btn'),
-      settingsOverlay: document.getElementById('settings-overlay'),
-      settingsForm: document.getElementById('settings-form'),
       historyBtn: document.getElementById('history-btn'),
       backupBtn: document.getElementById('backup-btn'),
       linkReportBtn: document.getElementById('link-report-btn'),
+      archiveBtn: document.getElementById('archive-btn'),
+      findReplaceBtn: document.getElementById('find-replace-btn'),
       navBack: document.getElementById('nav-back'),
       navForward: document.getElementById('nav-forward'),
       mobileNavBack: document.getElementById('mobile-nav-back'),
@@ -95,6 +101,7 @@ class App {
         this.#scheduleNavigationInitialization();
         this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
+        this.#scheduleSavedSearchesInitialization();
         return this;
       })
       .catch((err) => {
@@ -131,36 +138,14 @@ class App {
       this.db,
       {
         onOpen: (id) => this.openNote(id),
+        onOpenArchived: (id) => this.#showArchive(id),
         onTogglePin: (id) => this.togglePin(id),
         onReparent: (id, parentId) => this.reparent(id, parentId),
         onNewChild: (parentId) => this.newChild(parentId),
-      }
-    );
-    this.graph = new GraphView(this.el.graph, this.db, (id) => {
-      this.setView('editor');
-      this.openNote(id);
-    });
-    this.trash = new TrashView(
-      { overlay: this.el.trashOverlay, list: this.el.trashList, empty: this.el.trashEmpty, badge: this.el.trashBadge },
-      this.db,
-      (id) => this.openNote(id)
-    );
-    this.palette = new CommandPalette(
-      { overlay: this.el.paletteOverlay, input: this.el.paletteInput, list: this.el.paletteList },
-      {
-        getNotes: () => this.db.getAllNotes(),
-        getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
-        getCommands: () => this.#commands(),
-        onOpenNote: (id) => this.openNote(id),
-        onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
+        onSelectionChange: (ids) => this.#selectionChanged(ids),
       }
     );
     this.theme = new Theme(this.db, this.el.themeBtn);
-    this.settings = new SettingsView(
-      { overlay: this.el.settingsOverlay, form: this.el.settingsForm },
-      this.db,
-      (s) => this.#applySettings(s)
-    );
     this.history = null; // loaded on first open to keep recovery UI out of the initial shell
     this.backup = null;
     // Apply persisted font/width/autosave on load (Theme already applied the theme).
@@ -173,7 +158,7 @@ class App {
       this.editor.refresh();
       this.el.historyBtn.disabled = !this.currentId || !this.db.getNote(this.currentId);
       this.#pruneNavigationState();
-      if (this.view === 'graph') this.graph.render(this.currentId);
+      if (this.view === 'graph') this.graph?.render(this.currentId);
     });
 
     this.#wireChrome();
@@ -308,7 +293,7 @@ class App {
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open);
   }
 
   #toggleSidebar() {
@@ -557,6 +542,190 @@ class App {
     else setTimeout(initialize, 0);
   }
 
+  #ensureGraph() {
+    if (this.graph) return Promise.resolve(this.graph);
+    if (this.graphReady) return this.graphReady;
+    this.graphReady = import('../components/graph.js').then(({ GraphView }) => {
+      this.graph = new GraphView(this.el.graph, this.db, (id) => {
+        this.setView('editor');
+        this.openNote(id);
+      });
+      return this.graph;
+    }).catch((error) => {
+      this.graphReady = null;
+      throw error;
+    });
+    return this.graphReady;
+  }
+
+  #ensureTrash() {
+    if (this.trash) return Promise.resolve(this.trash);
+    if (this.trashReady) return this.trashReady;
+    this.trashReady = import('../components/trash-view.js').then(({ TrashView, createTrashElements }) => {
+      this.trash = new TrashView(createTrashElements({ badge: this.el.trashBadge }), this.db, (id, { archived = false } = {}) => {
+        if (archived) void this.#showArchive(id);
+        else this.openNote(id);
+      });
+      return this.trash;
+    }).catch((error) => {
+      this.trashReady = null;
+      throw error;
+    });
+    return this.trashReady;
+  }
+
+  #ensurePalette() {
+    if (this.palette) return Promise.resolve(this.palette);
+    if (this.paletteReady) return this.paletteReady;
+    this.paletteReady = import('../components/command-palette.js').then(({ CommandPalette, createCommandPaletteElements }) => {
+      this.palette = new CommandPalette(createCommandPaletteElements(), {
+        getNotes: () => this.db.getAllNotes(),
+        getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
+        getCommands: () => this.#commands(),
+        onOpenNote: (id) => this.openNote(id),
+        onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
+      });
+      return this.palette;
+    }).catch((error) => {
+      this.paletteReady = null;
+      throw error;
+    });
+    return this.paletteReady;
+  }
+
+  #ensureSettings() {
+    if (this.settings) return Promise.resolve(this.settings);
+    if (this.settingsReady) return this.settingsReady;
+    this.settingsReady = import('../components/settings-view.js').then(({ SettingsView, createSettingsElements }) => {
+      this.settings = new SettingsView(createSettingsElements(), this.db, (settings) => this.#applySettings(settings));
+      return this.settings;
+    }).catch((error) => {
+      this.settingsReady = null;
+      throw error;
+    });
+    return this.settingsReady;
+  }
+
+  #ensureArchive() {
+    if (this.archive) return Promise.resolve(this.archive);
+    if (this.archiveReady) return this.archiveReady;
+    this.archiveReady = import('../components/archive-view.js').then(({ ArchiveView, createArchiveElements }) => {
+      this.archive = new ArchiveView(createArchiveElements(), this.db, {
+        onRestored: (id) => this.openNote(id, { discardPending: true }),
+      });
+      return this.archive;
+    }).catch((error) => {
+      this.archiveReady = null;
+      throw error;
+    });
+    return this.archiveReady;
+  }
+
+  #ensureFindReplace() {
+    if (this.findReplace) return Promise.resolve(this.findReplace);
+    if (this.findReplaceReady) return this.findReplaceReady;
+    this.findReplaceReady = Promise.all([
+      import('../components/find-replace-view.js'),
+      this.#ensureRecovery(),
+    ]).then(([{ FindReplaceView, createFindReplaceElements }]) => {
+      this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
+        confirmVaultApply: ({ message }) => confirm(message),
+        onApplied: () => this.noteList.render(),
+      });
+      return this.findReplace;
+    }).catch((error) => {
+      this.findReplaceReady = null;
+      throw error;
+    });
+    return this.findReplaceReady;
+  }
+
+  #ensureSavedSearches() {
+    if (this.savedSearches) return Promise.resolve(this.savedSearches);
+    if (this.savedSearchesReady) return this.savedSearchesReady;
+    this.savedSearchesReady = import('../components/saved-searches-view.js').then(({ SavedSearchesView, createSavedSearchElements }) => {
+      this.savedSearches = new SavedSearchesView(createSavedSearchElements(), this.db, this.noteList, {
+        onRun: () => this.#closeSidebar(),
+      });
+      return this.savedSearches;
+    }).catch((error) => {
+      this.savedSearchesReady = null;
+      throw error;
+    });
+    return this.savedSearchesReady;
+  }
+
+  #scheduleSavedSearchesInitialization() {
+    const initialize = () => void this.#ensureSavedSearches().catch((error) => {
+      console.warn('[search] deferred saved views unavailable:', error);
+    });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 1_500 });
+    else setTimeout(initialize, 0);
+  }
+
+  #selectionChanged(ids) {
+    if (!ids.length && !this.bulkActions) return;
+    void this.#ensureBulkActions().then((view) => view.update(ids)).catch((error) => {
+      console.warn('[bulk] actions unavailable:', error);
+    });
+  }
+
+  #ensureBulkActions() {
+    if (this.bulkActions) return Promise.resolve(this.bulkActions);
+    if (this.bulkActionsReady) return this.bulkActionsReady;
+    this.bulkActionsReady = Promise.all([
+      import('../components/bulk-actions-view.js'),
+      this.#ensureRecovery(),
+    ]).then(([{ BulkActionsView, createBulkActionElements }]) => {
+      this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
+        confirmAction: ({ message }) => confirm(message),
+        onApplied: () => this.#syncCurrentAfterBatch(),
+      });
+      return this.bulkActions;
+    }).catch((error) => {
+      this.bulkActionsReady = null;
+      throw error;
+    });
+    return this.bulkActionsReady;
+  }
+
+  #syncCurrentAfterBatch() {
+    if (!this.currentId || this.db.getNote(this.currentId)) return;
+    this.currentId = null;
+    const next = this.db.getNotesSorted()[0];
+    if (next) this.openNote(next.id);
+    else this.editor?.refresh();
+  }
+
+  async #showTrash() {
+    this.#closeMenu();
+    (await this.#ensureTrash()).show();
+  }
+
+  async #showPalette(prefill = '') {
+    this.#closeMenu();
+    (await this.#ensurePalette()).show(prefill);
+  }
+
+  async #showSettings() {
+    this.#closeMenu();
+    (await this.#ensureSettings()).show();
+  }
+
+  async #showArchive(selectedId = null) {
+    this.#closeMenu();
+    (await this.#ensureArchive()).show({ selectedId });
+  }
+
+  async #showFindReplace(scope = 'current') {
+    this.#closeMenu();
+    this.#closeSidebar();
+    const view = await this.#ensureFindReplace();
+    this.editor?.flushPending();
+    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    view.show({ scope });
+  }
+
   #syncNavigationFrom(controller) {
     this.navigation = controller.state;
     this.recentNoteIds = controller.recentIds;
@@ -603,13 +772,17 @@ class App {
       { id: 'forward', title: 'Go forward to next note', hint: 'Navigation · Alt+Right', icon: '→', run: () => this.goForward() },
       { id: 'graph', title: this.view === 'graph' ? 'Close graph view' : 'Open graph view', hint: 'View', icon: '🕸️', run: () => this.toggleGraph() },
       { id: 'theme', title: 'Toggle dark / light theme', hint: 'Appearance', icon: '🌓', run: () => this.theme.toggle() },
-      { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.trash.show() },
-      { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.settings.show() },
+      { id: 'find', title: 'Find and replace in current note', hint: 'Source Markdown · Ctrl/⌘ F', icon: '⌕', run: () => this.#showFindReplace('current') },
+      { id: 'find-vault', title: 'Find and replace across vault', hint: 'Preview required', icon: '⌕', run: () => this.#showFindReplace('vault') },
+      { id: 'archive-view', title: 'Open Archive', hint: `${this.db.getArchived().length} archived`, icon: '🗄', run: () => this.#showArchive() },
+      { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.#showTrash() },
+      { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.#showSettings() },
       { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
       { id: 'link-report', title: 'Open link integrity report', hint: 'Knowledge graph', icon: '🔗', run: () => this.#showLinkReport() },
       { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
       { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
+      ...(this.savedSearches?.commands() || []),
     ];
     // Save-to-folder needs the File System Access API (Chromium) — only offer it there.
     if (window.showDirectoryPicker) {
@@ -617,6 +790,7 @@ class App {
     }
     if (cur) {
       cmds.push({ id: 'history', title: 'Open revision history', hint: cur.title, icon: '↶', run: () => this.#showHistory() });
+      cmds.push({ id: 'archive', title: 'Archive current note', hint: cur.title, icon: '🗄', run: () => this.#archiveCurrent() });
       cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
       if (cur.parentId) cmds.push({ id: 'unnest', title: 'Move current note to top level', hint: cur.title, icon: '↤', run: () => this.reparent(cur.id, null) });
       cmds.push({ id: 'pin', title: cur.pinned ? 'Unpin current note' : 'Pin current note to top', hint: cur.title, icon: '📌', run: () => this.togglePin(cur.id) });
@@ -660,6 +834,19 @@ class App {
     }
   }
 
+  async #archiveCurrent() {
+    const note = this.currentId ? this.db.getNote(this.currentId) : null;
+    if (!note) return;
+    this.editor?.flushPending();
+    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    const id = note.id;
+    if (!this.db.archiveNote(id)) return;
+    const next = this.db.getNotesSorted()[0];
+    this.currentId = null;
+    if (next) this.openNote(next.id);
+    else this.editor?.refresh();
+  }
+
   // --- views --------------------------------------------------------------
 
   setView(view) {
@@ -668,11 +855,13 @@ class App {
     this.el.graph.hidden = !showGraph;
     this.el.editor.hidden = showGraph;
     this.el.graphBtn.classList.toggle('btn--active', showGraph);
-    if (showGraph) this.graph.render(this.currentId);
+    if (showGraph) this.graph?.render(this.currentId);
   }
 
-  toggleGraph() {
-    this.setView(this.view === 'graph' ? 'editor' : 'graph');
+  async toggleGraph() {
+    if (this.view === 'graph') return this.setView('editor');
+    await this.#ensureGraph();
+    this.setView('graph');
   }
 
   // --- chrome (buttons, menu, import/export) ------------------------------
@@ -693,25 +882,15 @@ class App {
     this.el.importBtn.addEventListener('click', () => this.el.importFile.click());
     this.el.importFile.addEventListener('change', (e) => this.#import(e));
     this.el.seedBtn.addEventListener('click', () => this.#seed());
-    this.el.trashBtn.addEventListener('click', () => {
-      this.#closeMenu();
-      this.trash.show();
-    });
-    this.el.paletteBtn?.addEventListener('click', () => {
-      this.#closeMenu();
-      this.palette.show();
-    });
-    this.el.templateBtn?.addEventListener('click', () => {
-      this.#closeMenu();
-      this.palette.show('> new '); // pre-filter the palette to the New / template commands
-    });
-    this.el.settingsBtn?.addEventListener('click', () => {
-      this.#closeMenu();
-      this.settings.show();
-    });
+    this.el.trashBtn.addEventListener('click', () => this.#showTrash());
+    this.el.paletteBtn?.addEventListener('click', () => this.#showPalette());
+    this.el.templateBtn?.addEventListener('click', () => this.#showPalette('> new '));
+    this.el.settingsBtn?.addEventListener('click', () => this.#showSettings());
     this.el.historyBtn?.addEventListener('click', () => this.#showHistory());
     this.el.backupBtn?.addEventListener('click', () => this.#showBackup());
     this.el.linkReportBtn?.addEventListener('click', () => this.#showLinkReport());
+    this.el.archiveBtn?.addEventListener('click', () => this.#showArchive());
+    this.el.findReplaceBtn?.addEventListener('click', () => this.#showFindReplace('current'));
     for (const button of [this.el.navBack, this.el.mobileNavBack]) button?.addEventListener('click', () => this.goBack());
     for (const button of [this.el.navForward, this.el.mobileNavForward]) button?.addEventListener('click', () => this.goForward());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
@@ -719,7 +898,10 @@ class App {
   }
 
   #export() {
-    const data = JSON.stringify(this.db.getAllNotes().map((n) => n.toJSON()), null, 2);
+    // Archive is a live lifecycle state, not deletion. Keep archived notes and
+    // archivedAt in the legacy merge-export format; Trash remains exclusive to
+    // the complete portable backup flow.
+    const data = JSON.stringify(this.db.getNotesInScope('nontrash').map((n) => n.toJSON()), null, 2);
     this.#downloadBlob(data, `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     this.#closeMenu();
   }
@@ -783,6 +965,7 @@ class App {
           banner: data.banner || null,
           pinned: !!data.pinned,
           aliases: Array.isArray(data.aliases) ? data.aliases : [],
+          archivedAt: typeof data.archivedAt === 'string' ? data.archivedAt : null,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         }, { allowIdentityConflicts: true });
@@ -792,7 +975,7 @@ class App {
       }
       for (const { id, oldParent } of pendingParents) {
         const newParent = idMap.get(oldParent);
-        if (newParent) this.db.setParent(id, newParent); // db rejects cycles / missing parents
+        if (newParent) this.db.setParent(id, newParent, { includeArchived: true }); // db rejects cycles / missing parents
       }
       this.noteList.render();
       // Land the user in a note rather than the empty-state placeholder (matters
@@ -841,7 +1024,8 @@ class App {
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         if (this.#anyModalOpen() && !this.palette?.open) return; // don't stack over another modal
-        this.palette.toggle();
+        if (this.palette?.open) this.palette.close();
+        else void this.#showPalette();
         return;
       }
       // While a modal is open it owns the keyboard (each has its own Esc handler).
@@ -853,6 +1037,9 @@ class App {
       } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.#focusSearch();
+      } else if (mod && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        void this.#showFindReplace('current');
       } else if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault(); // autosave already handles it; just prevent the dialog
       } else if (mod && e.key.toLowerCase() === 'g') {
