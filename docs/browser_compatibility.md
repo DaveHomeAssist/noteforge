@@ -11,7 +11,7 @@ remain the authority when a browser-specific convenience API is unavailable.
 | --- | --- | --- |
 | Playwright Chromium on Node 22 CI/local | 394 component assertions, 120 integrated workflows, ten production/offline checks | Supported; release gate |
 | Current system Chrome, fresh disposable profile | Desktop and 390 px layouts, create/edit/autosave/reload, search, Trash, recovery, two panes, reconciliation, offline update, cache sentinel | Supported; live smoke surface |
-| Safari on macOS | Manual release-candidate pass | Pending the final Phase 7 release check |
+| Safari on macOS | Manual production-build pass: create/edit/autosave/reload, search, task/wikilink rendering, recovery focus trap and Escape return, two-pane ownership | Supported; manual compatibility surface |
 | Firefox | Standards/static review; no installed local Firefox in this release environment | Expected to support core notes/recovery; not a release-gated browser |
 
 ## Progressive fallbacks
