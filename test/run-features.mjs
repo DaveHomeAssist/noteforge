@@ -728,8 +728,13 @@ async function runPhase3Smoke(browser, base, runtimeErrors) {
 async function runPhase4Smoke(browser, base, runtimeErrors) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
+  let releaseDailyImport = () => {};
+  let markDailyImportRequested;
+  const dailyImportRequested = new Promise((resolve) => { markDailyImportRequested = resolve; });
+  const dailyImportBlocked = new Promise((resolve) => { releaseDailyImport = resolve; });
   await page.route('**/src/utils/daily-workflow.js*', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    markDailyImportRequested();
+    await dailyImportBlocked;
     await route.continue();
   }, { times: 1 });
   await page.addInitScript(() => {
@@ -800,8 +805,19 @@ async function runPhase4Smoke(browser, base, runtimeErrors) {
     stage = 'creating and reopening Today through the mobile menu';
     const outgoingId = await page.evaluate(() => window.app.currentId);
     await openMenuAction('#today-btn');
+    await Promise.race([
+      dailyImportRequested,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Daily workflow import did not start.')), 10_000)),
+    ]);
     await page.locator('.blk[contenteditable="true"]').first().fill('Typed during Daily lazy initialization');
+    releaseDailyImport();
     await page.waitForFunction((today) => window.app.db.getNote(window.app.currentId)?.title === today, dates.today);
+    await page.waitForFunction(({ today, outgoingId }) => {
+      const note = window.app.db.getNote(window.app.currentId);
+      return note?.content === `@date(${today})\n\n## Notes\n\n\n## Tasks\n- [ ] `
+        && window.app.db.getNote(outgoingId)?.content.includes('Typed during Daily lazy initialization')
+        && window.app.db.getPersistenceStatus().pendingWrites === 0;
+    }, { today: dates.today, outgoingId });
     firstDailyId = await page.evaluate(() => window.app.currentId);
     check('Open Today’s Note flushes first-use edits and creates the exact local-date Daily template',
       await page.evaluate(({ today, outgoingId }) => {
@@ -1041,6 +1057,7 @@ async function runPhase4Smoke(browser, base, runtimeErrors) {
     })).catch(() => null);
     throw new Error(`Phase 4 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
   } finally {
+    releaseDailyImport();
     await context.close();
   }
 }
