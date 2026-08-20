@@ -672,9 +672,9 @@ async function runPhase3Smoke(browser, base, runtimeErrors) {
         && Boolean(window.app.db.getNote('phase3-current'))));
 
     stage = 'archiving and restoring a parent note';
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       window.app.noteList.applySearchState({ query: '', sortMode: 'updated' });
-      window.app.openNote('phase3-parent');
+      await window.app.openNote('phase3-parent');
     });
     await page.keyboard.press('Control+p');
     await page.locator('#palette-input').fill('> archive current note');
