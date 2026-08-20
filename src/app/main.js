@@ -18,6 +18,7 @@ import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils/export.js';
 import { downloadText } from '../utils/download.js';
 import { writeVaultToDir } from '../utils/vault.js';
+import { parseNoteMergeImport, selectImportableNotes } from '../utils/json-import.js';
 
 class App {
   constructor() {
@@ -447,29 +448,26 @@ class App {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const parsed = JSON.parse(await file.text());
-      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of notes.');
+      const parsed = parseNoteMergeImport(await file.text());
       let imported = 0;
       // Two passes so the outline survives import: notes get fresh ids (avoids
       // colliding with existing notes), and parentId is remapped old->new. A
       // parentId that referenced a non-imported note falls through to top level.
       const idMap = new Map(); // oldId -> newId
       const pendingParents = []; // { id, oldParent }
-      for (const data of parsed) {
-        if (data && typeof data.content === 'string') {
-          const note = this.db.createNote({
-            title: data.title || 'Untitled',
-            content: data.content,
-            tags: Array.isArray(data.tags) ? data.tags : [],
-            banner: data.banner || null,
-            pinned: !!data.pinned,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          });
-          if (data.id) idMap.set(data.id, note.id);
-          if (typeof data.parentId === 'string') pendingParents.push({ id: note.id, oldParent: data.parentId });
-          imported++;
-        }
+      for (const data of selectImportableNotes(parsed)) {
+        const note = this.db.createNote({
+          title: data.title || 'Untitled',
+          content: data.content,
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          banner: data.banner || null,
+          pinned: !!data.pinned,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        });
+        if (data.id) idMap.set(data.id, note.id);
+        if (typeof data.parentId === 'string') pendingParents.push({ id: note.id, oldParent: data.parentId });
+        imported++;
       }
       for (const { id, oldParent } of pendingParents) {
         const newParent = idMap.get(oldParent);

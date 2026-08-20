@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "name": "object instead of note array",
+      "json": "{\"notes\":[]}",
+      "accepted": false,
+      "reason": "Expected a JSON array of notes."
+    },
+    {
+      "name": "null instead of note array",
+      "json": "null",
+      "accepted": false,
+      "reason": "Expected a JSON array of notes."
+    },
+    {
+      "name": "invalid JSON",
+      "json": "[{\"title\":\"truncated\"}",
+      "accepted": false,
+      "reason": "JSON parsing must fail before any write."
+    },
+    {
+      "name": "mixed entries",
+      "json": "[null,{\"title\":\"Missing content\"},{\"id\":\"valid-old-id\",\"title\":\"Valid\",\"content\":\"Body\",\"tags\":[\"kept\"]}]",
+      "accepted": true,
+      "acceptedNotes": 1,
+      "reason": "Only object entries with string Markdown content are importable."
+    },
+    {
+      "name": "unsafe banner",
+      "json": "[{\"id\":\"unsafe-banner\",\"title\":\"Unsafe\",\"content\":\"Body\",\"banner\":{\"type\":\"gradient\",\"value\":\"url(https://example.invalid/beacon)\",\"position\":50}}]",
+      "accepted": true,
+      "acceptedNotes": 1,
+      "reason": "The note imports but Note normalization removes the unsafe banner."
+    },
+    {
+      "name": "orphaned parent",
+      "json": "[{\"id\":\"child\",\"title\":\"Child\",\"content\":\"Body\",\"parentId\":\"missing-parent\"}]",
+      "accepted": true,
+      "acceptedNotes": 1,
+      "reason": "A parent outside the import set is promoted to the top level."
+    }
+  ]
+}

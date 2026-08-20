@@ -24,7 +24,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // The canonical app shares an origin with other System by Dave tools.
+      // Prune only stale NoteForge caches; deleting every other origin cache
+      // would break offline state owned by those sibling applications.
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith('noteforge-') && key !== CACHE)
+          .map((key) => caches.delete(key)),
+      ))
       .then(() => self.clients.claim())
   );
 });

@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 3,
+  "notes": [
+    {
+      "id": "v3-root",
+      "title": "Project Atlas",
+      "content": "# Project Atlas\n\nSee [[Nested Child|the child overview]] and [[Image Reference]].\n\n- [ ] Preserve the vault\n- [x] Record the baseline\n\n@date(2026-08-19)",
+      "tags": ["project", "baseline"],
+      "banner": null,
+      "createdAt": "2026-08-01T12:00:00.000Z",
+      "updatedAt": "2026-08-19T14:15:00.000Z",
+      "deletedAt": null,
+      "pinned": true,
+      "parentId": null
+    },
+    {
+      "id": "v3-child",
+      "title": "Nested Child",
+      "content": "## Child heading\n\nA nested note with an aliased backlink to [[Project Atlas|Atlas]].",
+      "tags": ["project", "nested"],
+      "banner": {
+        "type": "gradient",
+        "value": "linear-gradient(135deg, #3b6ef6, #8b5cf6)",
+        "position": 42
+      },
+      "createdAt": "2026-08-02T09:30:00.000Z",
+      "updatedAt": "2026-08-18T18:20:00.000Z",
+      "deletedAt": null,
+      "pinned": false,
+      "parentId": "v3-root"
+    },
+    {
+      "id": "v3-grandchild",
+      "title": "Nested Grandchild",
+      "content": "> [!note] Three levels prove parent identifiers survive loading.\n\n`[[Not a link|inside code]]`",
+      "tags": ["nested"],
+      "banner": null,
+      "createdAt": "2026-08-03T09:30:00.000Z",
+      "updatedAt": "2026-08-17T18:20:00.000Z",
+      "deletedAt": null,
+      "pinned": false,
+      "parentId": "v3-child"
+    },
+    {
+      "id": "v3-blank",
+      "title": "Blank Note",
+      "content": "",
+      "tags": [],
+      "banner": null,
+      "createdAt": "2026-08-04T00:00:00.000Z",
+      "updatedAt": "2026-08-04T00:00:00.000Z",
+      "deletedAt": null,
+      "pinned": false,
+      "parentId": null
+    },
+    {
+      "id": "v3-image",
+      "title": "Image Reference",
+      "content": "# Image fixture\n\n![One pixel](data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=)\n\nThe image remains Markdown source.",
+      "tags": ["image", "reference"],
+      "banner": {
+        "type": "image",
+        "value": "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
+        "position": 73
+      },
+      "createdAt": "2026-08-05T10:00:00.000Z",
+      "updatedAt": "2026-08-19T10:00:00.000Z",
+      "deletedAt": null,
+      "pinned": false,
+      "parentId": null
+    },
+    {
+      "id": "v3-trash",
+      "title": "Recoverable Draft",
+      "content": "This content must remain recoverable from Trash.\n\n[[Project Atlas|Return to Atlas]]",
+      "tags": ["draft", "recoverable"],
+      "banner": null,
+      "createdAt": "2026-07-15T08:00:00.000Z",
+      "updatedAt": "2026-08-10T11:45:00.000Z",
+      "deletedAt": "2026-08-18T16:30:00.000Z",
+      "pinned": false,
+      "parentId": null
+    },
+    {
+      "id": "v3-unicode",
+      "title": "Caf\u00e9 \ud83d\udcdd",
+      "content": "Unicode, escaped characters, and Windows paths stay exact: `C:\\\\Notes\\\\Atlas`.\n\n| Key | Value |\n| --- | --- |\n| pipe | x\\|y |",
+      "tags": ["international", "caf\u00e9"],
+      "banner": null,
+      "createdAt": "2026-08-06T10:00:00.000Z",
+      "updatedAt": "2026-08-06T10:00:00.000Z",
+      "deletedAt": null,
+      "pinned": false,
+      "parentId": null
+    }
+  ],
+  "config": {
+    "showGraph": true,
+    "themeMode": "dark",
+    "fontScale": "l",
+    "editorWidth": "wide",
+    "autosaveMs": 800,
+    "defaultTemplate": "project",
+    "sortMode": "title",
+    "collapsed": ["v3-root", "v3-child"]
+  }
+}

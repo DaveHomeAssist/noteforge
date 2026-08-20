@@ -21,7 +21,8 @@ const CONFIG_KEY = 'config';
 const SCHEMA_KEY = 'schemaVersion';
 
 export class Database {
-  constructor() {
+  constructor({ storageBackend = storage } = {}) {
+    this.storage = storageBackend;
     this.notes = new Map(); // id -> Note (both live and trashed)
     // Default config is available synchronously; init() overlays the stored one.
     // No `theme` default here — a fresh install must fall through to the settings
@@ -53,9 +54,9 @@ export class Database {
    * await it before rendering. Safe to call again to reload.
    */
   async init() {
-    const storedVersion = await storage.load(SCHEMA_KEY, undefined);
-    const rawNotes = await storage.load(NOTES_KEY, []);
-    const rawConfig = await storage.load(CONFIG_KEY, {});
+    const storedVersion = await this.storage.load(SCHEMA_KEY, undefined);
+    const rawNotes = await this.storage.load(NOTES_KEY, []);
+    const rawConfig = await this.storage.load(CONFIG_KEY, {});
 
     const { data, version, migrated } = runMigrations(
       { notes: Array.isArray(rawNotes) ? rawNotes : [], config: rawConfig || {} },
@@ -105,7 +106,7 @@ export class Database {
       try {
         while (this._writeQueue.size) {
           const [key, value] = this._writeQueue.entries().next().value;
-          const okSave = await storage.save(key, value);
+          const okSave = await this.storage.save(key, value);
           if (okSave) {
             // Delete only if a newer snapshot for this key wasn't queued while
             // we awaited — otherwise loop again and persist the newer value.

@@ -34,7 +34,7 @@ stronger architecture remain available when the product calls for them. Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 227 Node assertions (`npm test`) + 306 browser feature assertions
+- **Quality** — 257 Node assertions (`npm test`) + 306 browser feature assertions
   (`npm run test:browser`, headless via Playwright), gated in CI on every push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
@@ -49,6 +49,39 @@ stronger architecture remain available when the product calls for them. Shipped:
    library (e.g. a real WYSIWYG core) — and justify it.
 4. **Tested + reviewed.** Every substantive change gets round-trip/feature tests,
    an adversarial review, and a visual check before it's "done."
+
+## Daily-driver program (approved sequence)
+
+The current product program keeps NoteForge local-first and offline while adding
+20 daily-driver capabilities. Cloud sync, collaboration, mandatory accounts, and
+background two-way folder sync remain excluded. The detailed acceptance contract
+is in `docs/implementation/feature_acceptance_matrix.md`.
+
+1. **Phase 0 — Baseline, contracts, and release controls. ✅** Schema-version-3
+   preservation fixtures, architecture decisions, performance/storage budgets,
+   and the two-repository release checklist.
+2. **Phase 1 — Revision history and Backup Center.** Durable recovery precedes
+   every later multi-note or migration feature.
+3. **Phase 2 — Link integrity and knowledge navigation.** Rename-safe links,
+   aliases, outline, contextual backlinks, mentions, and back/forward/recents.
+4. **Phase 3 — Retrieval, lifecycle, and bulk operations.** Saved searches,
+   Archive, find/replace, and ID-based bulk actions.
+5. **Phase 4 — Daily workflow, capture, tasks, and calendar.** Idempotent Daily
+   notes, Quick Capture/share intake, `@due()` tasks, dashboard, and calendar.
+6. **Phase 5 — Properties and precise references.** Lossless YAML frontmatter,
+   typed properties, block IDs/links, and bounded sanitized transclusion.
+7. **Phase 6 — Multi-note and external research workflows.** Tabs/two-pane
+   workspace, bookmarklet clipper, and manual previewed folder reconciliation.
+8. **Phase 7 — Integration hardening.** Full migration corpus, 1,000-note
+   performance, accessibility, security, and cross-feature recovery scenarios.
+9. **Phase 8 — Canonical release.** Exact-SHA mirror and System by Dave builds,
+   provenance/hash parity, service-worker update proof, offline reload, and fresh
+   desktop/390 px live verification.
+
+Each phase ships only as a complete vertical slice with migrations, lossless
+round trips, recovery, Node/browser/build/audit gates, accessibility proof, and
+focused commit/provenance. Phase dependencies are intentional; quick wins do not
+bypass the recovery and syntax contracts that make them safe.
 
 ---
 
@@ -223,9 +256,7 @@ note can be shared as a link/file.
 
 ## Suggested near-term sequence
 
-~~`Round 1 (IndexedDB + trash + CI)`~~ ✅ → ~~`Round 2 (palette + search + pinning)`~~ ✅
-→ ~~`Round 3 (editor depth)`~~ ✅ → ~~`Round 4 (reach & polish)`~~ ✅ → ~~`Depth round
-(nested notes + first-class tables/toggles + list/graph virtualization)`~~ ✅ → **next:
-decide fork #2 (local-only vs. sync). If sync → `Round 5` (File System Access `.md` vault
-first). Otherwise: the inline-WYSIWYG stretch (fork #3) or the remaining performance
-items (incremental graph relayout).**
+~~`Rounds 1–4 + depth round`~~ ✅ → **`Phase 0 contracts`** → `Phase 1 recovery`
+→ `Phase 2 link integrity` → `Phase 3 retrieval/lifecycle` → `Phase 4 daily workflow`
+→ `Phase 5 properties/references` → `Phase 6 workspace/reconciliation`
+→ `Phase 7 hardening` → `Phase 8 canonical release`.

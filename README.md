@@ -128,12 +128,13 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (227 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (257 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
 nesting tree helpers, the note-export builder, the vault-export filenames, the
-settings normalizer / theme resolver, and the PWA manifest.
+settings normalizer / theme resolver, the PWA manifest, and deterministic
+schema-version-3 preservation fixtures (including a 1,000-note vault).
 `test/features.html` (306 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph

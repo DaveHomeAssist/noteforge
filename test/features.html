@@ -252,7 +252,9 @@
 
   // ============ XSS inert ============
   section('XSS-safe rendering', () => {
-    const be = mkBE('bad <script>window.__x=1<\/script> <img src=x onerror="window.__x=1">');
+    // Use an inline image so the sanitizer test cannot create a racy /test/x
+    // request that the hardened runner correctly reports as an HTTP/runtime error.
+    const be = mkBE('bad <script>window.__x=1<\/script> <img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" onerror="window.__x=1">');
     check('no <script> in DOM', !be.host.innerHTML.toLowerCase().includes('<script'));
     check('no onerror in DOM', !be.host.innerHTML.toLowerCase().includes('onerror'));
     check('XSS did not execute', window.__x === undefined);

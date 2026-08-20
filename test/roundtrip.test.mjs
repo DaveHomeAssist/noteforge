@@ -11,7 +11,10 @@ import { Database } from '../src/core/database.js';
 import { buildForest, flattenForest, isDescendant, ancestorChain } from '../src/utils/tree.js';
 import { buildNoteHtmlDoc, noteFileStem } from '../src/utils/export.js';
 import { vaultFileName } from '../src/utils/vault.js';
+import { parseNoteMergeImport, selectImportableNotes } from '../src/utils/json-import.js';
+import { makeSchemaV3LargeFixture } from './fixtures/generate-schema-v3-large.mjs';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -21,6 +24,10 @@ const ok = (name, cond, extra = '') => {
 
 const strip = (blocks) => blocks.map((b) => ({ type: b.type, text: b.text, meta: b.meta || {} }));
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const inertStorage = {
+  async load(_key, fallback) { return fallback; },
+  async save() { return true; },
+};
 
 // --- fixed point + block-stability over the seed corpus ---
 for (const note of sampleNotes) {
@@ -365,6 +372,27 @@ ok('manifest has at least one typed icon', Array.isArray(manifest.icons) && mani
 ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.startsWith('./')));
 ok('manifest has a maskable icon', manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')));
 ok('manifest has theme + background colors', /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color));
+const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
+const serviceWorkerHandlers = {};
+const deletedCaches = [];
+runInNewContext(serviceWorkerSource.replaceAll('__BUILD_HASH__', 'phase0test'), {
+  URL,
+  self: {
+    location: new URL('https://example.test/noteforge/sw.js'),
+    clients: { claim: async () => {} },
+    skipWaiting: async () => {},
+    addEventListener(type, handler) { serviceWorkerHandlers[type] = handler; },
+  },
+  caches: {
+    keys: async () => ['noteforge-oldbuild', 'noteforge-phase0test', 'system-by-dave-shell', 'release-check-unrelated-cache'],
+    delete: async (key) => { deletedCaches.push(key); return true; },
+  },
+  fetch: async () => { throw new Error('not used by activation test'); },
+});
+let activation;
+serviceWorkerHandlers.activate({ waitUntil(promise) { activation = promise; } });
+await activation;
+ok('service worker activation prunes only stale NoteForge caches', eq(deletedCaches, ['noteforge-oldbuild']));
 
 // --- nested notes (tree helpers) ---
 const tN = (id, parentId = null) => ({ id, parentId, title: id, updatedAt: '2026-01-01T00:00:00Z' });
@@ -411,7 +439,7 @@ ok('migration reaches v3', migT.version === 3 && CURRENT_SCHEMA_VERSION === 3);
 ok('v3 migration adds parentId:null', migT.data.notes[0].parentId === null);
 ok('v3 migration preserves an existing parentId', runMigrations({ notes: [{ id: '2', parentId: 'p' }], config: {} }, 2).data.notes[0].parentId === 'p');
 
-const dbt = new Database();
+const dbt = new Database({ storageBackend: inertStorage });
 const pa = dbt.createNote({ title: 'Parent', content: '' });
 const ch = dbt.createNote({ title: 'Child', content: '' });
 ok('setParent nests a note', dbt.setParent(ch.id, pa.id) === true && dbt.getNote(ch.id).parentId === pa.id);
@@ -451,6 +479,100 @@ ok('vaultFileName de-dups collisions case-insensitively', (() => {
   return vaultFileName('Note', u) === 'Note.md' && vaultFileName('Note', u) === 'Note 2.md' && vaultFileName('note', u) === 'note 3.md';
 })());
 ok('vaultFileName falls back to Untitled for empty/dot titles', vaultFileName('   ', new Set()) === 'Untitled.md' && vaultFileName('...', new Set()) === 'Untitled.md');
+
+// --- schema-v3 preservation fixtures + current merge-import boundaries ---
+const comprehensiveRaw = readFileSync(new URL('./fixtures/schema-v3-comprehensive.json', import.meta.url), 'utf8');
+const comprehensive = JSON.parse(comprehensiveRaw);
+const comprehensiveBefore = JSON.stringify(comprehensive);
+const comprehensivePayload = { notes: comprehensive.notes, config: comprehensive.config };
+const comprehensiveMigration = runMigrations(comprehensivePayload, comprehensive.schemaVersion);
+ok('schema-v3 fixture declares the current schema version', comprehensive.schemaVersion === CURRENT_SCHEMA_VERSION);
+ok('schema-v3 migration is a no-op', comprehensiveMigration.migrated === false && comprehensiveMigration.data === comprehensivePayload);
+ok('schema-v3 migration preserves the complete payload', eq(comprehensiveMigration.data, comprehensivePayload));
+ok('schema-v3 migration does not mutate its fixture', JSON.stringify(comprehensive) === comprehensiveBefore);
+ok('schema-v3 canonical notes are exact model JSON fixed points', comprehensive.notes.every((note) => eq(Note.fromJSON(note).toJSON(), note)));
+ok('schema-v3 Markdown contents are exact fixed points', comprehensive.notes.every((note) => serialize(parse(note.content)) === note.content));
+ok('schema-v3 fixture preserves stable unique note IDs', new Set(comprehensive.notes.map((note) => note.id)).size === comprehensive.notes.length);
+ok('schema-v3 fixture parent IDs resolve without self-parenting', (() => {
+  const ids = new Set(comprehensive.notes.map((note) => note.id));
+  return comprehensive.notes.every((note) => note.parentId === null || (note.parentId !== note.id && ids.has(note.parentId)));
+})());
+ok('schema-v3 fixture covers Trash, blank Markdown, nesting, image Markdown, banners, and display aliases', (() => {
+  const contents = comprehensive.notes.map((note) => note.content).join('\n');
+  return comprehensive.notes.some((note) => note.deletedAt !== null)
+    && comprehensive.notes.some((note) => note.content === '')
+    && comprehensive.notes.some((note) => note.parentId !== null)
+    && contents.includes('data:image/gif;base64,')
+    && comprehensive.notes.some((note) => note.banner?.type === 'gradient')
+    && comprehensive.notes.some((note) => note.banner?.type === 'image')
+    && /\[\[[^\]]+\|[^\]]+\]\]/.test(contents);
+})());
+ok('schema-v3 fixture preserves non-default settings exactly', comprehensive.config.themeMode === 'dark'
+  && comprehensive.config.fontScale === 'l'
+  && comprehensive.config.editorWidth === 'wide'
+  && comprehensive.config.autosaveMs === 800
+  && comprehensive.config.defaultTemplate === 'project'
+  && comprehensive.config.sortMode === 'title'
+  && eq(comprehensive.config.collapsed, ['v3-root', 'v3-child']));
+const fixtureStorage = new Map([
+  ['schemaVersion', comprehensive.schemaVersion],
+  ['notes', comprehensive.notes],
+  ['config', comprehensive.config],
+]);
+const fixtureBackend = {
+  async load(key, fallback) { return fixtureStorage.has(key) ? fixtureStorage.get(key) : fallback; },
+  async save(key, value) { fixtureStorage.set(key, value); return true; },
+};
+const loadedV3 = await new Database({ storageBackend: fixtureBackend }).init();
+ok('Database.init loads every canonical schema-v3 note without loss', eq([...loadedV3.notes.values()].map((note) => note.toJSON()), comprehensive.notes));
+ok('Database.init preserves schema-v3 config and Trash state', eq(loadedV3.config, comprehensive.config)
+  && loadedV3.getTrash().map((note) => note.id).join() === 'v3-trash');
+
+const largeRaw = readFileSync(new URL('./fixtures/schema-v3-large.json', import.meta.url), 'utf8');
+const large = JSON.parse(largeRaw);
+const regeneratedLarge = `${JSON.stringify(makeSchemaV3LargeFixture(), null, 2)}\n`;
+const largeBefore = JSON.stringify(large);
+const largeMigration = runMigrations({ notes: large.notes, config: large.config }, large.schemaVersion);
+ok('large schema-v3 fixture regenerates byte-for-byte', largeRaw === regeneratedLarge);
+ok('large schema-v3 fixture contains exactly 1,000 notes', large.notes.length === 1000);
+ok('large schema-v3 fixture is a migration no-op without mutation', largeMigration.migrated === false && JSON.stringify(large) === largeBefore);
+ok('large schema-v3 notes are exact model JSON fixed points', large.notes.every((note) => eq(Note.fromJSON(note).toJSON(), note)));
+ok('large schema-v3 Markdown contents are exact fixed points', large.notes.every((note) => serialize(parse(note.content)) === note.content));
+ok('large schema-v3 IDs are unique and every parent exists', (() => {
+  const ids = new Set(large.notes.map((note) => note.id));
+  return ids.size === large.notes.length && large.notes.every((note) => note.parentId === null || ids.has(note.parentId));
+})());
+ok('large schema-v3 fixture covers Trash, pins, banners, images, and display aliases', (() => {
+  const contents = large.notes.map((note) => note.content).join('\n');
+  return large.notes.some((note) => note.deletedAt !== null)
+    && large.notes.some((note) => note.pinned)
+    && large.notes.some((note) => note.banner !== null)
+    && contents.includes('data:image/gif;base64,')
+    && /\[\[[^\]]+\|previous note\]\]/.test(contents);
+})());
+
+const malformedImports = JSON.parse(readFileSync(new URL('./fixtures/malformed-imports.json', import.meta.url), 'utf8'));
+for (const fixtureCase of malformedImports.cases) {
+  let parsed = null;
+  let error = null;
+  try {
+    parsed = parseNoteMergeImport(fixtureCase.json);
+  } catch (err) {
+    error = err;
+  }
+  if (!fixtureCase.accepted) {
+    ok(`merge import rejects: ${fixtureCase.name}`, error instanceof Error && parsed === null);
+    continue;
+  }
+  const parsedBefore = JSON.stringify(parsed);
+  const selected = selectImportableNotes(parsed);
+  ok(`merge import accepts: ${fixtureCase.name}`, error === null && selected.length === fixtureCase.acceptedNotes);
+  ok(`merge import selection does not mutate: ${fixtureCase.name}`, JSON.stringify(parsed) === parsedBefore);
+}
+const unsafeImport = selectImportableNotes(parseNoteMergeImport(
+  malformedImports.cases.find((fixtureCase) => fixtureCase.name === 'unsafe banner').json,
+))[0];
+ok('merge import model normalization removes an unsafe banner', Note.fromJSON(unsafeImport).banner === null);
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
