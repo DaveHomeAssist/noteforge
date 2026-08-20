@@ -1,5 +1,6 @@
 import './calendar-view.css';
 import { Modal } from './modal.js';
+import { NoteDerivedIndex } from '../core/note-derived-index.js';
 import { buildCalendarItems, calendarItemsByDate, calendarPeriod } from '../utils/calendar.js';
 import {
   addCalendarDays,
@@ -40,6 +41,7 @@ export class CalendarView {
     this.activeDate = this.anchor;
     this.items = [];
     this.days = [];
+    this.index = new NoteDerivedIndex(db, (note) => buildCalendarItems([note]));
     this.modal = new Modal(els.overlay, { initialFocus: () => this.els.grid.querySelector('[tabindex="0"]') || this.modal.panel });
     this.els.overlay.addEventListener('click', (event) => this.#onClick(event));
     this.els.grid.addEventListener('keydown', (event) => this.#onGridKey(event));
@@ -58,8 +60,10 @@ export class CalendarView {
 
   close() { this.modal.close(); }
 
+  destroy() { this.unsubscribe?.(); this.index.destroy(); }
+
   refresh() {
-    this.items = buildCalendarItems(this.db.getAllNotes());
+    this.items = this.index.list();
     const period = calendarPeriod(this.mode, this.anchor);
     this.days = period.days;
     if (!this.days.includes(this.activeDate)) this.activeDate = this.mode === 'week' ? period.start : this.anchor;

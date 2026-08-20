@@ -1,4 +1,5 @@
 import { consumeClipperIntake } from '../utils/clipper.js';
+import '../components/accessibility-hardening.css';
 
 export class Phase6Controller {
   constructor({

@@ -100,6 +100,22 @@ bytes. Reconciliation renders at most 50 plan rows per accessible page. No
 dependency was added in this phase, and the high-severity audit reports zero
 vulnerabilities.
 
+Phase 7 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+5,592 bytes + directly referenced CSS 25,335 bytes + directly referenced JavaScript
+226,096 bytes = 257,023-byte initial shell, 157 bytes below the authoritative
+257,180-byte ceiling. JavaScript is 8,909 bytes above its diagnostic ceiling,
+offset by HTML being 2,908 bytes and CSS being 6,158 bytes below their diagnostic
+ceilings; the combined budget remains green without an exception. The deferred
+accessibility hardening stylesheet adds forced-colors, increased-contrast, and
+reduced-motion rules without increasing the initial CSS. Exact-ID incremental
+derived caches prevent ordinary note saves from rebuilding task, calendar, or
+property indexes across the 1,000-note corpus; the final Node gate kept the
+combined incremental update under 150 ms and the 20-query search p95 under 150 ms.
+All deferred CSS/JavaScript plus the 5,348-byte service worker total 415,522 bytes;
+full HTML/CSS/JavaScript/service-worker output is 672,545 bytes across 71 files.
+No dependency was added in this phase, and the high-severity audit reports zero
+vulnerabilities.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

@@ -31,8 +31,8 @@
   .workspace__panes, .workspace--split .workspace__panes { display: block; }
   .workspace__splitter { display: none !important; }
   .workspace__pane { height: 100%; }
-  .workspace__pane[data-pane="secondary"] { display: none; }
+  .workspace--split .workspace__pane[data-pane="secondary"] { display: none; }
   .workspace[data-active-pane="secondary"] .workspace__pane[data-pane="primary"] { display: none; }
-  .workspace[data-active-pane="secondary"] .workspace__pane[data-pane="secondary"] { display: flex; }
+  .workspace--split[data-active-pane="secondary"] .workspace__pane[data-pane="secondary"] { display: flex; }
   .workspace-tab__move, .workspace-tab__close { min-width: 34px; min-height: 34px; }
 }

@@ -29,7 +29,9 @@ export class Phase5Controller {
     this.propertiesReady = null;
     this.reconcileReady = null;
     this.refreshTimer = null;
-    this.unsubscribe = db.subscribe(() => this.#scheduleDerivedRefresh());
+    this.pendingNoteIds = new Set();
+    this.pendingReset = false;
+    this.unsubscribe = db.subscribe((_database, noteIds) => this.#scheduleDerivedRefresh(noteIds));
     setTransclusionRenderer(createTransclusionRenderer());
     editor?.enablePhase5?.(createBlockEditorPhase5Enhancer());
     this.ready = this.reconcileAliases();
@@ -126,14 +128,37 @@ export class Phase5Controller {
     return true;
   }
 
-  #scheduleDerivedRefresh() {
+  #queueDerivedRefresh() {
     if (this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.reconcileAliases({ changedOnly: true }).catch((error) => {
+      if (this.reconcileReady) {
+        void this.reconcileReady.then(
+          () => this.#queueDerivedRefresh(),
+          () => this.#queueDerivedRefresh(),
+        );
+        return;
+      }
+      const reset = this.pendingReset;
+      const noteIds = reset ? null : [...this.pendingNoteIds];
+      this.pendingReset = false;
+      this.pendingNoteIds.clear();
+      if (!reset && noteIds.length === 0) return;
+      void this.reconcileAliases({ changedOnly: !reset, noteIds }).catch((error) => {
         console.warn('[properties] derived index refresh unavailable:', error);
       });
     }, 0);
+  }
+
+  #scheduleDerivedRefresh(noteIds) {
+    if (Array.isArray(noteIds)) {
+      if (noteIds.length === 0) return;
+      noteIds.forEach((id) => this.pendingNoteIds.add(id));
+    } else {
+      this.pendingReset = true;
+      this.pendingNoteIds.clear();
+    }
+    this.#queueDerivedRefresh();
   }
 
   async #indexNote(note, parsed = null) {
@@ -148,15 +173,18 @@ export class Phase5Controller {
     return result;
   }
 
-  reconcileAliases({ changedOnly = false } = {}) {
+  reconcileAliases({ changedOnly = false, noteIds = null } = {}) {
     if (this.reconcileReady) return this.reconcileReady;
-    this.reconcileReady = this.#reconcileAliases(changedOnly).finally(() => { this.reconcileReady = null; });
+    this.reconcileReady = this.#reconcileAliases(changedOnly, noteIds).finally(() => { this.reconcileReady = null; });
     return this.reconcileReady;
   }
 
-  async #reconcileAliases(changedOnly) {
-    const notes = this.db.getNotesInScope('all');
-    const liveIds = new Set(notes.map((note) => note.id));
+  async #reconcileAliases(changedOnly, noteIds) {
+    const allNotes = this.db.getNotesInScope('all');
+    const liveIds = new Set(allNotes.map((note) => note.id));
+    const requested = Array.isArray(noteIds) ? new Set(noteIds) : null;
+    const notes = requested ? allNotes.filter((note) => requested.has(note.id)) : allNotes;
+    if (requested) for (const id of requested) if (!liveIds.has(id)) this.signatures.delete(id);
     const blockedById = new Map((changedOnly ? this.repairReport : [])
       .filter((entry) => liveIds.has(entry.id))
       .map((entry) => [entry.id, entry]));
@@ -215,7 +243,11 @@ export class Phase5Controller {
         },
       });
     }
-    for (const note of this.db.getNotesInScope('all')) await this.#indexNote(note);
+    const indexIds = requested || new Set(allNotes.map((note) => note.id));
+    for (const id of indexIds) {
+      const note = this.db.notes.get(id);
+      if (note) await this.#indexNote(note);
+    }
     this.refreshSearch();
     if (blocked.length) this.announce(`${blocked.length} note${blocked.length === 1 ? '' : 's'} need YAML repair before aliases can move to frontmatter.`);
     return { migrated: replacements.length, blocked };

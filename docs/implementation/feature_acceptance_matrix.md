@@ -49,9 +49,13 @@ No row exits its phase with failing Node/browser/build/audit checks, unexplained
 - Phase 5 rows 12 and 20 are released from NoteForge
   `f254c24fc64d172270a80d725d371c9cf5fe12da`; exact-SHA Pages run `32356312840`
   passed before live mirror verification.
-- Phase 6 rows 14, 16, and 19 are implemented and locally verified with 417 Node
-  checks, 394 browser assertions, 108 integrated recovery/Phase 2/Phase 3/Phase 4/
-  Phase 5/Phase 6 checks, ten production/offline checks, a 256,896-byte initial
-  shell, bounded 50-row reconciliation pages, and zero unexpected browser
-  console/page/request/HTTP errors. Exact-SHA release evidence is recorded after
-  the phase commit.
+- Phase 6 rows 14, 16, and 19 are released from NoteForge
+  `f95f80c7c06cbf56272e2522e2319053fcf9eb3a`; exact-SHA Pages run `32363393990`
+  passed before live mirror verification of all 69 artifacts, 17 desktop/mobile/
+  offline workflows, and unrelated-cache sentinel preservation.
+- Phase 7 hardening is locally verified with 425 Node checks, 394 browser component
+  assertions, 120 integrated recovery/Phase 2/Phase 3/Phase 4/Phase 5/Phase 6/
+  Phase 7 checks, ten production/offline checks, a 257,023-byte initial shell,
+  randomized 1,000-note migration/backup fidelity, bounded incremental derived
+  indexes, and zero unexpected browser console/page/request/HTTP errors. Exact-SHA
+  release evidence is recorded after the phase commit.

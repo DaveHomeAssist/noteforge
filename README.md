@@ -207,6 +207,9 @@ verification, restore, and browser-support details. See
 the portable syntax and repair behavior introduced in Phase 5. See
 [Workspace, clipper, and folder reconciliation](docs/workspace_clipper_reconciliation.md)
 for Phase 6 limits, browser fallbacks, and recovery boundaries.
+See [Browser compatibility](docs/browser_compatibility.md) for the tested browser
+matrix and [Phase 7 release candidate](docs/implementation/phase7_release_candidate.md)
+for migration, scale, accessibility, security, and cross-feature recovery evidence.
 
 ## Tests
 
@@ -244,7 +247,12 @@ The 22-check Phase 6 suite covers debounced durability, workspace normalization
 and single-writer ownership, bounded clipper intake, safe folder paths and stable
 identity, deterministic plans, explicit decisions, portable-backup/revision gates,
 atomic replacement, stale-source rejection, concurrent scans, idempotence, and
-prototype-shaped IDs. The complete Node gate is 417 checks.
+prototype-shaped IDs.
+The 8-check Phase 7 suite adds randomized 1,000-note schema-v3 migration and
+backup/restore fidelity, independent revision migration, exact-ID derived-index
+invalidation/full-vault reset, incremental task/calendar/property updates,
+20-query search p95, bounded workspace repair, and adversarial YAML/JSON/path/
+input/CSP/service-worker coverage. The complete Node gate is 425 checks.
 `test/features.html` (394 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
@@ -256,9 +264,10 @@ runs it headlessly via
 navigation checks, 17 integrated Phase 3 checks, 28 integrated Phase 4 checks at
 390 px and a 200%-equivalent viewport, 14 integrated Phase 5 properties/block-link/
 transclusion checks, 18 integrated Phase 6 workspace/clipper/reconciliation checks,
+12 integrated Phase 7 migration/scale/accessibility/security/cross-feature checks,
 and ten production/offline checks
 (including first-use recovery, Link tools, Archive, saved view, find/replace,
-bulk action, Phase 4, Phase 5, and Phase 6 chunks), and fails on
+bulk action, Phase 4, Phase 5, Phase 6, and Phase 7 chunks), and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -342,6 +351,7 @@ src/
 │   ├── frontmatter.js  # Sole yaml adapter: strict parse, lossless edits, typed values
 │   ├── block-links.js  # Stable block-ID validation, inspection, and resolution
 │   ├── transclusion.js # Read-only sanitized block embeds with cycle/depth budgets
+│   ├── note-derived-index.js # Exact-ID incremental cache shared by derived views
 │   ├── workspace.js    # Pure bounded two-pane/tab state transitions
 │   ├── clipper.js      # Bounded one-shot intake and bookmarklet builder
 │   ├── vault-import.js # Safe paths, stable identity, hashes, and deterministic folder plans
@@ -357,6 +367,7 @@ test/phase3.test.mjs     # Node invariants for Archive, saved views, replacement
 test/phase4.test.mjs     # Node invariants for Daily, capture, tasks, and calendar
 test/phase5.test.mjs     # Node invariants for frontmatter, properties, block refs, and embeds
 test/phase6.test.mjs     # Node invariants for workspace, clipper, and folder reconciliation
+test/phase7.test.mjs     # Migration, scale, incremental-index, and adversarial hardening
 vite.config.js          # Build + dev server; injects the Content-Security-Policy
 ```
 

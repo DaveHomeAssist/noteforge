@@ -1,18 +1,22 @@
 import { Note } from './note.js';
+import { NoteDerivedIndex } from './note-derived-index.js';
 import { extractTasks, mutateTaskSource } from '../utils/tasks.js';
 
 export class TaskService {
   constructor(db) {
     this.db = db;
-  }
-
-  list() {
-    return this.db.getAllNotes().flatMap((note) => extractTasks(note.content, {
+    this.index = new NoteDerivedIndex(db, (note) => extractTasks(note.content, {
       noteId: note.id,
       noteTitle: note.title,
       noteTags: note.tags,
     }));
   }
+
+  list() {
+    return this.index.list();
+  }
+
+  destroy() { this.index.destroy(); }
 
   async update(reference, patch) {
     const current = this.db.getNote(reference?.noteId);

@@ -68,6 +68,7 @@ async function warmLazyAppModules(browser, base) {
     '/src/components/workspace-view.js',
     '/src/components/clipper-view.js',
     '/src/components/reconciliation-view.js',
+    '/src/components/accessibility-hardening.css',
     '/src/app/phase4.js',
     '/src/app/phase5.js',
     '/src/app/phase6.js',
@@ -77,6 +78,7 @@ async function warmLazyAppModules(browser, base) {
     '/src/core/recovery-service.js',
     '/src/core/backup.js',
     '/src/core/reconciliation-service.js',
+    '/src/core/note-derived-index.js',
     '/src/core/knowledge-index.js',
     '/src/core/knowledge-index.css',
     '/src/utils/navigation.js',
@@ -1420,6 +1422,196 @@ async function runPhase6Smoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runPhase7Smoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const page = await context.newPage();
+  page.on('dialog', (dialog) => dialog.accept());
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Phase 7 smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  let stage = 'booting the release candidate';
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' });
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.phase6?.workspace && window.app?.phase5 && window.app?.recovery), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => Promise.all([window.app.phase6.ready, window.app.phase5.ready, window.app.recoveryReady]));
+
+    stage = 'creating a combined workspace, task, property, and recovery fixture';
+    await page.evaluate(async () => {
+      const db = window.app.db;
+      db.createNote({ id: 'phase7-a', title: 'Phase7 A', content: 'A before backup' });
+      db.createNote({ id: 'phase7-b', title: 'Phase7 B', content: 'B before backup' });
+      db.createNote({
+        id: 'phase7-task',
+        title: 'Phase7 Tasks',
+        content: '---\nstatus: open\n---\n# Work\n\n- [ ] Phase7 original task @due(2026-08-21)',
+      });
+      await db.flush();
+      await window.app.openNote('phase7-a');
+      await window.app.openNote('phase7-b');
+      await window.app.openNote('phase7-a');
+      await window.app.workspace.moveToOtherPane('phase7-a');
+    });
+    await page.locator('#workspace [data-pane="primary"] .blk').fill('B pane backup state');
+    await page.locator('#workspace [data-pane="secondary"] .blk').fill('A pane backup state');
+    await page.evaluate(async () => { window.app.workspace.flushPending(); await window.app.db.flush(); });
+    check('cross-feature fixture commits independent two-pane editor bytes', await page.evaluate(() => (
+      window.app.db.getNote('phase7-a')?.content === 'A pane backup state'
+      && window.app.db.getNote('phase7-b')?.content === 'B pane backup state'
+    )));
+    const backupText = await page.evaluate(async () => (await window.app.recovery.createBackup()).text);
+
+    stage = 'updating one task/property source incrementally';
+    await page.evaluate(async () => {
+      const note = window.app.db.getNote('phase7-task');
+      note.update({ content: '---\nstatus: reviewed\n---\n# Work\n\n- [ ] Phase7 updated task @due(2026-08-21)' });
+      window.app.db.saveNote(note);
+      await window.app.db.flush();
+    });
+    await page.locator('#menu-btn').click();
+    await page.locator('#tasks-btn').click();
+    await page.locator('#task-dashboard-overlay').waitFor({ state: 'visible' });
+    check('open Task dashboard reflects the incrementally updated source', /Phase7 updated task/.test(await page.locator('#task-dashboard-overlay').innerText()));
+    await page.keyboard.press('Escape');
+    await page.locator('#menu-btn').click();
+    await page.locator('#calendar-btn').click();
+    await page.locator('#calendar-overlay').waitFor({ state: 'visible' });
+    check('open Calendar reflects the same incrementally updated due task', /Phase7 updated task/.test(await page.locator('#calendar-overlay').innerText()));
+    await page.keyboard.press('Escape');
+
+    stage = 'capturing a post-backup revision and applying folder reconciliation';
+    await page.evaluate(() => window.app.openNote('phase7-b'));
+    await page.locator('#workspace [data-pane="primary"] .blk').fill('B recoverable revision');
+    await page.evaluate(async () => { window.app.workspace.flushPending(); await window.app.db.flush(); });
+    await page.evaluate(() => window.app.phase6.showReconciliation());
+    await page.locator('#reconciliation-overlay').waitFor({ state: 'visible' });
+    const imported = '---\nnoteforge_id: phase7-a\nfuture: { keep: true }\n---\nA reconciled <img src=x onerror="window.__phase7Xss=1">';
+    await page.locator('#reconciliation-overlay [data-files]').setInputFiles({
+      name: 'Phase7 A.md', mimeType: 'text/markdown', buffer: Buffer.from(imported),
+    });
+    await page.waitForFunction(() => /1 update/.test(document.querySelector('.reconciliation-summary')?.textContent || ''));
+    await page.locator('.reconciliation-decision select').selectOption('apply');
+    const [reconcileBackup] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#reconciliation-overlay [data-apply]').click(),
+    ]);
+    await page.waitForFunction(() => /Folder reconciliation completed/.test(document.querySelector('#reconciliation-overlay [role="status"]')?.textContent || ''));
+    check('reconciliation remains backup- and revision-protected inside the combined flow',
+      /^noteforge-backup-/.test(reconcileBackup.suggestedFilename())
+      && await page.evaluate(async () => window.app.db.getNote('phase7-a')?.content.includes('A reconciled')
+        && (await window.app.recovery.listRevisions('phase7-a')).some((revision) => revision.reason === 'pre_reconcile')));
+    await page.keyboard.press('Escape');
+
+    stage = 'restoring the pre-reconciliation portable backup through the UI';
+    await page.locator('#menu-btn').click();
+    await page.locator('#backup-btn').click();
+    await page.locator('#backup-overlay').waitFor({ state: 'visible' });
+    check('recovery modal traps focus and inerts all background body surfaces', await page.evaluate(() => (
+      document.querySelector('#backup-overlay').contains(document.activeElement)
+      && [...document.body.children].filter((node) => node.id !== 'backup-overlay').every((node) => node.hasAttribute('inert'))
+    )));
+    await page.locator('#backup-file').setInputFiles({ name: 'phase7-backup.json', mimeType: 'application/json', buffer: Buffer.from(backupText) });
+    await page.locator('#backup-verify').click();
+    await page.waitForFunction(() => /integrity verified/i.test(document.querySelector('#backup-status')?.textContent || ''));
+    await page.locator('#backup-preview-restore').click();
+    await page.locator('.backup-restore-preview').waitFor({ state: 'visible' });
+    const [restoreSafety] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#backup-restore').click(),
+    ]);
+    await page.waitForFunction(() => /Restore completed successfully/i.test(document.querySelector('#backup-status')?.textContent || ''));
+    check('portable restore reverses reconciliation/task mutations and downloads its own safety artifact',
+      /^noteforge-pre-restore-/.test(restoreSafety.suggestedFilename())
+      && await page.evaluate(() => window.app.db.getNote('phase7-a')?.content === 'A pane backup state'
+        && window.app.db.getNote('phase7-b')?.content === 'B pane backup state'
+        && /Phase7 original task/.test(window.app.db.getNote('phase7-task')?.content || '')));
+    await page.keyboard.press('Escape');
+
+    stage = 'restoring a post-backup revision after full-vault restore';
+    await page.evaluate(() => window.app.openNote('phase7-b'));
+    const revisionId = await page.evaluate(async () => {
+      for (const revision of await window.app.recovery.listRevisions('phase7-b')) {
+        const materialized = await window.app.recovery.revisions.materialize(revision);
+        if (materialized.content === 'B recoverable revision') return revision.id;
+      }
+      return null;
+    });
+    if (!revisionId) throw new Error('Post-backup revision was not retained across portable restore.');
+    await page.locator('#menu-btn').click();
+    await page.locator('#history-btn').click();
+    await page.locator('#history-overlay').waitFor({ state: 'visible' });
+    await page.locator('.history-revision').evaluateAll((buttons, id) => {
+      const target = buttons.find((button) => button.dataset.revisionId === id);
+      if (!target) throw new Error('Phase 7 revision was not rendered.');
+      target.click();
+    }, revisionId);
+    await page.waitForFunction((id) => [...document.querySelectorAll('.history-revision')]
+      .some((button) => button.dataset.revisionId === id && button.getAttribute('aria-current') === 'true'), revisionId);
+    await page.locator('#history-restore').click();
+    await page.waitForFunction(() => window.app.db.getNote('phase7-b')?.content === 'B recoverable revision');
+    check('browser-local revision restore still works after portable full-vault restore', true);
+    await page.keyboard.press('Escape');
+
+    stage = 'auditing contrast, reduced motion, zoom-equivalent, and mobile layouts';
+    check('forced-colors mode retains a visible selected-tab boundary', await page.evaluate(() => {
+      const selected = document.querySelector('.workspace-tab[aria-selected="true"]')?.closest('.workspace-tab-wrap');
+      const style = selected ? getComputedStyle(selected) : null;
+      return matchMedia('(forced-colors: active)').matches && style?.outlineStyle === 'solid' && parseFloat(style.outlineWidth) >= 2;
+    }));
+    check('reduced-motion mode suppresses transition timing', await page.evaluate(() => {
+      const style = getComputedStyle(document.querySelector('.workspace-tab'));
+      return matchMedia('(prefers-reduced-motion: reduce)').matches && parseFloat(style.transitionDuration) <= 0.001;
+    }));
+    await page.setViewportSize({ width: 640, height: 450 });
+    check('200%-equivalent viewport keeps the complete shell within its width', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileLayout = await page.evaluate(() => ({
+      innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      visiblePanes: [...document.querySelectorAll('#workspace .workspace__pane')].filter((pane) => getComputedStyle(pane).display !== 'none').length,
+      overflowing: [...document.querySelectorAll('body *')]
+        .filter((node) => node.getBoundingClientRect().right > innerWidth + 0.5)
+        .slice(0, 8)
+        .map((node) => ({ tag: node.tagName, id: node.id, className: String(node.className), right: node.getBoundingClientRect().right })),
+    }));
+    if (mobileLayout.scrollWidth > mobileLayout.innerWidth || mobileLayout.visiblePanes !== 1) {
+      throw new Error(`390px release-candidate workspace remains unclipped: ${JSON.stringify(mobileLayout)}`);
+    }
+    checks.push('PASS  390px release-candidate workspace remains unclipped');
+
+    stage = 'reloading the combined recovery result';
+    await page.evaluate(async () => { window.app.workspace.flushPending(); await window.app.db.flush(); });
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => Boolean(window.app?.phase6?.workspace), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.phase6.ready);
+    check('cross-feature restore, revision, and workspace state survive reload', await page.evaluate(() => {
+      const state = window.app.workspace.state;
+      const ids = [...state.panes.primary.tabs, ...state.panes.secondary.tabs];
+      return window.app.db.getNote('phase7-b')?.content === 'B recoverable revision'
+        && window.app.db.getNote('phase7-a')?.content === 'A pane backup state'
+        && new Set(ids).size === ids.length;
+    }));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      workspace: window.app?.workspace?.state,
+      backupStatus: document.querySelector('#backup-status')?.textContent || '',
+      historyStatus: document.querySelector('#history-status')?.textContent || '',
+      reconciliationStatus: document.querySelector('#reconciliation-overlay [role="status"]')?.textContent || '',
+      openOverlays: [...document.querySelectorAll('.modal:not([hidden])')].map((node) => node.id),
+    })).catch(() => null);
+    throw new Error(`Phase 7 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -1672,11 +1864,12 @@ async function main() {
     const phase4Output = await runPhase4Smoke(browser, base, runtimeErrors);
     const phase5Output = await runPhase5Smoke(browser, base, runtimeErrors);
     const phase6Output = await runPhase6Smoke(browser, base, runtimeErrors);
+    const phase7Output = await runPhase7Smoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${phase6Output}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${phase6Output}\n${phase7Output}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
     output += `${output ? '\n' : ''}Runner error: ${err.message || err}`;

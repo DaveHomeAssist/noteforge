@@ -34,11 +34,12 @@ stronger architecture remain available when the product calls for them. Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 417 Node checks (`npm test`) + 394 browser feature assertions,
+- **Quality** — 425 Node checks (`npm test`) + 394 browser feature assertions,
   15 integrated recovery checks, 16 integrated Phase 2 checks, 17 integrated
   Phase 3 checks, 28 integrated Phase 4 checks, 14 integrated Phase 5 checks at
-  390 px/200%-equivalent width, 18 integrated Phase 6 checks, and ten
-  production/offline checks
+  390 px/200%-equivalent width, 18 integrated Phase 6 checks, 12 integrated
+  Phase 7 cross-feature/scale/accessibility/security checks, and ten production/
+  offline checks
   (`npm run test:browser`, headless via
   Playwright), gated in CI on pull requests
   and every main push; an
@@ -80,8 +81,9 @@ is in `docs/implementation/feature_acceptance_matrix.md`.
    typed properties, block IDs/links, and bounded sanitized transclusion.
 7. **Phase 6 — Multi-note and external research workflows. ✅** Tabs/two-pane
    workspace, bookmarklet clipper, and manual previewed folder reconciliation.
-8. **Phase 7 — Integration hardening.** Full migration corpus, 1,000-note
-   performance, accessibility, security, and cross-feature recovery scenarios.
+8. **Phase 7 — Integration hardening. ✅** Full migration corpus, 1,000-note
+   performance, incremental derived indexes, accessibility, security, and
+   cross-feature recovery scenarios.
 9. **Phase 8 — Canonical release.** Exact-SHA mirror and System by Dave builds,
    provenance/hash parity, service-worker update proof, offline reload, and fresh
    desktop/390 px live verification.
@@ -268,4 +270,4 @@ note can be shared as a link/file.
 ~~`Phase 1 recovery`~~ ✅ → ~~`Phase 2 link integrity and navigation`~~ ✅
 → ~~`Phase 3 retrieval/lifecycle`~~ ✅ → ~~`Phase 4 daily workflow`~~ ✅
 → ~~`Phase 5 properties/references`~~ ✅ → ~~`Phase 6 workspace/reconciliation`~~ ✅
-→ **`Phase 7 hardening`** → `Phase 8 canonical release`.
+→ ~~`Phase 7 hardening`~~ ✅ → **`Phase 8 canonical release`**.

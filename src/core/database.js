@@ -73,8 +73,8 @@ export class Database {
     return () => this.listeners.delete(fn);
   }
 
-  #emit() {
-    for (const fn of this.listeners) fn(this);
+  #emit(noteIds = null) {
+    for (const fn of this.listeners) fn(this, noteIds);
   }
 
   // --- lifecycle / persistence -------------------------------------------
@@ -470,7 +470,7 @@ export class Database {
     this._knowledgeReady = import('./knowledge-index.js')
       .then(({ KnowledgeIndex }) => {
         this._knowledgeIndex = new KnowledgeIndex(this);
-        this.#emit();
+        this.#emit([]);
         return this._knowledgeIndex;
       })
       .catch((error) => {
@@ -494,7 +494,7 @@ export class Database {
     }
     const captures = captureRevision ? [{ note: note.toJSON(), reason }] : [];
     this.#persist(captures);
-    this.#emit();
+    this.#emit([note.id]);
     return note;
   }
 
@@ -551,7 +551,7 @@ export class Database {
     }
     note.parentId = next; // structural change only — don't touch updatedAt
     this.#persist();
-    this.#emit();
+    this.#emit([id]);
     return true;
   }
 
@@ -561,7 +561,7 @@ export class Database {
     if (!note) return null;
     note.setPinned(pinned);
     this.#persist();
-    this.#emit();
+    this.#emit([id]);
     return note.pinned;
   }
 
@@ -572,7 +572,7 @@ export class Database {
     note.markTrashed();
     this.#rebuildLinkState();
     this.#persist();
-    this.#emit();
+    this.#emit([id]);
     return true;
   }
 
@@ -583,7 +583,7 @@ export class Database {
     note.restore();
     this.#rebuildLinkState();
     this.#persist();
-    this.#emit();
+    this.#emit([id]);
     return true;
   }
 
@@ -595,7 +595,7 @@ export class Database {
     note.markArchived();
     this.#rebuildLinkState();
     this.#persist([{ note: before, reason: 'pre_archive' }]);
-    this.#emit();
+    this.#emit([id]);
     return true;
   }
 
@@ -613,7 +613,7 @@ export class Database {
     note.unarchive();
     this.#rebuildLinkState();
     this.#persist([{ note: before, reason: 'pre_unarchive' }]);
-    this.#emit();
+    this.#emit([id]);
     return true;
   }
 
@@ -623,7 +623,7 @@ export class Database {
     if (existed) {
       this.#rebuildLinkState();
       this.#persist([], [id]);
-      this.#emit();
+      this.#emit([id]);
     }
     return existed;
   }
@@ -642,7 +642,7 @@ export class Database {
     if (purged) {
       this.#rebuildLinkState();
       this.#persist([], purgedIds);
-      this.#emit();
+      this.#emit(purgedIds);
     }
     return purged;
   }
