@@ -13,6 +13,7 @@ import {
   serializeBackup,
   verifyBackup,
 } from '../src/core/backup.js';
+import { CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/schema-v3-comprehensive.json', import.meta.url), 'utf8'));
 const CREATED_AT = '2026-08-19T20:00:00.000Z';
@@ -54,9 +55,9 @@ async function rejectsCode(run, code) {
 
 const makeBackup = (state = fixture, options = {}) => createBackup(state, { createdAt: CREATED_AT, ...options });
 const asCurrentState = (state) => ({
-  schemaVersion: 5,
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   notes: state.notes.map((note) => ({ ...structuredClone(note), aliases: [...(note.aliases || [])], archivedAt: note.archivedAt || null })),
-  config: structuredClone(state.config),
+  config: { ...structuredClone(state.config), frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] } },
 });
 
 await test('creates a versioned NoteForge portable-backup envelope', async () => {

@@ -158,7 +158,8 @@ export class NoteList {
     const q = text.trim();
     // A scoped filter (tag:/has:banner/is:pinned/in:title) counts as searching even
     // with no free text — otherwise the tree view would ignore the filter.
-    const hasFilters = filters.tags.length > 0 || filters.hasBanner === true || filters.pinned === true || filters.inTitle === true || filters.archived === true;
+    const hasFilters = filters.tags.length > 0 || filters.properties.length > 0
+      || filters.hasBanner === true || filters.pinned === true || filters.inTitle === true || filters.archived === true;
     const searching = !!q || !!this.activeTag || hasFilters;
 
     if (searching) {

@@ -1,9 +1,11 @@
 // Pure heading extraction and deterministic occurrence-aware anchors.
 
 import { normalizeTitle } from './helpers.js';
+import { splitFrontmatterSource } from './frontmatter-boundary.js';
 
 function visibleHeadingText(raw) {
   return String(raw ?? '')
+    .replace(/\s+\^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\s*$/, '')
     .replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g, (_all, target, display) => display || target)
     .replace(/[*_`~]/g, '')
     .replace(/\s+#+\s*$/, '')
@@ -27,11 +29,12 @@ export function nextHeadingAnchor(text, counts) {
 }
 
 export function extractHeadings(markdown) {
-  const source = String(markdown ?? '');
+  const split = splitFrontmatterSource(markdown);
+  const source = split.body;
   const lines = source.split('\n');
   const headings = [];
   const counts = new Map();
-  let offset = 0;
+  let offset = split.bodyStart;
   let fence = null;
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];

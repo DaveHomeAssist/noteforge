@@ -5,6 +5,7 @@
 
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
+import './recovery.css';
 
 const REASON_LABELS = {
   autosave: 'Autosave',
@@ -17,6 +18,9 @@ const REASON_LABELS = {
   pre_rename: 'Before rename',
   pre_alias_repair: 'Before alias repair',
   pre_link_conversion: 'Before link conversion',
+  pre_frontmatter_alias_migration: 'Before alias migration',
+  pre_frontmatter_source_edit: 'Before YAML source edit',
+  pre_property_edit: 'Before property edit',
   pre_restore: 'Before restore',
   manual: 'Manual snapshot',
 };

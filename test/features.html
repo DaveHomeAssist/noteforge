@@ -33,12 +33,16 @@
   import { QuickCaptureView, createQuickCaptureElements } from '/src/components/quick-capture-view.js';
   import { TaskDashboardView, createTaskDashboardElements } from '/src/components/task-dashboard-view.js';
   import { CalendarView, createCalendarElements } from '/src/components/calendar-view.js';
+  import { createBlockEditorPhase5Enhancer } from '/src/components/block-editor-phase5.js';
+  import { PropertiesView, createPropertiesElements } from '/src/components/properties-view.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
   import { buildNoteHtmlDoc, flattenExportWikilinks } from '/src/utils/export.js';
   import { vaultFileName, writeVaultToDir } from '/src/utils/vault.js';
-  import { renderMarkdown, setKnownTitles } from '/src/utils/markdown.js';
+  import { renderMarkdown, setKnownTitles, setTransclusionRenderer } from '/src/utils/markdown.js';
+  import { createTransclusionRenderer } from '/src/utils/transclusion.js';
+  import { parseFrontmatter, setFrontmatterProperty } from '/src/utils/frontmatter.js';
 
   const results = [];
   const check = (name, cond) => results.push((cond ? 'PASS' : 'FAIL') + '  ' + name);
@@ -2051,6 +2055,94 @@
       check('Phase 4 empty calendar day invokes the idempotent Daily-note entry point', dailyDate === '2026-08-23');
     } catch (e) {
       results.push('FAIL  Phase 4 component flows — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 5 properties, block identity, and transclusion ==========
+  await (async () => {
+    try {
+      let copied = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (value) => { copied = value; } },
+      });
+      const exact = '---\r\n# keep\r\nstatus: Active\r\n---\r\nBody bytes  \r\n';
+      let status = '';
+      const blockEditor = new BlockEditor(mkHost(), {
+        initialMarkdown: exact,
+        noteId: 'phase5-note',
+        noteTitle: 'Phase5 Note',
+        getTitles: () => ['Phase5 Note'],
+        enhancer: createBlockEditorPhase5Enhancer(),
+        onStatus: (message) => { status = message; },
+      });
+      check('Phase 5 untouched frontmatter and Markdown preserve every source byte', blockEditor.serialize() === exact);
+      check('Phase 5 raw frontmatter stays visible with comments and delimiters',
+        blockEditor.host.querySelector('.blk-frontmatter__source')?.value.replace(/\r\n/g, '\n') === '---\n# keep\nstatus: Active\n---');
+      blockEditor.host.querySelector('.blk-copy-link').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      const assigned = /\^([A-Za-z0-9_-]+)$/.exec(blockEditor.serialize().trim())?.[1];
+      check('Phase 5 Copy Block Link assigns and copies one stable trailing block ID',
+        Boolean(assigned) && copied === `[[Phase5 Note#^${assigned}]]` && status.includes(copied));
+      check('Phase 5 Copy Block Link restores keyboard focus after the row rebuild',
+        document.activeElement?.classList.contains('blk-copy-link'));
+      check('Phase 5 block-fragment navigation focuses the unique target row',
+        blockEditor.jumpToBlock(assigned) && document.activeElement?.dataset.blockId === assigned);
+
+      const notes = new Map([
+        ['Outer', { id: 'outer', title: 'Outer', content: 'Nested ![[Inner#^inner]] ^outer' }],
+        ['Inner', { id: 'inner', title: 'Inner', content: 'Safe **content** <img src=x onerror="alert(1)"> ^inner' }],
+        ['Cycle', { id: 'cycle', title: 'Cycle', content: 'Again ![[Cycle#^self]] ^self' }],
+        ['Duplicate', { id: 'duplicate', title: 'Duplicate', content: 'One ^same\n\nTwo ^same' }],
+      ]);
+      setKnownTitles([...notes.keys()]);
+      setTransclusionRenderer(createTransclusionRenderer());
+      const resolveNote = (title) => notes.get(title) || null;
+      const nested = renderMarkdown('![[Outer#^outer]]', { resolveNote, sourceNoteId: 'root' });
+      check('Phase 5 nested block transclusion uses the shared sanitized renderer',
+        (nested.match(/class="transclusion"/g) || []).length === 2
+        && /<strong>content<\/strong>/.test(nested)
+        && !/onerror|alert\(1\)/i.test(nested));
+      check('Phase 5 transclusion cycles stop at a visible read-only placeholder',
+        /transclusion--cycle/.test(renderMarkdown('![[Cycle#^self]]', { resolveNote, sourceNoteId: 'root' })));
+      check('Phase 5 duplicate IDs and depth overflow fail visibly instead of guessing',
+        /transclusion--duplicate/.test(renderMarkdown('![[Duplicate#^same]]', { resolveNote, sourceNoteId: 'root' }))
+        && /transclusion--depth/.test(renderMarkdown('![[Outer#^outer]]', { resolveNote, sourceNoteId: 'root', maxDepth: 1 })));
+
+      let propertySource = '---\nfuture: [broken\n---\nBody exact  \n';
+      const propertyElements = createPropertiesElements(scratch);
+      const propertyView = new PropertiesView(propertyElements, {
+        read: async () => parseFrontmatter(propertySource),
+        set: async (_id, name, value, type) => { propertySource = await setFrontmatterProperty(propertySource, name, value, { type }); },
+        remove: async () => {},
+        replaceRaw: async (_id, raw) => { propertySource = `${raw}\nBody exact  \n`; },
+      });
+      await propertyView.show('phase5-note');
+      check('Phase 5 invalid YAML remains raw and disables only typed controls',
+        propertyElements.fieldset.disabled
+        && propertyElements.rawForm.elements.raw.value.includes('future: [broken')
+        && /Fix the raw source/.test(propertyElements.status.textContent));
+      propertyElements.rawForm.elements.raw.value = '---\nfuture: { keep: true }\n---';
+      propertyElements.rawForm.requestSubmit();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      check('Phase 5 raw YAML repair preserves unknown properties and exact body bytes',
+        !propertyElements.fieldset.disabled
+        && propertySource.endsWith('Body exact  \n')
+        && /future: \{ keep: true \}/.test(propertySource));
+      const typeValues = [...propertyElements.form.elements.type.options].map((option) => option.value).join(',');
+      check('Phase 5 property editor exposes all six typed control contracts',
+        typeValues === 'text,number,boolean,date,url,select,multi-select');
+      propertyElements.form.elements.key.value = 'site';
+      propertyElements.form.elements.type.value = 'url';
+      propertyElements.form.elements.type.dispatchEvent(new Event('change', { bubbles: true }));
+      propertyElements.form.elements.value.value = 'javascript:alert(1)';
+      propertyElements.form.requestSubmit();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 5 typed URL controls reject unsafe schemes without mutating YAML',
+        /Only HTTP and HTTPS/.test(propertyElements.status.textContent) && !propertySource.includes('javascript:'));
+      propertyView.modal.close();
+    } catch (e) {
+      results.push('FAIL  Phase 5 component flows — threw: ' + e.message);
     }
   })();
 

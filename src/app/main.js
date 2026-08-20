@@ -8,15 +8,10 @@ import { Editor } from '../components/editor.js';
 import { NoteList } from '../components/note-list.js';
 import { Theme } from '../ui/theme.js';
 import { normalizeSettings } from '../ui/settings.js';
-import { sampleNotes } from './seed.js';
 import { TEMPLATES, templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
-import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
-import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils/export.js';
-import { downloadText } from '../utils/download.js';
-import { writeVaultToDir } from '../utils/vault.js';
-import { parseNoteMergeImport, selectImportableNotes } from '../utils/json-import.js';
 import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
+import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 
 class App {
   constructor() {
@@ -50,6 +45,8 @@ class App {
     this.bulkActionsReady = null;
     this.phase4 = null;
     this.phase4Ready = null;
+    this.phase5 = null;
+    this.phase5Ready = null;
 
     this.el = {
       editor: document.getElementById('editor'),
@@ -109,6 +106,7 @@ class App {
         this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
         this.#scheduleSavedSearchesInitialization();
+        this.#schedulePhase5Initialization();
         if (new URL(window.location.href).searchParams.get('source') === 'share-target') void this.#openShareTarget().catch((error) => {
           console.warn('[capture] shared intake unavailable:', error);
           this.#announce(error?.message || 'Shared content could not be opened.');
@@ -141,6 +139,8 @@ class App {
       togglePin: (id) => this.togglePin(id),
       requestRename: (id, title) => this.#showRename(id, title),
       previewMention: (mention) => this.#showMention(mention),
+      showProperties: (id) => this.#showProperties(id),
+      announce: (message) => this.#announce(message),
     };
 
     this.editor = new Editor(this.el.editor, this.db, actions);
@@ -181,7 +181,7 @@ class App {
     // merely sits in the Trash (otherwise a reload of an all-deleted vault would
     // silently re-inject the sample notes alongside the user's trashed ones).
     if (this.db.notes.size === 0) {
-      this.#seed();
+      await this.#seed();
     } else {
       this.noteList.render();
       const first = this.db.getNotesSorted()[0];
@@ -204,8 +204,10 @@ class App {
     this.currentId = id;
     this.el.historyBtn.disabled = false;
     this.setView('editor');
-    const headingAnchor = opts.headingAnchor || resolveHeadingAnchor(extractHeadings(note.content), opts.fragment);
-    this.editor.open(id, { ...opts, headingAnchor });
+    const fragment = String(opts.fragment || '');
+    const blockId = fragment.startsWith('^') ? fragment.slice(1) : null;
+    const headingAnchor = blockId ? null : opts.headingAnchor || resolveHeadingAnchor(extractHeadings(note.content), fragment);
+    this.editor.open(id, { ...opts, headingAnchor, blockId });
     this.noteList.reveal(id); // expand collapsed ancestors so the active note is visible in the outline
     this.noteList.setActive(id);
     this.#syncNavigationControls();
@@ -316,7 +318,7 @@ class App {
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open || this.phase5?.properties?.open);
   }
 
   #toggleSidebar() {
@@ -702,6 +704,47 @@ class App {
     return this.phase4Ready;
   }
 
+  #ensurePhase5() {
+    if (this.phase5Ready) return this.phase5Ready;
+    if (this.phase5) return Promise.resolve(this.phase5);
+    this.phase5Ready = Promise.all([
+      import('./phase5.js'),
+      import('../components/properties-view.css'),
+      this.#ensureRecovery(),
+    ]).then(async ([{ Phase5Controller }]) => {
+      this.phase5 = new Phase5Controller({
+        db: this.db,
+        editor: this.editor,
+        ensureRecovery: () => this.#ensureRecovery(),
+        announce: (message) => this.#announce(message),
+        refreshSearch: () => this.noteList.render(),
+      });
+      await this.phase5.ready;
+      return this.phase5;
+    }).catch((error) => {
+      this.phase5Ready = null;
+      this.phase5 = null;
+      throw error;
+    });
+    return this.phase5Ready;
+  }
+
+  #schedulePhase5Initialization() {
+    const initialize = () => void this.#ensurePhase5().catch((error) => {
+      console.warn('[properties] deferred initialization unavailable:', error);
+    });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 2_500 });
+    else setTimeout(initialize, 0);
+  }
+
+  async #showProperties(noteId = this.currentId) {
+    this.#closeMenu();
+    const phase5 = await this.#ensurePhase5();
+    this.editor?.flushPending();
+    await this.db.flush();
+    await phase5.showProperties(noteId);
+  }
+
   async #showQuickCapture(options = {}) {
     this.#closeMenu();
     this.#closeSidebar();
@@ -855,6 +898,7 @@ class App {
       cmds.push({ id: 'save-folder', title: 'Save all notes to a folder…', hint: 'Markdown vault', icon: '📁', run: () => this.saveVaultToFolder() });
     }
     if (cur) {
+      cmds.push({ id: 'properties', title: 'Edit note properties', hint: 'YAML frontmatter', icon: '◇', run: () => this.#showProperties(cur.id) });
       cmds.push({ id: 'history', title: 'Open revision history', hint: cur.title, icon: '↶', run: () => this.#showHistory() });
       cmds.push({ id: 'archive', title: 'Archive current note', hint: cur.title, icon: '🗄', run: () => this.#archiveCurrent() });
       cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
@@ -967,32 +1011,35 @@ class App {
     this.el.sidebarBackdrop?.addEventListener('click', () => this.#closeSidebar());
   }
 
-  #export() {
+  async #export() {
     // Archive is a live lifecycle state, not deletion. Keep archived notes and
     // archivedAt in the legacy merge-export format; Trash remains exclusive to
     // the complete portable backup flow.
     const data = JSON.stringify(this.db.getNotesInScope('nontrash').map((n) => n.toJSON()), null, 2);
-    this.#downloadBlob(data, `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+    await this.#downloadBlob(data, `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     this.#closeMenu();
   }
 
   /** Download arbitrary text as a file (shared by all export paths). */
-  #downloadBlob(text, filename, type) {
+  async #downloadBlob(text, filename, type) {
+    const { downloadText } = await import('../utils/download.js');
     downloadText(text, filename, type);
   }
 
   /** Export one note as a self-contained, shareable HTML page. */
-  exportNoteHtml(note) {
+  async exportNoteHtml(note) {
     if (!note) return;
+    const { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } = await import('../utils/export.js');
     setKnownTitles(this.db.allTitles()); // so renderMarkdown resolves wikilink styling
-    const inner = flattenExportWikilinks(renderMarkdown(note.content));
-    this.#downloadBlob(buildNoteHtmlDoc(note.title, inner), `${noteFileStem(note.title)}.html`, 'text/html');
+    const inner = flattenExportWikilinks(renderMarkdown(note.content, { resolveNote: (title) => this.db.resolveTitle(title), sourceNoteId: note.id }));
+    await this.#downloadBlob(buildNoteHtmlDoc(note.title, inner), `${noteFileStem(note.title)}.html`, 'text/html');
   }
 
   /** Download one note's raw markdown. */
-  downloadNoteMarkdown(note) {
+  async downloadNoteMarkdown(note) {
     if (!note) return;
-    this.#downloadBlob(note.content, `${noteFileStem(note.title)}.md`, 'text/markdown');
+    const { noteFileStem } = await import('../utils/export.js');
+    await this.#downloadBlob(note.content, `${noteFileStem(note.title)}.md`, 'text/markdown');
   }
 
   /** Save the whole (live) vault to a chosen folder as Obsidian-compatible .md files. */
@@ -1008,6 +1055,7 @@ class App {
       return; // user dismissed the picker
     }
     try {
+      const { writeVaultToDir } = await import('../utils/vault.js');
       const written = await writeVaultToDir(dir, this.db.getAllNotes());
       alert(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`);
     } catch (err) {
@@ -1020,6 +1068,7 @@ class App {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
+      const { parseNoteMergeImport, selectImportableNotes } = await import('../utils/json-import.js');
       const parsed = parseNoteMergeImport(await file.text());
       let imported = 0;
       // Two passes so the outline survives import: notes get fresh ids (avoids
@@ -1069,7 +1118,8 @@ class App {
     }
   }
 
-  #seed() {
+  async #seed() {
+    const { sampleNotes } = await import('./seed.js');
     let firstId = null;
     for (const data of sampleNotes) {
       const existing = this.db.resolveTitleResult(data.title);

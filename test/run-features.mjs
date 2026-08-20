@@ -63,7 +63,10 @@ async function warmLazyAppModules(browser, base) {
     '/src/components/quick-capture-view.js',
     '/src/components/task-dashboard-view.js',
     '/src/components/calendar-view.js',
+    '/src/components/block-editor-phase5.js',
+    '/src/components/properties-view.js',
     '/src/app/phase4.js',
+    '/src/app/phase5.js',
     '/src/core/capture-service.js',
     '/src/core/task-service.js',
     '/src/core/revision-store.js',
@@ -77,6 +80,9 @@ async function warmLazyAppModules(browser, base) {
     '/src/utils/capture.js',
     '/src/utils/tasks.js',
     '/src/utils/calendar.js',
+    '/src/utils/frontmatter.js',
+    '/src/utils/block-links.js',
+    '/src/utils/transclusion.js',
   ];
   try {
     await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
@@ -88,8 +94,20 @@ async function warmLazyAppModules(browser, base) {
           await page.evaluate((path) => import(path), modulePath);
           break;
         } catch (error) {
-          if (!/Execution context was destroyed|navigation/i.test(error?.message || '') || attempt === 2) throw error;
-          await page.waitForLoadState('load', { timeout: TIMEOUT }).catch(() => {});
+          if (!/Execution context was destroyed|navigation|timeout|closed|connection refused/i.test(error?.message || '') || attempt === 2) throw error;
+          // Dependency optimisation can briefly replace the document or restart
+          // the dev listener. Re-enter the app instead of waiting forever on the
+          // stale error document left by that transient response.
+          let restored = false;
+          for (let retry = 0; retry < 20 && !restored; retry += 1) {
+            try {
+              await page.goto(base, { waitUntil: 'load', timeout: 10_000 });
+              restored = true;
+            } catch {
+              await page.waitForTimeout(250);
+            }
+          }
+          if (!restored) throw error;
         }
       }
     }
@@ -120,6 +138,11 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
     await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
     await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
     await page.evaluate(() => window.app.ready);
+    // Phase 5 may perform a one-time revision-protected alias migration after
+    // first paint. Let that safe startup write settle before this smoke asserts
+    // that its own editor bytes are still inside the autosave debounce window.
+    await page.waitForFunction(() => Boolean(window.app?.phase5), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.phase5Ready);
     await page.locator('.note-item').first().waitFor({ state: 'visible' });
     check('390px app shell has no horizontal document overflow',
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -852,8 +875,10 @@ async function runPhase4Smoke(browser, base, runtimeErrors) {
     await page.locator('#capture-new-title').fill('Phase4 New Capture');
     await page.locator('#capture-text').fill('New destination bytes');
     await page.locator('#quick-capture-form [type="submit"]').click();
-    await page.waitForFunction(() => window.app.db.getAllNotes().some((note) => note.title === 'Phase4 New Capture' && note.content === 'New destination bytes'));
-    check('Quick Capture creates an explicitly named new destination without changing other notes', true);
+    await page.waitForFunction(() => window.app.db.getAllNotes().some((note) => note.title === 'Phase4 New Capture' && note.content === 'New destination bytes')
+      && /Saved to “Phase4 New Capture”/.test(document.querySelector('#quick-capture-status')?.textContent || '')
+      && window.app.db.getPersistenceStatus().pendingWrites === 0);
+    check('Quick Capture creates and durably commits an explicitly named new destination without changing other notes', true);
     await page.keyboard.press('Escape');
 
     stage = 'opening the one-shot GET share target';
@@ -1010,6 +1035,180 @@ async function runPhase4Smoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runPhase5Smoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.__phase5Clipboard = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value) => { window.__phase5Clipboard = value; } },
+    });
+  });
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Phase 5 smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  let stage = 'booting the app';
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.phase5), undefined, { timeout: TIMEOUT });
+
+    stage = 'creating the Phase 5 fixture and migrating aliases';
+    await page.evaluate(async () => {
+      const db = window.app.db;
+      db.createNote({
+        id: 'phase5-target', title: 'Phase5 Target', aliases: ['Legacy Phase5'],
+        content: '---\n# preserved\nfuture: { keep: true }\n---\nTarget **safe** <img src=x onerror="alert(1)"> ^target',
+      });
+      db.createNote({
+        id: 'phase5-source', title: 'Phase5 Source',
+        content: 'Jump [[Legacy Phase5#^target]]\n\nEmbed ![[Phase5 Target#^target]]',
+      });
+      db.createNote({
+        id: 'phase5-cycle', title: 'Phase5 Cycle',
+        content: 'Cycle ![[Phase5 Cycle#^self]] ^self',
+      });
+      db.createNote({
+        id: 'phase5-invalid', title: 'Phase5 Invalid', aliases: ['Repair Later'],
+        content: '---\naliases: [broken\n---\nBody remains exact',
+      });
+      await db.flush();
+      await window.app.phase5.reconcileAliases();
+      await db.flush();
+      window.app.openNote('phase5-target');
+    });
+    check('one-time alias migration preserves unknown YAML and mirrors aliases for Phase 2 compatibility',
+      await page.evaluate(() => {
+        const note = window.app.db.getNote('phase5-target');
+        return note.aliases.join(',') === 'Legacy Phase5'
+          && /aliases:\s*\n?\s*- Legacy Phase5|aliases: \[Legacy Phase5\]/.test(note.content)
+          && /future: \{ keep: true \}/.test(note.content)
+          && /# preserved/.test(note.content);
+      }));
+    check('malformed alias frontmatter stays byte-exact and is reported for repair',
+      await page.evaluate(() => window.app.db.getNote('phase5-invalid').content === '---\naliases: [broken\n---\nBody remains exact'
+        && window.app.db.config.frontmatterAliasMigration?.status === 'repair_required'));
+
+    stage = 'editing typed properties on mobile';
+    const propertiesTrigger = page.locator('.editor__properties');
+    await propertiesTrigger.focus();
+    await propertiesTrigger.click();
+    await page.locator('#properties-overlay').waitFor({ state: 'visible' });
+    check('390px Properties dialog is labelled, focused, trapped, and has no horizontal overflow',
+      await page.evaluate(() => document.querySelector('#properties-overlay')?.contains(document.activeElement)
+        && document.querySelector('#properties-overlay [role="dialog"]')?.getAttribute('aria-labelledby') === 'properties-title'
+        && document.documentElement.scrollWidth <= window.innerWidth));
+    await page.locator('.properties-form [name="key"]').fill('priority');
+    await page.locator('.properties-form [name="type"]').selectOption('number');
+    await page.locator('.properties-form [name="value"]').fill('7');
+    await page.locator('.properties-form button[type="submit"]').click();
+    await page.waitForFunction(() => /Property saved to Markdown/.test(document.querySelector('#properties-status')?.textContent || ''));
+    check('typed property edits persist into YAML without reformatting the Markdown body',
+      await page.evaluate(() => {
+        const content = window.app.db.getNote('phase5-target').content;
+        return /priority: 7/.test(content)
+          && content.endsWith('Target **safe** <img src=x onerror="alert(1)"> ^target');
+      }));
+    await page.locator('.properties-form [name="key"]').fill('site');
+    await page.locator('.properties-form [name="type"]').selectOption('url');
+    await page.locator('.properties-form [name="value"]').fill('javascript:alert(1)');
+    await page.locator('.properties-form button[type="submit"]').click();
+    await page.waitForFunction(() => /Only HTTP and HTTPS/.test(document.querySelector('#properties-status')?.textContent || ''));
+    check('unsafe property URLs are rejected before source mutation',
+      !await page.evaluate(() => window.app.db.getNote('phase5-target').content.includes('javascript:')));
+    await page.keyboard.press('Escape');
+    await page.locator('#properties-overlay').waitFor({ state: 'hidden' });
+    check('closing Properties restores focus to its editor trigger', await propertiesTrigger.evaluate((node) => document.activeElement === node));
+
+    stage = 'filtering by a derived property';
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+    await page.locator('#search-input').fill('prop:priority=7');
+    await page.waitForFunction(() => document.querySelectorAll('.note-item').length === 1);
+    check('property filters use a derived index without adding fields to JSON notes',
+      await page.evaluate(() => document.querySelector('.note-item')?.dataset.id === 'phase5-target'
+        && !JSON.stringify(window.app.db.getNote('phase5-target')).includes('_propertySearchIndex')));
+
+    stage = 'copying and following block links';
+    await page.locator('#sidebar-backdrop').click();
+    await page.locator('.blk-copy-link').click();
+    await page.waitForFunction(() => window.__phase5Clipboard === '[[Phase5 Target#^target]]'
+      && /Copied block link/.test(document.querySelector('#app-status')?.textContent || ''));
+    check('Copy Block Link preserves an existing stable ID and exposes clipboard success',
+      await page.evaluate(() => window.__phase5Clipboard === '[[Phase5 Target#^target]]'
+        && /Copied block link/.test(document.querySelector('#app-status')?.textContent || '')
+        && document.activeElement?.classList.contains('blk-copy-link')));
+    await page.evaluate(() => window.app.openNote('phase5-source'));
+    const sourceLinks = page.locator('a[data-wikilink="Legacy Phase5"][data-fragment="^target"]');
+    await sourceLinks.first().click();
+    await page.waitForFunction(() => window.app.currentId === 'phase5-target' && document.activeElement?.dataset.blockId === 'target');
+    check('alias block links resolve to the canonical note and focus the exact block', true);
+
+    stage = 'rendering nested and cyclic transclusions safely';
+    await page.evaluate(() => window.app.openNote('phase5-source'));
+    check('block transclusion renders read-only through the shared sanitizer',
+      await page.evaluate(() => {
+        const transclusion = document.querySelector('.transclusion');
+        return Boolean(transclusion)
+          && transclusion.getAttribute('contenteditable') === 'false'
+          && /Target safe/.test(transclusion.textContent)
+          && !transclusion.querySelector('[onerror],script');
+      }));
+    await page.evaluate(() => window.app.openNote('phase5-cycle'));
+    check('cyclic transclusion stops at a visible bounded placeholder',
+      await page.locator('.transclusion--cycle').count() === 1);
+
+    stage = 'repairing malformed YAML through its raw-only state';
+    await page.evaluate(() => window.app.openNote('phase5-invalid'));
+    await page.locator('.editor__properties').click();
+    await page.locator('#properties-overlay').waitFor({ state: 'visible' });
+    check('invalid YAML remains visible while typed property controls fail closed',
+      await page.evaluate(() => document.querySelector('.properties-form fieldset')?.disabled
+        && /aliases: \[broken/.test(document.querySelector('.properties-raw-form textarea')?.value || '')));
+    await page.locator('.properties-raw-form textarea').fill('---\naliases: [Repair Later]\nunknown: keep\n---');
+    await page.locator('.properties-raw-form button[type="submit"]').click();
+    await page.waitForFunction(() => /Raw YAML source saved/.test(document.querySelector('#properties-status')?.textContent || ''));
+    check('raw repair re-enables typed controls and preserves the note body',
+      !await page.evaluate(() => document.querySelector('.properties-form fieldset')?.disabled)
+        && await page.evaluate(() => window.app.db.getNote('phase5-invalid').content.endsWith('Body remains exact')));
+    await page.keyboard.press('Escape');
+
+    stage = 'reloading the complete Phase 5 state';
+    await page.evaluate(() => window.app.db.flush());
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    check('frontmatter, unknown properties, aliases, and block IDs survive reload exactly',
+      await page.evaluate(() => {
+        const target = window.app.db.getNote('phase5-target');
+        const invalid = window.app.db.getNote('phase5-invalid');
+        return /future: \{ keep: true \}/.test(target.content)
+          && /priority: 7/.test(target.content)
+          && target.content.endsWith('^target')
+          && target.aliases.includes('Legacy Phase5')
+          && /unknown: keep/.test(invalid.content)
+          && invalid.content.endsWith('Body remains exact');
+      }));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      title: window.app?.db?.getNote?.(window.app?.currentId)?.title || '',
+      appStatus: document.querySelector('#app-status')?.textContent || '',
+      propertiesStatus: document.querySelector('#properties-status')?.textContent || '',
+      openOverlay: [...document.querySelectorAll('.modal:not([hidden])')].map((node) => node.id),
+    })).catch(() => null);
+    throw new Error(`Phase 5 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -1132,6 +1331,15 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     await page.waitForFunction(() => window.app.db.getNote(window.app.currentId)?.title === '2040-01-02');
     checks.push('PASS  production Phase 4 lazy chunks and Daily creation work on first use offline');
 
+    stage = 'opening Phase 5 properties for the first time offline';
+    await page.locator('.editor__properties').click();
+    await page.locator('#properties-overlay').waitFor({ state: 'visible' });
+    if (!/Note properties/.test(await page.locator('#properties-overlay').innerText())) {
+      throw new Error('Properties dialog did not render offline.');
+    }
+    checks.push('PASS  production Phase 5 Properties and YAML chunks open on first use offline');
+    await page.keyboard.press('Escape');
+
     stage = 'opening Phase 3 retrieval and lifecycle tools for the first time offline';
     await page.locator('#sidebar-toggle').click();
     await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
@@ -1230,11 +1438,12 @@ async function main() {
     const linkIntegrityOutput = await runLinkIntegritySmoke(browser, base, runtimeErrors);
     const phase3Output = await runPhase3Smoke(browser, base, runtimeErrors);
     const phase4Output = await runPhase4Smoke(browser, base, runtimeErrors);
+    const phase5Output = await runPhase5Smoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
     output += `${output ? '\n' : ''}Runner error: ${err.message || err}`;

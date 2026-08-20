@@ -6,14 +6,14 @@
 
 import { fuzzyMatch } from './fuzzy.js';
 
-const FILTER_RE = /(?:^|\s)(tag|in|has|is):([^\s]+)/gi;
+const FILTER_RE = /(?:^|\s)(tag|in|has|is|prop|property):([^\s]+)/gi;
 
 /**
  * @param {string} raw
- * @returns {{ text:string, filters:{ tags:string[], inTitle:boolean, hasBanner:boolean|null, pinned:boolean|null, archived:boolean|null } }}
+ * @returns {{ text:string, filters:{ tags:string[], properties:object[], inTitle:boolean, hasBanner:boolean|null, pinned:boolean|null, archived:boolean|null } }}
  */
 export function parseQuery(raw) {
-  const filters = { tags: [], inTitle: false, hasBanner: null, pinned: null, archived: null };
+  const filters = { tags: [], properties: [], inTitle: false, hasBanner: null, pinned: null, archived: null };
   let text = String(raw ?? '');
   text = text.replace(FILTER_RE, (match, key, val) => {
     const k = key.toLowerCase();
@@ -23,6 +23,13 @@ export function parseQuery(raw) {
     else if (k === 'has' && v === 'banner') filters.hasBanner = true;
     else if (k === 'is' && v === 'pinned') filters.pinned = true;
     else if (k === 'is' && v === 'archived') filters.archived = true;
+    else if (k === 'prop' || k === 'property') {
+      const equals = val.indexOf('=');
+      const property = (equals < 0 ? val : val.slice(0, equals)).normalize('NFKC').toLowerCase();
+      const value = equals < 0 ? null : val.slice(equals + 1).normalize('NFKC').toLowerCase();
+      if (!property || (equals >= 0 && !value)) return match;
+      filters.properties.push({ key: property, value });
+    }
     else return match; // unknown filter — leave it as searchable text
     return ' ';
   });
@@ -38,6 +45,11 @@ export function noteMatchesFilters(note, filters) {
   if (filters.hasBanner === true && !note.banner) return false;
   if (filters.pinned === true && !note.pinned) return false;
   if (filters.archived === true && !note.archivedAt) return false;
+  const properties = note._propertySearchIndex instanceof Map ? note._propertySearchIndex : new Map();
+  for (const filter of filters.properties || []) {
+    if (!properties.has(filter.key)) return false;
+    if (filter.value !== null && !(properties.get(filter.key) || []).includes(filter.value)) return false;
+  }
   return true;
 }
 
@@ -62,6 +74,9 @@ export function scoreNote(text, note, { inTitle = false } = {}) {
     }
     const tagHit = note.tags.some((t) => t.toLowerCase().includes(ql));
     if (tagHit) score = Math.max(score ?? -Infinity, 25);
+    const propertyHit = note._propertySearchIndex instanceof Map
+      && [...note._propertySearchIndex].some(([key, values]) => key.includes(ql) || values.some((value) => value.includes(ql)));
+    if (propertyHit) score = Math.max(score ?? -Infinity, 20);
   }
 
   if (score === null) return null;

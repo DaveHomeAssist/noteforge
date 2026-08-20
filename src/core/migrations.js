@@ -10,7 +10,7 @@
 // new numbered function whenever the on-disk shape changes; never edit an old
 // one (users may still be on that version).
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 const MIGRATIONS = {
   // v0 -> v1: introduce soft-delete. Every note gains an explicit `deletedAt`
@@ -51,6 +51,21 @@ const MIGRATIONS = {
       : payload.notes;
     return { ...payload, notes };
   },
+  // v5 -> v6: declare the deferred, revision-protected alias-to-frontmatter
+  // migration. The pure migration never rewrites Markdown; Phase5Controller
+  // completes it through the normal durable/revision boundary once recovery is
+  // available, or records the notes whose malformed YAML needs manual repair.
+  6: (payload) => ({
+    ...payload,
+    config: {
+      ...(payload.config || {}),
+      frontmatterAliasMigration: payload.config?.frontmatterAliasMigration || {
+        version: 0,
+        status: 'pending',
+        blocked: [],
+      },
+    },
+  }),
 };
 
 /**

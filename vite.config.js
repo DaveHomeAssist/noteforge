@@ -111,6 +111,12 @@ export default defineConfig(({ command, isPreview }) => ({
     port: 5175,
     open: true,
   },
+  // All three runtime dependencies are known up front. Pre-bundling the lazy
+  // YAML adapter prevents a first Properties test/use from triggering Vite's
+  // dependency-discovery restart in the middle of an authoritative request.
+  optimizeDeps: {
+    include: ['dompurify', 'marked', 'yaml'],
+  },
   build: {
     outDir: 'dist',
     target: 'es2020',

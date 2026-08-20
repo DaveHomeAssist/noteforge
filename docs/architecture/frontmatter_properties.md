@@ -1,6 +1,6 @@
 # Leading YAML frontmatter and note properties
 
-Status: accepted Phase 0 decision
+Status: implemented and locally verified in Phase 5
 
 ## Context
 
@@ -10,7 +10,12 @@ Properties and portable aliases require structured metadata in Markdown. NoteFor
 
 ### Dependency boundary
 
-Phase 5 may add the `yaml` package behind `src/utils/frontmatter.js` only after recording the exact pinned version, license, installed and production bundle contribution, CSP effect, and `npm audit --audit-level=high` result. The adapter is the only application module that imports the package.
+Phase 5 adds `yaml` 2.9.0 (ISC, zero runtime dependencies) behind
+`src/utils/frontmatter.js`. The adapter is the only application module that imports
+the package. It is lazy-loaded into a 104,706-byte production chunk; the Phase 5
+controller, properties view, and properties CSS add 24,416 bytes, for 129,122 bytes
+of Phase 5 deferred output. All assets remain same-origin under the existing CSP,
+and `npm audit --audit-level=high` reports zero vulnerabilities.
 
 The adapter uses the document/CST-preserving API with strict duplicate-key handling, no custom executable tags, bounded aliases, and a mapping root. It exposes parsed values, diagnostics, source ranges, the original frontmatter bytes, and the untouched body.
 
@@ -42,6 +47,12 @@ The migration is additive and pure. For each note with Phase 2 alias metadata:
 
 Malformed frontmatter blocks automatic rewriting for that note and produces a repair report; it is never silently replaced. Old backup envelopes retain their original schema version and migrate through the same chain.
 
+Schema version 6 stores only a migration marker during the pure migration. The
+lazy Phase 5 controller performs the Markdown rewrite after the current vault is
+durable, captures `pre_frontmatter_alias_migration` revisions first, checks for a
+stale note before committing, keeps compatibility alias metadata synchronized,
+and records `repair_required` until every blocked note is fixed.
+
 ## Verification contract
 
 - Byte-exact unchanged round trips for no frontmatter, valid frontmatter, comments, quotes, CRLF, unknown/nested keys, and a leading Markdown divider.
@@ -52,3 +63,8 @@ Malformed frontmatter blocks automatic rewriting for that note and produces a re
 ## Consequences
 
 Markdown remains the sole portable source of property truth. Using a narrow adapter avoids spreading YAML-library behavior through the application and allows a future parser replacement without changing editor, search, or reconciliation contracts.
+
+The final Phase 5 local gate passed 395 Node checks, 376 browser component
+assertions, 90 integrated checks, nine production/offline checks, the Vite build,
+and the high-severity audit. The initial shell is 253,841 bytes, 3,339 bytes below
+the authoritative ceiling.

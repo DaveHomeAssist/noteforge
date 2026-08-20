@@ -3,6 +3,7 @@
 // mention conversion agree about code/URL/escape exclusions.
 
 import { normalizeTitle } from './helpers.js';
+import { splitFrontmatterSource } from './frontmatter-boundary.js';
 
 // Kept for the marked inline tokenizer. Anchored consumers should check index 0.
 export const WIKILINK_RE = /!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/;
@@ -44,7 +45,8 @@ function rangeContains(ranges, index) {
 /** Fenced code, inline code, and URL ranges that source transforms must skip. */
 export function markdownExclusionRanges(markdown) {
   const source = String(markdown ?? '');
-  const ranges = [];
+  const leading = splitFrontmatterSource(source);
+  const ranges = leading.hasFrontmatter ? [{ start: 0, end: leading.bodyStart, kind: 'frontmatter' }] : [];
   const lines = source.split('\n');
   let offset = 0;
   let fence = null;

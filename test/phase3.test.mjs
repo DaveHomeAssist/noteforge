@@ -47,14 +47,15 @@ async function database(options = {}) {
   return { db, backend, captures };
 }
 
-test('schema v5 adds Archive state without mutating schema-v3 input', () => {
+test('schema v5 Archive and v6 frontmatter marker migrate without mutating schema-v3 input', () => {
   const input = { notes: [{ id: 'legacy', title: 'Legacy', content: '', parentId: null }], config: { custom: true } };
   const before = structuredClone(input);
   const migrated = runMigrations(input, 3);
-  assert.equal(CURRENT_SCHEMA_VERSION, 5);
-  assert.equal(migrated.version, 5);
+  assert.equal(CURRENT_SCHEMA_VERSION, 6);
+  assert.equal(migrated.version, 6);
   assert.deepEqual(migrated.data.notes[0].aliases, []);
   assert.equal(migrated.data.notes[0].archivedAt, null);
+  assert.deepEqual(migrated.data.config.frontmatterAliasMigration, { version: 0, status: 'pending', blocked: [] });
   assert.deepEqual(input, before);
 });
 

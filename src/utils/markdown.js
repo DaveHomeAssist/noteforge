@@ -10,6 +10,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { escapeHtml, escapeAttr, normalizeTitle } from './helpers.js';
 import { parseWikilinks, extractWikilinks } from './wikilinks.js';
+import { splitFrontmatterSource } from './frontmatter-boundary.js';
 
 // Re-export so existing importers of markdown.js keep working.
 export { extractWikilinks };
@@ -17,6 +18,12 @@ export { extractWikilinks };
 // Titles that currently resolve to a real note (normalized). Updated by the app
 // before each render so missing links can be styled/created on click.
 let knownTitles = new Set();
+const renderContexts = [];
+let transclusionRenderer = null;
+
+export function setTransclusionRenderer(renderer) {
+  transclusionRenderer = typeof renderer === 'function' ? renderer : null;
+}
 
 export function setKnownTitles(titles) {
   knownTitles = new Set(Array.from(titles, normalizeTitle));
@@ -39,11 +46,16 @@ const wikilinkExtension = {
         target: token.target,
         alias: token.display || `${token.target}${token.fragment ? `#${token.fragment}` : ''}`,
         fragment: token.fragment,
+        embedded: token.embedded,
       };
     }
     return undefined;
   },
   renderer(token) {
+    if (token.embedded && token.fragment?.startsWith('^')) {
+      return transclusionRenderer?.(token, renderContexts.at(-1))
+        || `<aside class="transclusion transclusion--unavailable" role="note" contenteditable="false">Embedded block ${escapeHtml(token.target)}#${escapeHtml(token.fragment)}</aside>`;
+    }
     const exists = knownTitles.has(normalizeTitle(token.target));
     const cls = exists ? 'wikilink' : 'wikilink wikilink--missing';
     return (
@@ -59,29 +71,46 @@ marked.use({
   extensions: [wikilinkExtension],
 });
 
-// Keep wikilink + task-list attributes through sanitization.
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A' && node.getAttribute('data-wikilink') !== null) {
-    node.setAttribute('href', '#');
-  }
-  // Open real external links in a new tab, safely.
-  if (node.tagName === 'A' && /^https?:\/\//i.test(node.getAttribute('href') || '')) {
-    node.setAttribute('target', '_blank');
-    node.setAttribute('rel', 'noopener noreferrer');
-  }
-});
+// Keep wikilink + task-list attributes through sanitization. DOMPurify's Node
+// export is an uninitialised factory when no DOM exists; pure Node services may
+// import this module to register render hooks without ever rendering HTML.
+if (typeof DOMPurify.addHook === 'function') {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.getAttribute('data-wikilink') !== null) {
+      node.setAttribute('href', '#');
+    }
+    // Open real external links in a new tab, safely.
+    if (node.tagName === 'A' && /^https?:\/\//i.test(node.getAttribute('href') || '')) {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+}
 
 const PURIFY_CONFIG = {
   // Allow collapsible <details>/<summary> (with the `open` state) so toggle
   // blocks render as native disclosure widgets. Everything else is sanitized.
-  ADD_TAGS: ['details', 'summary'],
-  ADD_ATTR: ['data-wikilink', 'data-fragment', 'target', 'rel', 'open'],
+  ADD_TAGS: ['details', 'summary', 'aside'],
+  ADD_ATTR: ['data-wikilink', 'data-fragment', 'target', 'rel', 'open', 'contenteditable', 'role', 'aria-label'],
 };
 
 /** Render markdown (with wikilinks) to sanitized HTML. */
-export function renderMarkdown(md) {
-  const raw = marked.parse(md || '');
-  return DOMPurify.sanitize(raw, PURIFY_CONFIG);
+export function renderMarkdown(md, options = {}) {
+  const split = splitFrontmatterSource(md);
+  const context = {
+    resolveNote: options.resolveNote || null,
+    sourceNoteId: options.sourceNoteId || null,
+    maxDepth: Number.isInteger(options.maxDepth) ? Math.max(1, Math.min(options.maxDepth, 5)) : 5,
+    depth: Number.isInteger(options.depth) ? options.depth : 0,
+    chain: Array.isArray(options.chain) ? options.chain : [],
+    budget: options.budget || { used: 0, max: 50 },
+  };
+  renderContexts.push(context);
+  try {
+    return DOMPurify.sanitize(marked.parse(split.body || ''), PURIFY_CONFIG);
+  } finally {
+    renderContexts.pop();
+  }
 }
 
 const BLOCK_WRAPPERS = /^(P|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE)$/;
@@ -93,8 +122,8 @@ const BLOCK_WRAPPERS = /^(P|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE)$/;
  * when the result isn't a lone block wrapper (e.g. a table in a raw block).
  * Reuses the same marked + wikilink + DOMPurify pipeline — no new HTML paths.
  */
-export function renderInline(md) {
-  const html = renderMarkdown(md);
+export function renderInline(md, options = {}) {
+  const html = renderMarkdown(md, options);
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
   const kids = tpl.content.children;

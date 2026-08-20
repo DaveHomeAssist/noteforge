@@ -3,6 +3,7 @@
 
 import { escapeHtml } from '../utils/helpers.js';
 import { downloadText } from '../utils/download.js';
+import './graph.css';
 
 const WIDTH = 900;
 const HEIGHT = 640;

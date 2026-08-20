@@ -52,6 +52,14 @@ and dark mode — all stored in your browser, no backend required.
 - **Markdown shortcuts** — `# ` → heading, `- ` → bullet, `1. ` → numbered,
   `[] ` → to-do, `> ` → quote, ` ``` ` → code, `---` → divider. Enter splits /
   continues lists; Backspace at the start demotes then merges; Tab indents.
+- **YAML properties** — leading YAML frontmatter is portable Markdown authority
+  for text, number, boolean, ISO-date, safe HTTP(S) URL, select, and multi-select
+  values. The Properties dialog preserves unknown keys and comments, exposes raw
+  source when YAML is malformed, and never reformats the note body.
+- **Precise block links and transclusion** — Copy Block Link assigns a stable
+  trailing `^id`; `[[Note#Heading]]` and `[[Note#^id]]` navigate exactly, while
+  `![[Note#^id]]` renders a read-only, sanitized embed with bounded depth and
+  explicit cycle/missing/duplicate diagnostics.
 - **Rename-safe `[[wikilinks]]`** — type `[[` for canonical-title and alias
   autocomplete. Display text, heading fragments, and embeds parse from one
   source-aware grammar; rename previews every affected note/link, captures safety
@@ -100,7 +108,7 @@ and dark mode — all stored in your browser, no backend required.
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
   plus filters: `tag:<name>`, `in:title`, `has:banner`, `is:pinned`,
-  `is:archived`.
+  `is:archived`, `prop:<key>`, and `prop:<key>=<value>`.
 - **Theme** — light / dark / **system** (follows your OS), persisted.
 - **Settings** (⚙ in the ⋯ menu) — theme, editor font size & width, autosave delay,
   and the default template for new notes.
@@ -170,6 +178,11 @@ Schema version 5 adds nullable `archivedAt` lifecycle metadata. Existing
 schema-version-3 and schema-version-4 vaults migrate additively without changing
 IDs, Markdown, hierarchy, Trash state, or settings.
 
+Schema version 6 records the revision-protected move of Phase 2 aliases into
+leading YAML `aliases`. Valid notes migrate without body changes; malformed YAML
+is left byte-for-byte intact and reported for repair. Compatibility alias metadata
+remains synchronized while older backups migrate through the same chain.
+
 Revision history and rolling snapshots use namespaced keys in the same unchanged
 `my-notes-app` IndexedDB database and share content-addressed blobs. They are
 browser-local recovery aids, not independent backups. If IndexedDB is unavailable,
@@ -177,7 +190,9 @@ current-note persistence continues through the existing `localStorage` fallback,
 while history and local snapshots report themselves unavailable instead of risking
 the smaller fallback quota. Use **⋯ → Backup center → Download JSON backup** for a
 portable artifact. See [Recovery and backups](docs/recovery.md) for retention,
-verification, restore, and browser-support details.
+verification, restore, and browser-support details. See
+[Properties, block links, and transclusion](docs/properties_and_block_links.md) for
+the portable syntax and repair behavior introduced in Phase 5.
 
 ## Tests
 
@@ -207,8 +222,11 @@ rejection, rollback, and lifecycle-complete backup fidelity. The complete Node g
 also includes 14 Phase 4 checks for local calendar arithmetic across time zones,
 Daily resolution, allowlisted share intake, task fixed points/exact mutation,
 capture durability, calendar aggregation, and a 1,000-note derivation budget. The
-complete Node gate is 386 checks.
-`test/features.html` (364 assertions) drives
+complete Node gate also includes 9 Phase 5 checks for lossless YAML boundaries,
+typed validation, migration, property filtering, stable block IDs, exact
+fragments, bounded transclusion, XSS safety, and exact backup/Markdown-export
+fidelity. The complete Node gate is 395 checks.
+`test/features.html` (376 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
@@ -217,9 +235,10 @@ runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
 `document.title`, then runs 15 integrated recovery checks, 16 Phase 2 link and
 navigation checks, 17 integrated Phase 3 checks, 28 integrated Phase 4 checks at
-390 px and a 200%-equivalent viewport, and eight production/offline checks
+390 px and a 200%-equivalent viewport, 14 integrated Phase 5 properties/block-link/
+transclusion checks, and nine production/offline checks
 (including first-use recovery, Link tools, Archive, saved view, find/replace,
-bulk-action, and Phase 4 chunks), and fails on
+bulk action, Phase 4, and Phase 5 chunks), and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -230,6 +249,7 @@ src/
 ├── app/
 │   ├── main.js         # App controller: wiring, views, shortcuts, palette, settings, mobile
 │   ├── phase4.js       # Lazy Daily, capture, task-dashboard, and calendar orchestration
+│   ├── phase5.js       # Lazy properties, alias migration, block references, and transclusion
 │   ├── templates.js    # Daily / meeting / project note templates
 │   ├── pwa.js          # Registers the service worker (production only)
 │   └── seed.js         # Sample interlinked notes for first run
@@ -249,6 +269,8 @@ src/
 │   ├── quick-capture-view.js # Text/URL/clipboard/image routing dialog
 │   ├── task-dashboard-view.js # Grouped, filtered, bounded Markdown task dashboard
 │   ├── calendar-view.js # Keyboard month/week grid and equivalent mobile agenda
+│   ├── properties-view.js # Typed and raw lossless YAML property editor
+│   ├── block-editor-phase5.js # Raw frontmatter and Copy Block Link enhancements
 │   ├── bulk-actions-view.js # ID-based multi-note action bar and result announcements
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
@@ -291,6 +313,10 @@ src/
 │   ├── capture.js      # Allowlisted share intake and Markdown composition
 │   ├── tasks.js        # Source ranges, due markers, exact task mutation, grouping
 │   ├── calendar.js     # Derived Daily/date/task calendar items
+│   ├── frontmatter-boundary.js # Tiny synchronous leading-YAML boundary scanner
+│   ├── frontmatter.js  # Sole yaml adapter: strict parse, lossless edits, typed values
+│   ├── block-links.js  # Stable block-ID validation, inspection, and resolution
+│   ├── transclusion.js # Read-only sanitized block embeds with cycle/depth budgets
 │   ├── image.js        # Client-side image downscale/compress (banners + inline images)
 │   └── helpers.js      # ids, escaping, debounce, dates
 └── styles.css          # Tokenized light/dark theme
@@ -300,6 +326,8 @@ test/features.html      # Browser feature suite (editor, banner, Trash, palette,
 test/run-features.mjs   # Headless runner for features.html (npm run test:browser)
 test/link-integrity.test.mjs # Node invariants for Phase 2 identity/link/navigation behavior
 test/phase3.test.mjs     # Node invariants for Archive, saved views, replacement, and batches
+test/phase4.test.mjs     # Node invariants for Daily, capture, tasks, and calendar
+test/phase5.test.mjs     # Node invariants for frontmatter, properties, block refs, and embeds
 vite.config.js          # Build + dev server; injects the Content-Security-Policy
 ```
 

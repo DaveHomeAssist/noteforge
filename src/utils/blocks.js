@@ -13,9 +13,24 @@
 import { uid } from './helpers.js';
 
 export const LIST_TYPES = new Set(['bullet', 'numbered', 'todo']);
+const BLOCK_ID_SUFFIX_RE = /(?:^|[ \t]+)\^([A-Za-z0-9][A-Za-z0-9_-]{0,63})[ \t]*$/;
+const BLOCK_ID_TYPES = new Set(['paragraph', 'heading', 'bullet', 'numbered', 'todo', 'quote']);
 
 export function makeBlock(type, text = '', meta = {}) {
   return { id: uid(), type, text, meta };
+}
+
+function blockSupportsId(block) {
+  return BLOCK_ID_TYPES.has(block?.type);
+}
+
+function readBlockId(block) {
+  if (!blockSupportsId(block)) return block;
+  const match = BLOCK_ID_SUFFIX_RE.exec(block.text || '');
+  if (!match) return block;
+  block.text = block.text.slice(0, match.index).replace(/[ \t]+$/, '');
+  block.meta = { ...block.meta, blockId: match[1] };
+  return block;
 }
 
 const RE = {
@@ -87,6 +102,7 @@ export function parse(md) {
   // two lists silently fuse.
   let sawBlank = false;
   const push = (b) => {
+    readBlockId(b);
     if (sawBlank && LIST_TYPES.has(b.type)) {
       const last = blocks[blocks.length - 1];
       if (last && LIST_TYPES.has(last.type)) b.meta = { ...b.meta, blankBefore: true };
@@ -314,17 +330,20 @@ export function serialize(blocks) {
 
 function renderBlockToMd(block, numbers) {
   const indent = '  '.repeat(block.meta?.indent || 0);
+  const text = blockSupportsId(block) && block.meta?.blockId
+    ? `${block.text}${block.text ? ' ' : ''}^${block.meta.blockId}`
+    : block.text;
   switch (block.type) {
     case 'heading':
-      return '#'.repeat(block.meta?.level || 1) + ' ' + block.text;
+      return '#'.repeat(block.meta?.level || 1) + ' ' + text;
     case 'bullet':
-      return indent + '- ' + block.text;
+      return indent + '- ' + text;
     case 'numbered':
-      return indent + (numbers.get(block.id) || 1) + '. ' + block.text;
+      return indent + (numbers.get(block.id) || 1) + '. ' + text;
     case 'todo':
-      return indent + (block.meta?.checked ? '- [x] ' : '- [ ] ') + block.text;
+      return indent + (block.meta?.checked ? '- [x] ' : '- [ ] ') + text;
     case 'quote':
-      return block.text
+      return text
         .split('\n')
         .map((l) => '> ' + l)
         .join('\n');
@@ -348,6 +367,6 @@ function renderBlockToMd(block, numbers) {
       return block.text;
     case 'paragraph':
     default:
-      return block.text;
+      return text;
   }
 }

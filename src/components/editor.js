@@ -11,7 +11,8 @@ export class Editor {
    * @param {HTMLElement} container
    * @param {import('../core/database.js').Database} db
    * @param {{ openNote:(id:string,opts?:object)=>void, openOrCreateByTitle:(t:string,fragment?:string)=>void,
-   *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void }} actions
+   *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void,
+   *   showProperties?:(id:string)=>void, announce?:(message:string)=>void }} actions
    */
   constructor(container, db, actions) {
     this.container = container;
@@ -22,6 +23,7 @@ export class Editor {
     this.banner = null;
     this.OutlineView = null;
     this.outlineReady = null;
+    this.phase5Enhancer = null;
     this.autosave = debounce(() => this.#save(), Number(db.config?.autosaveMs) || 400);
     this.#renderEmpty();
   }
@@ -49,7 +51,12 @@ export class Editor {
     return this.outlineReady;
   }
 
-  open(id, { focus = null, discardPending = false, headingAnchor = null } = {}) {
+  enablePhase5(enhancer) {
+    this.phase5Enhancer = enhancer;
+    this.blockEditor?.setEnhancer(enhancer);
+  }
+
+  open(id, { focus = null, discardPending = false, headingAnchor = null, blockId = null } = {}) {
     // Persist the OUTGOING note's buffered (debounced) edits before we switch —
     // flush runs #save() synchronously while currentId/blockEditor still point at
     // the note being left, so a fast note-switch never drops unsaved typing.
@@ -64,6 +71,8 @@ export class Editor {
       if (el) { el.focus(); el.select(); }
     } else if (focus === 'content') {
       this.blockEditor?.focusFirst();
+    } else if (blockId) {
+      queueMicrotask(() => this.blockEditor?.jumpToBlock(blockId));
     } else if (headingAnchor) {
       queueMicrotask(() => this.blockEditor?.jumpToHeading(headingAnchor));
     }
@@ -167,6 +176,7 @@ export class Editor {
         <input type="text" class="editor__title" value="${escapeHtml(note.title)}"
                placeholder="Untitled" />
         <div class="editor__tools">
+          <button class="btn btn--ghost editor__properties" title="Edit note properties" aria-label="Edit note properties">Properties</button>
           <button class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
                   title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-pressed="${note.pinned}">📌</button>
           <button class="btn btn--danger-ghost editor__delete" title="Delete note">🗑</button>
@@ -231,6 +241,11 @@ export class Editor {
         this.actions.openOrCreateByTitle(title, fragment);
       },
       getTitles: () => this.db.allLinkNames(),
+      resolveNote: (title) => this.db.resolveTitle(title),
+      noteId: note.id,
+      noteTitle: note.title,
+      onStatus: (message) => this.actions.announce?.(message),
+      enhancer: this.phase5Enhancer,
     });
     this._blockEditorNoteId = note.id;
 
@@ -285,6 +300,10 @@ export class Editor {
 
     this.container.querySelector('.editor__pin').addEventListener('click', () => {
       this.actions.togglePin(note.id); // the app flushes pending edits + persists
+    });
+
+    this.container.querySelector('.editor__properties').addEventListener('click', () => {
+      this.actions.showProperties?.(note.id);
     });
 
     this.container.querySelector('.editor__delete').addEventListener('click', () => {

@@ -6,6 +6,7 @@
 import { downloadText } from '../utils/download.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
+import './recovery.css';
 
 function formatDateTime(value) {
   if (!value) return 'Never';

@@ -71,6 +71,21 @@ dashboard renders at most 50 rows per visible group page, while pure derivation 
 JavaScript plus the service worker total 211,450 bytes; full HTML/CSS/JavaScript/
 service-worker output is 468,624 bytes. No dependency was added in this phase.
 
+Phase 5 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+5,442 bytes + directly referenced CSS 25,335 bytes + directly referenced JavaScript
+223,064 bytes = 253,841-byte initial shell, 3,339 bytes below the authoritative
+257,180-byte ceiling. JavaScript is 5,877 bytes above its diagnostic ceiling,
+offset by HTML being 3,058 bytes and CSS being 6,158 bytes below their diagnostic
+ceilings; the combined budget remains green without an exception. YAML parsing,
+the Phase 5 controller, Properties view, and responsive styles remain post-usable
+chunks and are build-time precached for offline first use. Their deferred output is
+129,122 bytes: `yaml` 104,706, controller 14,702, Properties JavaScript 6,575,
+and Properties CSS 3,139. All deferred CSS/JavaScript plus the 5,040-byte service
+worker total 352,784 bytes; full HTML/CSS/JavaScript/service-worker output is
+606,625 bytes. The exact pinned dependency is `yaml` 2.9.0, ISC licensed with no
+runtime dependencies; it is imported only by `src/utils/frontmatter.js`, adds no
+CSP origin or directive, and the high-severity audit reports zero vulnerabilities.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

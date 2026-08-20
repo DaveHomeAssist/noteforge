@@ -9,9 +9,10 @@
 
 import { parse, serialize, makeBlock, numberedLabels, LIST_TYPES } from '../utils/blocks.js';
 import { renderInline, renderMarkdown, setKnownTitles } from '../utils/markdown.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, uid } from '../utils/helpers.js';
 import { fileToBannerDataURL } from '../utils/image.js';
 import { nextHeadingAnchor } from '../utils/headings.js';
+import { splitFrontmatterSource } from '../utils/frontmatter-boundary.js';
 
 const MULTILINE = new Set(['code', 'raw']); // edited as plain multi-line text
 const NONTEXT = new Set(['divider', 'date', 'image']); // not text-editable: select & delete
@@ -96,7 +97,9 @@ export class BlockEditor {
   /**
    * @param {HTMLElement} host  the `.editor__blocks` container
    * @param {{ initialMarkdown?:string, onChange?:()=>void,
-   *           onOpenWikilink?:(t:string)=>void, getTitles?:()=>string[] }} opts
+   *           onOpenWikilink?:(t:string)=>void, getTitles?:()=>string[],
+   *           resolveNote?:(t:string)=>object|null, noteId?:string, noteTitle?:string,
+   *           onStatus?:(message:string)=>void }} opts
    */
   constructor(host, opts = {}) {
     this.host = host;
@@ -104,8 +107,13 @@ export class BlockEditor {
     this.onChange = opts.onChange || (() => {});
     this.onOpenWikilink = opts.onOpenWikilink || (() => {});
     this.getTitles = opts.getTitles || (() => []);
+    this.resolveNote = opts.resolveNote || (() => null);
+    this.noteId = opts.noteId || null;
+    this.noteTitle = opts.noteTitle || 'Untitled';
+    this.onStatus = opts.onStatus || (() => {});
+    this.enhancer = opts.enhancer || null;
 
-    this.blocks = parse(opts.initialMarkdown || '');
+    this.#loadSource(opts.initialMarkdown || '');
     this.focusedId = null;
     this.selectedId = null; // for non-editable blocks (divider/date/image)
     this.selectedIds = new Set(); // multi-block selection (shift-click range)
@@ -140,7 +148,11 @@ export class BlockEditor {
 
   serialize() {
     this.#syncFocused();
-    return serialize(this.blocks);
+    if (!this.sourceDirty) return this.originalMarkdown;
+    const body = serialize(this.blocks);
+    return this.frontmatter
+      ? `${this.frontmatter.raw}${this.frontmatter.separator}${body}`
+      : body;
   }
 
   /** True while an edit/selection is in flight — editor.js must not re-render then. */
@@ -154,11 +166,49 @@ export class BlockEditor {
   }
 
   setMarkdown(md) {
-    this.blocks = parse(md || '');
+    this.#loadSource(md || '');
     this.baseline = this.#clone(this.blocks);
     this.undoStack = [];
     this.redoStack = [];
     this.#render();
+  }
+
+  setEnhancer(enhancer) {
+    this.enhancer = enhancer || null;
+    this.#render();
+  }
+
+  setFrontmatterRaw(raw) {
+    if (!this.frontmatter) return false;
+    this.frontmatter.raw = String(raw ?? '');
+    this.sourceDirty = true;
+    this.onChange();
+    return true;
+  }
+
+  assignBlockId(block) {
+    if (!block || !this.blocks.includes(block)) return null;
+    this.#syncFocused();
+    if (!block.meta?.blockId) {
+      const used = new Set(this.blocks.map((entry) => entry.meta?.blockId).filter(Boolean));
+      let id = uid();
+      while (used.has(id)) id = uid();
+      block.meta = { ...block.meta, blockId: id };
+      this.#snapshot();
+      this.#render();
+    }
+    return block.meta.blockId;
+  }
+
+  #loadSource(markdown) {
+    const source = String(markdown ?? '');
+    const split = splitFrontmatterSource(source);
+    this.originalMarkdown = source;
+    this.sourceDirty = false;
+    this.frontmatter = split.hasFrontmatter
+      ? { raw: split.raw, separator: split.separator }
+      : null;
+    this.blocks = parse(split.body);
   }
 
   focusFirst() {
@@ -205,12 +255,17 @@ export class BlockEditor {
   applyMarkdown(markdown) {
     this.#syncFocused();
     const previous = this.#clone(this.blocks);
-    const next = parse(String(markdown ?? ''));
-    if (serialize(previous) === serialize(next)) return false;
+    const current = this.serialize();
+    const source = String(markdown ?? '');
+    if (current === source) return false;
+    const split = splitFrontmatterSource(source);
+    const next = parse(split.body);
     this.undoStack.push(previous);
     if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
     this.redoStack = [];
     this.blocks = next;
+    this.frontmatter = split.hasFrontmatter ? { raw: split.raw, separator: split.separator } : null;
+    this.sourceDirty = true;
     this.baseline = this.#clone(next);
     this.focusedId = null;
     this.selectedId = null;
@@ -226,6 +281,21 @@ export class BlockEditor {
     if (!row) return false;
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     row.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+    if (focus) {
+      row.tabIndex = -1;
+      row.focus({ preventScroll: true });
+    }
+    return true;
+  }
+
+  jumpToBlock(blockId, { focus = true } = {}) {
+    const id = String(blockId ?? '').replace(/^\^/, '');
+    const matches = [...this.host.querySelectorAll('[data-block-id]')]
+      .filter((element) => element.dataset.blockId === id);
+    if (matches.length !== 1) return false;
+    const row = matches[0];
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
     if (focus) {
       row.tabIndex = -1;
       row.focus({ preventScroll: true });
@@ -269,6 +339,7 @@ export class BlockEditor {
         });
       }
       this.host.innerHTML = '';
+      this.enhancer?.prepend?.(this.host, this);
       for (const block of this.blocks) {
         this.host.appendChild(this.#buildRow(block, numbers));
       }
@@ -281,6 +352,7 @@ export class BlockEditor {
     const row = el('div', 'blk-row');
     row.dataset.id = block.id;
     row.dataset.type = block.type;
+    if (block.meta?.blockId) row.dataset.blockId = block.meta.blockId;
     const heading = this.headingAnchors?.get(block.id);
     if (heading) {
       row.dataset.level = heading.level;
@@ -308,7 +380,16 @@ export class BlockEditor {
     content.contentEditable = NONTEXT.has(block.type) || block.type === 'table' ? 'false' : 'true';
     this.#fillContent(content, block, /*raw*/ false);
     row.appendChild(content);
+    this.enhancer?.decorateRow?.(row, block, this);
     return row;
+  }
+
+  #renderOptions() {
+    return {
+      resolveNote: this.resolveNote,
+      sourceNoteId: this.noteId,
+      maxDepth: 5,
+    };
   }
 
   #buildMarker(block, numbers) {
@@ -364,7 +445,7 @@ export class BlockEditor {
       } else {
         // blurred raw block: render (tables/HTML display properly)
         setKnownTitles(this.getTitles());
-        content.innerHTML = renderMarkdown(block.text);
+        content.innerHTML = renderMarkdown(block.text, this.#renderOptions());
         delete content.dataset.raw;
       }
       return;
@@ -380,7 +461,7 @@ export class BlockEditor {
         const callout = parseCallout(block.text);
         if (callout) { this.#fillCallout(content, callout); return; }
       }
-      content.innerHTML = block.text ? renderInline(block.text) : '';
+      content.innerHTML = block.text ? renderInline(block.text, this.#renderOptions()) : '';
     }
   }
 
@@ -414,7 +495,7 @@ export class BlockEditor {
     const head = el('div', 'blk-callout__head');
     head.textContent = `${meta.icon} ${meta.label}`;
     const bodyEl = el('div', 'blk-callout__body markdown');
-    bodyEl.innerHTML = body ? renderInline(body) : '';
+    bodyEl.innerHTML = body ? renderInline(body, this.#renderOptions()) : '';
     box.append(head, bodyEl);
     content.appendChild(box);
   }
@@ -1688,6 +1769,7 @@ export class BlockEditor {
   // baseline to the new current state. This keeps the undo stack holding states
   // the user was in *before* each edit (first Ctrl+Z actually reverts).
   #snapshot(coalesce = false) {
+    this.sourceDirty = true;
     const now = Date.now();
     if (coalesce && now - this.lastSnapshotAt < 500 && this.undoStack.length) {
       // fold rapid typing: advance the baseline but add no new undo step
@@ -1711,6 +1793,7 @@ export class BlockEditor {
     const prev = this.undoStack.pop();
     this.redoStack.push(this.#clone(this.blocks));
     this.blocks = prev;
+    this.sourceDirty = true;
     this.baseline = this.#clone(prev);
     this.focusedId = null;
     this.selectedId = null;
@@ -1724,6 +1807,7 @@ export class BlockEditor {
     const next = this.redoStack.pop();
     this.undoStack.push(this.#clone(this.blocks));
     this.blocks = next;
+    this.sourceDirty = true;
     this.baseline = this.#clone(next);
     this.focusedId = null;
     this.selectedId = null;
