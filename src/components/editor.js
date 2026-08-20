@@ -345,6 +345,10 @@ export class Editor {
     this.autosave.flush();
   }
 
+  focusTask(occurrence) {
+    return this.blockEditor?.focusTask(occurrence) || false;
+  }
+
   findEntries() {
     return this.blockEditor?.findEntries() || [];
   }

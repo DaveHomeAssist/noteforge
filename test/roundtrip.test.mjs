@@ -372,6 +372,14 @@ ok('manifest has at least one typed icon', Array.isArray(manifest.icons) && mani
 ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.startsWith('./')));
 ok('manifest has a maskable icon', manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')));
 ok('manifest has theme + background colors', /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color));
+ok('manifest share target is relative, GET-only, and allowlists title/text/url', (() => {
+  const target = manifest.share_target;
+  return target?.action === './?source=share-target'
+    && target.method === 'GET'
+    && eq(target.params, { title: 'title', text: 'text', url: 'url' })
+    && !('enctype' in target)
+    && !('files' in target.params);
+})());
 const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 ok('service worker has a build-time emitted-asset precache hook', serviceWorkerSource.includes('__PRECACHE_ASSETS__'));
 ok('service worker matches same-origin static precache entries across host-added Vary headers',

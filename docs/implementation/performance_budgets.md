@@ -58,6 +58,19 @@ post-usable chunks and are build-time precached for offline first use. Deferred 
 JavaScript plus the service worker total 165,998 bytes; full HTML/CSS/JavaScript
 output is 419,333 bytes. No dependency was added in this phase.
 
+Phase 4 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+5,442 bytes + directly referenced CSS 31,941 bytes + directly referenced JavaScript
+219,791 bytes = 257,174-byte initial shell, 6 bytes below the authoritative
+257,180-byte ceiling. JavaScript is 2,604 bytes and CSS is 448 bytes above their
+diagnostic ceilings, offset by HTML being 3,058 bytes below its diagnostic ceiling;
+the combined budget remains green without an exception. Daily/capture/task/calendar
+orchestration, views, services, date/task parsers, and responsive styles remain
+post-usable chunks and are build-time precached for offline first use. The task
+dashboard renders at most 50 rows per visible group page, while pure derivation over
+1,000 notes remained under 5 ms in repeated final Node 22 checks. Deferred CSS/
+JavaScript plus the service worker total 211,450 bytes; full HTML/CSS/JavaScript/
+service-worker output is 468,624 bytes. No dependency was added in this phase.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

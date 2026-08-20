@@ -72,6 +72,17 @@ and dark mode — all stored in your browser, no backend required.
   revision-protected apply. ID-based sidebar selection remains exact across
   virtualized rows and supports batch tag, Archive/Unarchive, reparent, export,
   and confirmed move to Trash.
+- **Daily workflow and Quick Capture** — open one idempotent local-date Daily
+  note with `Ctrl/⌘+Shift+D`, explicitly restore a matching Trash/Archive note,
+  or capture text, URLs, clipboard text, and a locally resized image to Inbox,
+  any active note, or a new note with `Ctrl/⌘+Shift+C`. The installed PWA accepts
+  allowlisted GET share parameters for review and never auto-saves shared input.
+- **Tasks and calendar** — terminal `@due(YYYY-MM-DD)` markers keep due dates in
+  source Markdown. The task dashboard groups Today, Overdue, Upcoming, No date,
+  and completed work with exact-occurrence toggles, due editing, note/tag filters,
+  and bounded pagination. The keyboard month/week calendar combines Daily titles,
+  standalone `@date()` blocks, and due tasks; mobile presents the same items as an
+  agenda, and an empty day opens the idempotent Daily workflow.
 - **Graph view** (🕸️) — a force-directed map of how your notes connect.
 - **Tags** — add `#tags` as chips; filter the sidebar by tag.
 - **Pin & sort** — pin notes to float them to the top; sort the sidebar by
@@ -113,6 +124,8 @@ export operate on the same `.md` content and are unaffected by the editor.
 | --- | --- |
 | `Ctrl/⌘ + P` | Command palette (notes · `>` commands · `#` headings) |
 | `Ctrl/⌘ + N` | New note |
+| `Ctrl/⌘ + Shift + D` | Open Today’s local Daily note |
+| `Ctrl/⌘ + Shift + C` | Open Quick Capture |
 | `Ctrl/⌘ + K` | Focus search |
 | `Ctrl/⌘ + F` | Find and replace in the current note or vault |
 | `Ctrl/⌘ + G` | Toggle graph view |
@@ -174,7 +187,7 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (261 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (262 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
@@ -191,18 +204,22 @@ fidelity, and a 1,000-note incremental-update budget. A 10-check Phase 3 suite
 covers schema v5, Archive scopes, saved views,
 literal source replacement, ID-based selection, atomic batch planning, stale-plan
 rejection, rollback, and lifecycle-complete backup fidelity. The complete Node gate
-is 371 checks.
-`test/features.html` (355 assertions) drives
+also includes 14 Phase 4 checks for local calendar arithmetic across time zones,
+Daily resolution, allowlisted share intake, task fixed points/exact mutation,
+capture durability, calendar aggregation, and a 1,000-note derivation budget. The
+complete Node gate is 386 checks.
+`test/features.html` (364 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
 graph and recovery views in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
-`document.title`, then runs 15 integrated recovery checks and 16 Phase 2 link and
-navigation checks, 17 integrated Phase 3 checks at 390 px, and seven production/
-offline checks (including first-use recovery, Link tools, Archive, saved view,
-find/replace, and bulk-action chunks), and fails on
+`document.title`, then runs 15 integrated recovery checks, 16 Phase 2 link and
+navigation checks, 17 integrated Phase 3 checks, 28 integrated Phase 4 checks at
+390 px and a 200%-equivalent viewport, and eight production/offline checks
+(including first-use recovery, Link tools, Archive, saved view, find/replace,
+bulk-action, and Phase 4 chunks), and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -212,6 +229,7 @@ unexpected browser runtime, console, request, or HTTP errors). Both suites gate 
 src/
 ├── app/
 │   ├── main.js         # App controller: wiring, views, shortcuts, palette, settings, mobile
+│   ├── phase4.js       # Lazy Daily, capture, task-dashboard, and calendar orchestration
 │   ├── templates.js    # Daily / meeting / project note templates
 │   ├── pwa.js          # Registers the service worker (production only)
 │   └── seed.js         # Sample interlinked notes for first run
@@ -228,6 +246,9 @@ src/
 │   ├── archive-view.js    # Explicit Archive list, preview, and collision-safe restore
 │   ├── saved-searches-view.js # Saved-view create, rename, reorder, run, and delete
 │   ├── find-replace-view.js # Current-note and previewed vault-wide source replacement
+│   ├── quick-capture-view.js # Text/URL/clipboard/image routing dialog
+│   ├── task-dashboard-view.js # Grouped, filtered, bounded Markdown task dashboard
+│   ├── calendar-view.js # Keyboard month/week grid and equivalent mobile agenda
 │   ├── bulk-actions-view.js # ID-based multi-note action bar and result announcements
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
@@ -243,7 +264,9 @@ src/
 │   ├── backup.js       # Deterministic portable envelope, SHA-256 verify, restore preview
 │   ├── knowledge-index.js # Rebuildable contextual backlinks and unlinked mentions
 │   ├── link-operations.js # Atomic rename/repair/conversion plans with revision gates
-│   └── bulk-operations.js # Previewed/stale-safe replace and multi-note transaction plans
+│   ├── bulk-operations.js # Previewed/stale-safe replace and multi-note transaction plans
+│   ├── capture-service.js # Durable Inbox/existing/new capture routing
+│   └── task-service.js # Exact source-verified task mutation boundary
 ├── ui/
 │   ├── theme.js        # Resolved data-theme from light/dark/system (matchMedia), persisted
 │   └── settings.js     # Pure settings defaults / normalize / theme resolution
@@ -263,6 +286,11 @@ src/
 │   ├── saved-searches.js # Normalized stable saved-view records and CRUD ordering
 │   ├── find-replace.js # Literal Unicode-aware source match and replacement plans
 │   ├── selection.js    # ID-based range selection independent of rendered windows
+│   ├── local-date.js   # Timezone-free calendar tuples and local Today key
+│   ├── daily-workflow.js # Active/Archive/Trash Daily-note resolution
+│   ├── capture.js      # Allowlisted share intake and Markdown composition
+│   ├── tasks.js        # Source ranges, due markers, exact task mutation, grouping
+│   ├── calendar.js     # Derived Daily/date/task calendar items
 │   ├── image.js        # Client-side image downscale/compress (banners + inline images)
 │   └── helpers.js      # ids, escaping, debounce, dates
 └── styles.css          # Tokenized light/dark theme

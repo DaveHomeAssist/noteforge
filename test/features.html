@@ -30,6 +30,9 @@
   import { FindReplaceView, createFindReplaceElements } from '/src/components/find-replace-view.js';
   import { SavedSearchesView, createSavedSearchElements } from '/src/components/saved-searches-view.js';
   import { BulkActionsView, createBulkActionElements } from '/src/components/bulk-actions-view.js';
+  import { QuickCaptureView, createQuickCaptureElements } from '/src/components/quick-capture-view.js';
+  import { TaskDashboardView, createTaskDashboardElements } from '/src/components/task-dashboard-view.js';
+  import { CalendarView, createCalendarElements } from '/src/components/calendar-view.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
@@ -1948,6 +1951,106 @@
         && noteList.getSelection().length === 0);
     } catch (e) {
       results.push('FAIL  Phase 3 component flows — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 4 capture, bounded tasks, and keyboard calendar ============
+  await (async () => {
+    try {
+      const captureElements = createQuickCaptureElements(scratch);
+      let captureInput = null;
+      const captureView = new QuickCaptureView(captureElements, {
+        getAllNotes: () => [{ id: 'capture-target', title: 'Capture target' }],
+      }, {
+        async save(input) {
+          captureInput = input;
+          return { note: { id: 'capture-target', title: 'Capture target' }, created: false };
+        },
+      }, { readClipboard: async () => 'Clipboard source' });
+      captureView.show({ payload: { title: 'Shared title', text: 'Shared text', url: 'https://example.test/source' } });
+      check('Phase 4 Quick Capture is labelled, focus-trapped, review-only, and defaults to Inbox',
+        captureView.open
+        && captureElements.overlay.contains(document.activeElement)
+        && captureElements.destination.value === 'inbox'
+        && /Nothing is saved until/.test(captureElements.status.textContent)
+        && captureInput === null);
+      captureElements.overlay.querySelector('[data-read-clipboard]').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      const image = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>'], 'capture.svg', { type: 'image/svg+xml' });
+      const transfer = new DataTransfer();
+      transfer.items.add(image);
+      captureElements.image.files = transfer.files;
+      captureElements.destination.value = 'existing:capture-target';
+      captureElements.destination.dispatchEvent(new Event('change', { bubbles: true }));
+      captureElements.form.requestSubmit();
+      for (let attempt = 0; attempt < 50 && !captureInput; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+      check('Phase 4 Quick Capture composes shared text, URL, clipboard, local image, and exact destination',
+        captureInput?.destination === 'existing'
+        && captureInput?.noteId === 'capture-target'
+        && /Shared text\n\nClipboard source/.test(captureInput?.markdown || '')
+        && /\[Shared title\]\(https:\/\/example\.test\/source\)/.test(captureInput?.markdown || '')
+        && /!\[capture\]\(data:image\/jpeg/.test(captureInput?.markdown || ''));
+      captureView.readClipboard = async () => { throw new Error('permission denied'); };
+      captureView.show();
+      captureElements.overlay.querySelector('[data-read-clipboard]').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 4 clipboard denial remains visible with a manual-paste fallback',
+        /Clipboard access was unavailable/.test(captureElements.status.textContent)
+        && /Paste into the Text field/.test(captureElements.status.textContent));
+      captureView.close();
+
+      const pageTasks = Array.from({ length: 1_000 }, (_, index) => ({
+        id: `page-task-${index}`, noteId: `page-note-${index}`, noteTitle: `Note ${index}`,
+        noteTags: ['scale'], occurrence: 0, checked: false, text: `Task ${String(index).padStart(4, '0')}`,
+        dueDate: null, heading: 'Scale',
+      }));
+      const taskElements = createTaskDashboardElements(scratch);
+      const taskView = new TaskDashboardView(taskElements, { subscribe: () => () => {} }, { list: () => pageTasks });
+      taskView.show();
+      check('Phase 4 task dashboard bounds a 1,000-task DOM and exposes page status',
+        taskElements.list.querySelectorAll('.task-card').length === 50
+        && /Page 1 of 20/.test(taskElements.list.textContent)
+        && /50 of 1000 tasks shown/.test(taskElements.status.textContent));
+      const firstWindowIds = new Set(taskView.visibleTasks.map((task) => task.id));
+      taskElements.list.querySelector('[data-page-delta="1"]').click();
+      check('Phase 4 task pagination preserves keyboard focus and exact next-window identity',
+        taskElements.list.querySelectorAll('.task-card').length === 50
+        && !firstWindowIds.has(taskView.visibleTasks[0]?.id)
+        && taskElements.list.contains(document.activeElement));
+      taskView.close();
+
+      let dailyDate = null;
+      let openedItem = null;
+      const calendarElements = createCalendarElements(scratch);
+      const calendarView = new CalendarView(calendarElements, {
+        subscribe: () => () => {},
+        getAllNotes: () => [
+          { id: 'daily', title: '2026-08-20', content: '@date(2026-08-20)', tags: [], isTrashed: false, isArchived: false },
+          { id: 'dated', title: 'Dated source', content: '@date(2026-08-21)\n- [ ] Due @due(2026-08-22)', tags: [], isTrashed: false, isArchived: false },
+        ],
+      }, { onOpenItem: (item) => { openedItem = item; }, onOpenDaily: (date) => { dailyDate = date; } });
+      calendarView.show({ date: '2026-08-20' });
+      check('Phase 4 calendar exposes a labelled grid and equivalent desktop/mobile item sets',
+        calendarElements.grid.getAttribute('role') === 'grid'
+        && calendarElements.grid.getAttribute('aria-rowcount') === '7'
+        && calendarElements.grid.getAttribute('aria-colcount') === '7'
+        && calendarElements.grid.querySelectorAll(':scope > [role="row"]').length === 7
+        && calendarElements.grid.querySelectorAll('[data-calendar-item]').length === calendarElements.agenda.querySelectorAll('[data-calendar-item]').length
+        && calendarElements.grid.querySelector('[data-calendar-item="date:dated:0"]')?.getAttribute('aria-label') === 'Date from Dated source'
+        && calendarElements.overlay.contains(document.activeElement));
+      const firstDate = document.activeElement.closest('[data-calendar-date]')?.dataset.calendarDate;
+      key(document.activeElement, 'ArrowRight');
+      check('Phase 4 calendar Arrow navigation moves roving focus by one local day',
+        firstDate === '2026-08-20'
+        && document.activeElement.closest('[data-calendar-date]')?.dataset.calendarDate === '2026-08-21'
+        && document.activeElement.tabIndex === 0);
+      calendarElements.grid.querySelector('[data-calendar-item="date:dated:0"]').click();
+      check('Phase 4 calendar source control opens the exact derived source', openedItem?.noteId === 'dated');
+      calendarView.show({ date: '2026-08-20' });
+      calendarElements.grid.querySelector('[data-calendar-date="2026-08-23"] [data-day]').click();
+      check('Phase 4 empty calendar day invokes the idempotent Daily-note entry point', dailyDate === '2026-08-23');
+    } catch (e) {
+      results.push('FAIL  Phase 4 component flows — threw: ' + e.message);
     }
   })();
 

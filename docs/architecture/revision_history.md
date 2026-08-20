@@ -27,7 +27,10 @@ A revision record is immutable and contains:
 }
 ```
 
-- `reason` is one of `autosave`, `pre_import`, `pre_reconcile`, `pre_bulk_replace`, `pre_rename`, `pre_restore`, or `manual`.
+- `reason` is one of the allowlisted durable boundaries: `autosave`, `quick_capture`,
+  `pre_import`, `pre_reconcile`, `pre_bulk_replace`, `pre_bulk_action`,
+  `pre_archive`, `pre_unarchive`, `pre_rename`, `pre_alias_repair`,
+  `pre_link_conversion`, `pre_task_change`, `pre_restore`, or `manual`.
 - `contentHash` is SHA-256 over the exact UTF-8 Markdown bytes.
 - `metadataHash` is SHA-256 over canonical JSON containing every authoritative note field except `content`. Keys use a fixed order; arrays retain user order.
 - Content and metadata blobs are stored once under namespaced content-addressed keys. Revision records reference them and never duplicate large image-bearing Markdown when hashes match.

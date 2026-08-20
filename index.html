@@ -46,6 +46,7 @@
             <button id="nav-forward" class="btn btn--ghost" aria-label="Forward" title="Alt+Right" disabled>→</button>
           </div>
           <button id="new-note-btn" class="btn btn--primary" title="New note (Ctrl+N)">＋ New</button>
+          <button id="capture-btn" class="btn btn--ghost" aria-label="Open Quick Capture">↘</button>
           <button id="theme-btn" class="btn btn--ghost" title="Toggle theme" aria-label="Toggle theme">🌙</button>
           <button id="graph-btn" class="btn btn--ghost" title="Toggle graph view" aria-label="Toggle graph view">🕸️</button>
           <div class="menu">
@@ -53,6 +54,9 @@
             <div class="menu__dropdown" id="menu-dropdown" hidden>
               <button id="palette-btn" class="menu__item">⌘ Command palette <span class="menu__hint">Ctrl/⌘ P</span></button>
               <button id="template-btn" class="menu__item">🧩 New from template…</button>
+              <button id="today-btn" class="menu__item">◫ Open Today’s Note</button>
+              <button id="tasks-btn" class="menu__item">☑ Tasks</button>
+              <button id="calendar-btn" class="menu__item">▦ Calendar</button>
               <button id="trash-btn" class="menu__item">🗑 Trash <span id="trash-badge" class="menu__badge" hidden></span></button>
               <button id="settings-btn" class="menu__item">⚙ Settings</button>
               <button id="history-btn" class="menu__item" disabled>↶ Revision history</button>
@@ -99,6 +103,8 @@
       <section id="graph" class="graph" hidden></section>
     </main>
   </div>
+
+  <span id="app-status" class="sr-only" role="status" aria-live="polite"></span>
 
   <script type="module" src="/src/app/main.js"></script>
 </body>

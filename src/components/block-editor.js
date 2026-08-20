@@ -63,7 +63,10 @@ const el = (tag, cls) => {
   return e;
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
 
 function blockHeading(block) {
   if (block.type === 'heading') return { level: block.meta?.level || 1, text: block.text };
@@ -161,6 +164,15 @@ export class BlockEditor {
   focusFirst() {
     const first = this.blocks.find((b) => !NONTEXT.has(b.type));
     if (first) this.#focusBlock(first.id, 'start');
+  }
+
+  focusTask(occurrence) {
+    const tasks = this.blocks.filter((block) => block.type === 'todo');
+    const block = tasks[Number(occurrence)];
+    if (!block) return false;
+    this.#focusBlock(block.id, 'start');
+    this.#rowEl(block.id)?.scrollIntoView({ block: 'center' });
+    return true;
   }
 
   /** Plain editable text per block for modeless find navigation. */
@@ -1195,7 +1207,6 @@ export class BlockEditor {
       if (content.contains(input)) restore();
     });
   }
-
   // === slash menu + [[ autocomplete =======================================
 
   #updateContextMenus(block, content) {

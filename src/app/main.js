@@ -48,6 +48,8 @@ class App {
     this.savedSearchesReady = null;
     this.bulkActions = null;
     this.bulkActionsReady = null;
+    this.phase4 = null;
+    this.phase4Ready = null;
 
     this.el = {
       editor: document.getElementById('editor'),
@@ -76,6 +78,11 @@ class App {
       linkReportBtn: document.getElementById('link-report-btn'),
       archiveBtn: document.getElementById('archive-btn'),
       findReplaceBtn: document.getElementById('find-replace-btn'),
+      todayBtn: document.getElementById('today-btn'),
+      captureBtn: document.getElementById('capture-btn'),
+      tasksBtn: document.getElementById('tasks-btn'),
+      calendarBtn: document.getElementById('calendar-btn'),
+      appStatus: document.getElementById('app-status'),
       navBack: document.getElementById('nav-back'),
       navForward: document.getElementById('nav-forward'),
       mobileNavBack: document.getElementById('mobile-nav-back'),
@@ -102,6 +109,10 @@ class App {
         this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
         this.#scheduleSavedSearchesInitialization();
+        if (new URL(window.location.href).searchParams.get('source') === 'share-target') void this.#openShareTarget().catch((error) => {
+          console.warn('[capture] shared intake unavailable:', error);
+          this.#announce(error?.message || 'Shared content could not be opened.');
+        });
         return this;
       })
       .catch((err) => {
@@ -257,6 +268,12 @@ class App {
     this.openNote(note.id, { focus: 'content' });
   }
 
+  async openDailyNote(date = null) {
+    this.#closeMenu();
+    this.#closeSidebar();
+    return (await this.#ensurePhase4()).openDailyNote(date);
+  }
+
   /** Create a new note nested under `parentId`. */
   newChild(parentId) {
     this.editor?.flushPending();
@@ -292,8 +309,14 @@ class App {
     if (this.editor) this.editor.setAutosaveInterval(s.autosaveMs);
   }
 
+  #announce(message) {
+    if (!this.el.appStatus) return;
+    this.el.appStatus.textContent = '';
+    requestAnimationFrame(() => { this.el.appStatus.textContent = String(message || ''); });
+  }
+
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open);
   }
 
   #toggleSidebar() {
@@ -663,6 +686,45 @@ class App {
     else setTimeout(initialize, 0);
   }
 
+  #ensurePhase4() {
+    if (this.phase4) return Promise.resolve(this.phase4);
+    if (this.phase4Ready) return this.phase4Ready;
+    this.phase4Ready = import('./phase4.js').then(({ Phase4Controller }) => {
+      this.phase4 = new Phase4Controller({
+        db: this.db,
+        editor: this.editor,
+        openNote: (id, options) => this.openNote(id, options),
+        showStorageError: () => this.#showStorageError(),
+        announce: (message) => this.#announce(message),
+      });
+      return this.phase4;
+    }).catch((error) => { this.phase4Ready = null; throw error; });
+    return this.phase4Ready;
+  }
+
+  async #showQuickCapture(options = {}) {
+    this.#closeMenu();
+    this.#closeSidebar();
+    return (await this.#ensurePhase4()).showQuickCapture(options);
+  }
+
+  async #showTaskDashboard() {
+    this.#closeMenu();
+    this.#closeSidebar();
+    await this.#ensureRecovery();
+    return (await this.#ensurePhase4()).showTaskDashboard();
+  }
+
+  async #showCalendar(options = {}) {
+    this.#closeMenu();
+    this.#closeSidebar();
+    return (await this.#ensurePhase4()).showCalendar(options);
+  }
+
+  async #openShareTarget() {
+    return (await this.#ensurePhase4()).openShareTarget();
+  }
+
   #selectionChanged(ids) {
     if (!ids.length && !this.bulkActions) return;
     void this.#ensureBulkActions().then((view) => view.update(ids)).catch((error) => {
@@ -760,6 +822,10 @@ class App {
     const cur = this.currentId ? this.db.getNote(this.currentId) : null;
     const cmds = [
       { id: 'new', title: 'New note', hint: 'Create', icon: '📝', run: () => this.newNote() },
+      { id: 'today', title: "Open Today’s Note", hint: 'Local Daily note · Ctrl/⌘ Shift D', icon: '◫', run: () => this.openDailyNote() },
+      { id: 'capture', title: 'Quick Capture', hint: 'Text, URL, clipboard, image · Ctrl/⌘ Shift C', icon: '↘', run: () => this.#showQuickCapture() },
+      { id: 'tasks', title: 'Open task dashboard', hint: 'Today, overdue, upcoming', icon: '☑', run: () => this.#showTaskDashboard() },
+      { id: 'calendar', title: 'Open calendar', hint: 'Month and week', icon: '▦', run: () => this.#showCalendar() },
       ...TEMPLATES.map((t) => ({
         id: 'tpl-' + t.id,
         title: `New ${t.label.toLowerCase()}`,
@@ -891,6 +957,10 @@ class App {
     this.el.linkReportBtn?.addEventListener('click', () => this.#showLinkReport());
     this.el.archiveBtn?.addEventListener('click', () => this.#showArchive());
     this.el.findReplaceBtn?.addEventListener('click', () => this.#showFindReplace('current'));
+    this.el.todayBtn?.addEventListener('click', () => this.openDailyNote());
+    this.el.captureBtn?.addEventListener('click', () => this.#showQuickCapture());
+    this.el.tasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
+    this.el.calendarBtn?.addEventListener('click', () => this.#showCalendar());
     for (const button of [this.el.navBack, this.el.mobileNavBack]) button?.addEventListener('click', () => this.goBack());
     for (const button of [this.el.navForward, this.el.mobileNavForward]) button?.addEventListener('click', () => this.goForward());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
@@ -1034,6 +1104,12 @@ class App {
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         this.newNote();
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        void this.openDailyNote();
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        void this.#showQuickCapture();
       } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.#focusSearch();

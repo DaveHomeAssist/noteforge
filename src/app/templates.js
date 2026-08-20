@@ -3,9 +3,23 @@
 // embedded as an @date(...) block that the editor renders as a chip.
 
 function todayISO() {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function isCalendarDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
+  if (!match) return false;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
+}
+
+export function buildDailyNote(date = todayISO()) {
+  if (!isCalendarDate(date)) throw new TypeError('Daily template dates must use YYYY-MM-DD.');
+  return {
+    title: date,
+    content: `@date(${date})\n\n## Notes\n\n\n## Tasks\n- [ ] `,
+  };
 }
 
 export const TEMPLATES = [
@@ -13,13 +27,7 @@ export const TEMPLATES = [
     id: 'daily',
     label: 'Daily note',
     icon: '📅',
-    build() {
-      const day = todayISO();
-      return {
-        title: day,
-        content: `@date(${day})\n\n## Notes\n\n\n## Tasks\n- [ ] `,
-      };
-    },
+    build({ date = todayISO() } = {}) { return buildDailyNote(date); },
   },
   {
     id: 'meeting',

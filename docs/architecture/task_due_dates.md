@@ -1,6 +1,6 @@
 # Markdown task due dates and calendar dates
 
-Status: accepted Phase 0 decision
+Status: implemented and verified in Phase 4
 
 ## Context
 

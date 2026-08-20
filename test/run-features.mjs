@@ -60,12 +60,23 @@ async function warmLazyAppModules(browser, base) {
     '/src/components/saved-searches-view.js',
     '/src/components/settings-view.js',
     '/src/components/trash-view.js',
+    '/src/components/quick-capture-view.js',
+    '/src/components/task-dashboard-view.js',
+    '/src/components/calendar-view.js',
+    '/src/app/phase4.js',
+    '/src/core/capture-service.js',
+    '/src/core/task-service.js',
     '/src/core/revision-store.js',
     '/src/core/recovery-service.js',
     '/src/core/backup.js',
     '/src/core/knowledge-index.js',
     '/src/core/knowledge-index.css',
     '/src/utils/navigation.js',
+    '/src/utils/local-date.js',
+    '/src/utils/daily-workflow.js',
+    '/src/utils/capture.js',
+    '/src/utils/tasks.js',
+    '/src/utils/calendar.js',
   ];
   try {
     await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
@@ -681,6 +692,324 @@ async function runPhase3Smoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runPhase4Smoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.route('**/src/utils/daily-workflow.js*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.continue();
+  }, { times: 1 });
+  await page.addInitScript(() => {
+    window.__phase4Clipboard = { value: 'Clipboard browser text', fail: false };
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        readText: async () => {
+          if (window.__phase4Clipboard.fail) throw new Error('permission denied');
+          return window.__phase4Clipboard.value;
+        },
+      },
+    });
+  });
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Phase 4 smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  const openSidebar = async () => {
+    const state = await page.evaluate(() => ({
+      mobile: matchMedia('(max-width: 760px)').matches,
+      open: document.querySelector('#app')?.classList.contains('sidebar-open'),
+    }));
+    if (state.mobile && !state.open) {
+      await page.locator('#sidebar-toggle').click();
+      await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+    }
+  };
+  const openMenuAction = async (selector) => {
+    await openSidebar();
+    await page.locator('#menu-btn').click();
+    await page.locator(selector).click();
+  };
+  let stage = 'booting the app';
+  let dates = null;
+  let firstDailyId = null;
+  let emptyDailyDate = null;
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+
+    stage = 'creating the Phase 4 fixture';
+    dates = await page.evaluate(async () => {
+      const key = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const day = (offset) => {
+        const date = new Date();
+        date.setHours(12, 0, 0, 0);
+        date.setDate(date.getDate() + offset);
+        return key(date);
+      };
+      const result = { today: day(0), overdue: day(-1), tomorrow: day(1), upcoming: day(7) };
+      const db = window.app.db;
+      db.createNote({
+        id: 'phase4-task-source', title: 'Phase4 Task Source', tags: ['phase4'],
+        content: `# Work\n- [ ] Duplicate task\n- [ ] Duplicate task\n- [ ] Today source task @due(${result.today})\n- [ ] Late source task @due(${result.overdue})\n- [ ] Upcoming source task @due(${result.upcoming})\n- [ ] No date source task\n- [x] Finished source task @due(${result.today})`,
+      });
+      db.createNote({ id: 'phase4-calendar-event', title: 'Phase4 Calendar Event', content: `@date(${result.tomorrow})`, tags: [] });
+      db.createNote({ id: 'phase4-archived-task', title: 'Phase4 Archived Task', content: '- [ ] Hidden archived task', archivedAt: new Date().toISOString() });
+      const trashed = db.createNote({ id: 'phase4-trashed-task', title: 'Phase4 Trashed Task', content: '- [ ] Hidden trashed task' });
+      db.deleteNote(trashed.id);
+      await db.flush();
+      return result;
+    });
+
+    stage = 'creating and reopening Today through the mobile menu';
+    const outgoingId = await page.evaluate(() => window.app.currentId);
+    await openMenuAction('#today-btn');
+    await page.locator('.blk[contenteditable="true"]').first().fill('Typed during Daily lazy initialization');
+    await page.waitForFunction((today) => window.app.db.getNote(window.app.currentId)?.title === today, dates.today);
+    firstDailyId = await page.evaluate(() => window.app.currentId);
+    check('Open Today’s Note flushes first-use edits and creates the exact local-date Daily template',
+      await page.evaluate(({ today, outgoingId }) => {
+        const note = window.app.db.getNote(window.app.currentId);
+        return note?.title === today
+          && note.content === `@date(${today})\n\n## Notes\n\n\n## Tasks\n- [ ] `
+          && window.app.db.getNote(outgoingId)?.content.includes('Typed during Daily lazy initialization')
+          && window.app.db.getPersistenceStatus().pendingWrites === 0;
+      }, { today: dates.today, outgoingId }));
+    await openMenuAction('#today-btn');
+    await page.waitForFunction((id) => window.app.currentId === id, firstDailyId);
+    check('repeated Today invocation reopens one live note without duplication',
+      await page.evaluate((today) => window.app.db.getAllNotes().filter((note) => note.title === today).length === 1, dates.today));
+
+    stage = 'exercising explicit Trash cancellation and restore for Today';
+    await page.evaluate(async (id) => { window.app.db.deleteNote(id); await window.app.db.flush(); }, firstDailyId);
+    let dailyDialogChoice = 'dismiss';
+    const handleDailyDialog = (dialog) => dailyDialogChoice === 'accept' ? dialog.accept() : dialog.dismiss();
+    page.on('dialog', handleDailyDialog);
+    await openMenuAction('#today-btn');
+    await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#app-status')?.textContent || ''));
+    check('trashed Today requires an explicit restore choice and cancellation leaves it in Trash',
+      await page.evaluate((id) => Boolean(window.app.db.notes.get(id)?.isTrashed), firstDailyId));
+    dailyDialogChoice = 'accept';
+    await openMenuAction('#today-btn');
+    await page.waitForFunction((id) => window.app.currentId === id
+      && Boolean(window.app.db.getNote(id))
+      && /Restored and opened/.test(document.querySelector('#app-status')?.textContent || ''), firstDailyId);
+    page.off('dialog', handleDailyDialog);
+    check('confirmed Today restore reuses the original note ID and announces completion',
+      await page.evaluate((id) => window.app.currentId === id && /Restored and opened/.test(document.querySelector('#app-status')?.textContent || ''), firstDailyId));
+
+    stage = 'capturing text, URL, and clipboard content to the default Inbox';
+    await openSidebar();
+    await page.locator('#capture-btn').click();
+    await page.locator('#quick-capture-overlay').waitFor({ state: 'visible' });
+    check('Quick Capture defaults to Inbox with labelled focus and no 390px overflow',
+      await page.evaluate(() => (
+        document.querySelector('#capture-destination')?.value === 'inbox'
+        && document.querySelector('#quick-capture-overlay')?.contains(document.activeElement)
+        && document.documentElement.scrollWidth <= window.innerWidth
+      )));
+    await page.locator('#capture-title').fill('Captured reference');
+    await page.locator('#capture-text').fill('Captured browser text');
+    await page.locator('#capture-url').fill('https://example.com/phase4');
+    await page.locator('[data-read-clipboard]').click();
+    await page.waitForFunction(() => document.querySelector('#capture-text')?.value.includes('Clipboard browser text'));
+    await page.locator('#quick-capture-form [type="submit"]').click();
+    await page.waitForFunction(() => /Saved to “Inbox”/.test(document.querySelector('#quick-capture-status')?.textContent || ''));
+    check('text, URL, and clipboard capture append exact Markdown through the normal durable queue',
+      await page.evaluate(() => {
+        const inbox = window.app.db.getAllNotes().find((note) => note.title === 'Inbox');
+        return inbox?.content === 'Captured browser text\n\nClipboard browser text\n\n[Captured reference](https://example.com/phase4)'
+          && window.app.db.getPersistenceStatus().pendingWrites === 0;
+      }));
+    await page.keyboard.press('Escape');
+
+    stage = 'capturing a local image to an arbitrary existing note';
+    await openSidebar();
+    await page.locator('#capture-btn').click();
+    await page.locator('#capture-destination').selectOption('existing:phase4-task-source');
+    await page.locator('#capture-text').fill('Local image capture');
+    await page.locator('#capture-image').setInputFiles({
+      name: 'phase4.svg', mimeType: 'image/svg+xml',
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>'),
+    });
+    await page.locator('#quick-capture-form [type="submit"]').click();
+    await page.waitForFunction(() => window.app.db.getNote('phase4-task-source')?.content.includes('data:image/jpeg'));
+    check('local image capture targets an arbitrary note and persists embedded Markdown',
+      await page.evaluate(() => /Local image capture\n\n!\[phase4\]\(data:image\/jpeg/.test(window.app.db.getNote('phase4-task-source')?.content || '')));
+    await page.keyboard.press('Escape');
+
+    stage = 'capturing to a new destination and handling clipboard denial';
+    await openSidebar();
+    await page.locator('#capture-btn').click();
+    await page.evaluate(() => { window.__phase4Clipboard.fail = true; });
+    await page.locator('[data-read-clipboard]').click();
+    await page.waitForFunction(() => /Clipboard access was unavailable/.test(document.querySelector('#quick-capture-status')?.textContent || ''));
+    check('clipboard denial provides a visible manual-paste fallback', /Paste into the Text field/.test(await page.locator('#quick-capture-status').innerText()));
+    await page.locator('#capture-destination').selectOption('new');
+    await page.locator('#capture-new-title').fill('Phase4 New Capture');
+    await page.locator('#capture-text').fill('New destination bytes');
+    await page.locator('#quick-capture-form [type="submit"]').click();
+    await page.waitForFunction(() => window.app.db.getAllNotes().some((note) => note.title === 'Phase4 New Capture' && note.content === 'New destination bytes'));
+    check('Quick Capture creates an explicitly named new destination without changing other notes', true);
+    await page.keyboard.press('Escape');
+
+    stage = 'opening the one-shot GET share target';
+    const beforeShareCount = await page.evaluate(() => window.app.db.notes.size);
+    // Vite reserves a root-level `?url=` request for its own asset handling;
+    // use the explicit HTML path while exercising the same browser URL intake.
+    const shareUrl = new URL('index.html', base);
+    shareUrl.search = new URLSearchParams({
+      source: 'share-target', title: 'Shared browser title', text: 'Shared browser text',
+      url: 'https://example.com/shared', ignored: 'must-not-enter-vault',
+    }).toString();
+    await page.goto(shareUrl.href, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.locator('#quick-capture-overlay').waitFor({ state: 'visible' });
+    check('GET share target clears its URL, allowlists fields, and never auto-saves',
+      await page.evaluate((count) => (
+        location.search === ''
+        && document.querySelector('#capture-title')?.value === 'Shared browser title'
+        && document.querySelector('#capture-text')?.value === 'Shared browser text'
+        && document.querySelector('#capture-url')?.value === 'https://example.com/shared'
+        && document.querySelector('#capture-destination')?.value === 'inbox'
+        && window.app.db.notes.size === count
+        && !document.querySelector('#quick-capture-overlay')?.textContent.includes('must-not-enter-vault')
+      ), beforeShareCount));
+    await page.locator('#quick-capture-form [type="submit"]').click();
+    await page.waitForFunction(() => window.app.db.getAllNotes().find((note) => note.title === 'Inbox')?.content.includes('Shared browser text'));
+    await page.keyboard.press('Escape');
+
+    stage = 'grouping and mutating source-verified tasks';
+    await openMenuAction('#tasks-btn');
+    await page.locator('#task-dashboard-overlay').waitFor({ state: 'visible' });
+    const taskText = await page.locator('#task-dashboard-overlay').innerText();
+    check('task dashboard exposes all local-date groups while excluding Archive and Trash',
+      /Today/.test(taskText) && /Overdue/.test(taskText) && /Upcoming/.test(taskText)
+      && /No date/.test(taskText) && /Completed/.test(taskText)
+      && !/Hidden archived task|Hidden trashed task/.test(taskText));
+    const duplicates = page.locator('.task-card').filter({ hasText: 'Duplicate task' });
+    check('duplicate task text remains separately addressable', await duplicates.count() === 2);
+    await duplicates.nth(1).locator('[data-task-toggle]').check();
+    await page.waitForFunction(() => window.app.db.getNote('phase4-task-source')?.content.includes('- [ ] Duplicate task\n- [x] Duplicate task'));
+    check('task toggle edits only the verified duplicate occurrence and announces durable success',
+      /Saved “Duplicate task”/.test(await page.locator('#task-dashboard-status').innerText()));
+    const todayCard = page.locator('.task-card').filter({ hasText: 'Today source task' });
+    await todayCard.locator('[data-task-due]').fill(dates.upcoming);
+    await page.waitForFunction((due) => window.app.db.getNote('phase4-task-source')?.content.includes(`Today source task @due(${due})`), dates.upcoming);
+    check('task due editing changes only the terminal source marker and creates a safety revision',
+      await page.evaluate(async () => {
+        const reasons = (await window.app.recovery.listRevisions('phase4-task-source')).map((revision) => revision.reason);
+        return reasons.includes('quick_capture') && reasons.includes('pre_task_change');
+      }));
+    await page.locator('#task-group-filter').selectOption('completed');
+    check('task group filter exposes the completed source state', /Finished source task/.test(await page.locator('#task-dashboard-list').innerText()));
+    await page.locator('#task-group-filter').selectOption('all');
+    await page.locator('.task-card').filter({ hasText: 'Today source task' }).locator('[data-task-open]').click();
+    await page.waitForFunction(() => window.app.currentId === 'phase4-task-source');
+    check('task source control opens the exact note and moves focus to its task block',
+      await page.evaluate(() => document.activeElement?.closest('.blk-row')?.dataset.type === 'todo'));
+
+    stage = 'operating the month/week calendar';
+    await openMenuAction('#calendar-btn');
+    await page.locator('#calendar-overlay').waitFor({ state: 'visible' });
+    check('390px Calendar uses an equivalent agenda without clipping',
+      await page.evaluate(() => (
+        getComputedStyle(document.querySelector('#calendar-agenda')).display !== 'none'
+        && document.querySelectorAll('#calendar-grid [data-calendar-item]').length === document.querySelectorAll('#calendar-agenda [data-calendar-item]').length
+        && document.documentElement.scrollWidth <= window.innerWidth
+      )));
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.locator('[data-calendar-mode="week"]').click();
+    check('week view exposes seven labelled grid cells and a polite item summary',
+      await page.locator('#calendar-grid [role="gridcell"]').count() === 7
+      && await page.locator('#calendar-grid > [role="row"]').count() === 2
+      && await page.locator('#calendar-grid').getAttribute('aria-rowcount') === '2'
+      && await page.locator('#calendar-status').getAttribute('role') === 'status');
+    const startingDate = await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => button.closest('[data-calendar-date]').dataset.calendarDate);
+    await page.locator('#calendar-grid [data-day][tabindex="0"]').press('ArrowRight');
+    const nextDate = await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => button.closest('[data-calendar-date]').dataset.calendarDate);
+    check('calendar roving focus follows Arrow, Home, End, and Page navigation', await page.evaluate(({ startingDate, nextDate }) => {
+      const add = (value, amount) => {
+        const [year, month, day] = value.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, day + amount));
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+      };
+      return nextDate === add(startingDate, 1) && document.activeElement?.matches('[data-day][tabindex="0"]');
+    }, { startingDate, nextDate }));
+    await page.locator('#calendar-grid [data-day][tabindex="0"]').press('Home');
+    check('calendar Home moves to the first day of the local calendar week',
+      await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => new Date(`${button.closest('[data-calendar-date]').dataset.calendarDate}T00:00:00Z`).getUTCDay() === 0));
+    await page.locator('#calendar-grid [data-day][tabindex="0"]').press('End');
+    check('calendar End moves to the final day of the local calendar week',
+      await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => new Date(`${button.closest('[data-calendar-date]').dataset.calendarDate}T00:00:00Z`).getUTCDay() === 6));
+    const beforePage = await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => button.closest('[data-calendar-date]').dataset.calendarDate);
+    await page.locator('#calendar-grid [data-day][tabindex="0"]').press('PageDown');
+    const afterPage = await page.locator('#calendar-grid [data-day][tabindex="0"]').evaluate((button) => button.closest('[data-calendar-date]').dataset.calendarDate);
+    check('calendar Page Down advances one week in week mode',
+      (new Date(`${afterPage}T00:00:00Z`) - new Date(`${beforePage}T00:00:00Z`)) / 86_400_000 === 7);
+    await page.locator('[data-period="today"]').click();
+    await page.locator('[data-calendar-mode="month"]').click();
+    await page.locator('#calendar-grid [data-calendar-item^="date:phase4-calendar-event:"]').click();
+    await page.waitForFunction(() => window.app.currentId === 'phase4-calendar-event');
+    check('calendar source link opens the exact note represented by its derived item', true);
+
+    stage = 'creating a Daily note from an empty calendar day';
+    await openMenuAction('#calendar-btn');
+    emptyDailyDate = await page.evaluate(() => [...document.querySelectorAll('#calendar-grid [data-calendar-date]')]
+      .find((cell) => !cell.querySelector('[data-calendar-item]') && !cell.querySelector('[aria-current="date"]'))?.dataset.calendarDate || null);
+    if (!emptyDailyDate) throw new Error('No empty calendar day was available in the visible month.');
+    await page.locator(`#calendar-grid [data-calendar-date="${emptyDailyDate}"] [data-day]`).click();
+    await page.waitForFunction((date) => window.app.db.getNote(window.app.currentId)?.title === date, emptyDailyDate);
+    await page.evaluate((date) => window.app.openDailyNote(date), emptyDailyDate);
+    check('empty-day action creates one idempotent Daily note',
+      await page.evaluate((date) => window.app.db.getAllNotes().filter((note) => note.title === date).length === 1, emptyDailyDate));
+    await page.setViewportSize({ width: 640, height: 720 });
+    await openMenuAction('#calendar-btn');
+    check('Calendar remains readable at a 200%-equivalent CSS viewport',
+      await page.evaluate(() => getComputedStyle(document.querySelector('#calendar-agenda')).display !== 'none'
+        && document.documentElement.scrollWidth <= window.innerWidth));
+    await page.keyboard.press('Escape');
+
+    stage = 'reloading the complete Phase 4 state';
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    check('Daily, capture, task, due-date, image, and calendar state survive reload exactly',
+      await page.evaluate(({ firstDailyId, upcoming, emptyDailyDate }) => {
+        const task = window.app.db.getNote('phase4-task-source');
+        const inbox = window.app.db.getAllNotes().find((note) => note.title === 'Inbox');
+        return window.app.db.getNote(firstDailyId)?.title
+          && task?.content.includes('- [ ] Duplicate task\n- [x] Duplicate task')
+          && task?.content.includes(`Today source task @due(${upcoming})`)
+          && task?.content.includes('data:image/jpeg')
+          && inbox?.content.includes('Shared browser text')
+          && window.app.db.getAllNotes().some((note) => note.title === 'Phase4 New Capture')
+          && window.app.db.getAllNotes().filter((note) => note.title === emptyDailyDate).length === 1;
+      }, { firstDailyId, upcoming: dates.upcoming, emptyDailyDate }));
+    check('reloaded 390px Phase 4 shell has no horizontal overflow',
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      title: window.app?.db?.getNote?.(window.app?.currentId)?.title || '',
+      appStatus: document.querySelector('#app-status')?.textContent || '',
+      captureStatus: document.querySelector('#quick-capture-status')?.textContent || '',
+      taskStatus: document.querySelector('#task-dashboard-status')?.textContent || '',
+      calendarStatus: document.querySelector('#calendar-status')?.textContent || '',
+      openOverlay: [...document.querySelectorAll('.modal:not([hidden])')].map((node) => node.id),
+    })).catch(() => null);
+    throw new Error(`Phase 4 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -783,7 +1112,29 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     checks.push('PASS  production Link tools lazy chunk opens on first use offline');
     await page.keyboard.press('Escape');
 
+    stage = 'opening Phase 4 daily, capture, task, and calendar tools for the first time offline';
+    await page.keyboard.press('Control+Shift+C');
+    await page.locator('#quick-capture-overlay').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+    await page.locator('#menu-btn').click();
+    await page.locator('#tasks-btn').click();
+    await page.locator('#task-dashboard-overlay').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+    await page.locator('#menu-btn').click();
+    await page.locator('#calendar-btn').click();
+    await page.locator('#calendar-overlay').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.app.openDailyNote('2040-01-02'));
+    await page.waitForFunction(() => window.app.db.getNote(window.app.currentId)?.title === '2040-01-02');
+    checks.push('PASS  production Phase 4 lazy chunks and Daily creation work on first use offline');
+
     stage = 'opening Phase 3 retrieval and lifecycle tools for the first time offline';
+    await page.locator('#sidebar-toggle').click();
+    await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
     await page.locator('#menu-btn').click();
     await page.locator('#archive-btn').click();
     await page.locator('#archive-overlay').waitFor({ state: 'visible' });
@@ -854,6 +1205,7 @@ async function main() {
   // them before error capture so Vite's one-time dependency discovery cannot
   // abort an authoritative delayed-import request.
   await warmLazyAppModules(browser, base);
+  await server.waitForRequestsIdle();
 
   const runtimeErrors = [];
   captureRuntimeErrors(page, runtimeErrors);
@@ -877,14 +1229,15 @@ async function main() {
     const recoveryOutput = await runRecoverySmoke(browser, base, runtimeErrors);
     const linkIntegrityOutput = await runLinkIntegritySmoke(browser, base, runtimeErrors);
     const phase3Output = await runPhase3Smoke(browser, base, runtimeErrors);
+    const phase4Output = await runPhase4Smoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
-    output = `Runner error: ${err.message || err}`;
+    output += `${output ? '\n' : ''}Runner error: ${err.message || err}`;
   } finally {
     await browser.close();
     if (!devServerClosed) await server.close();
