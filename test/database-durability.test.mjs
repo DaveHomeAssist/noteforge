@@ -1,4 +1,5 @@
 import { Database } from '../src/core/database.js';
+import { CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
 
 let assertions = 0;
 function ok(name, condition) {
@@ -216,12 +217,12 @@ function memoryBackend({ failNotes = false } = {}) {
   let emitted = 0;
   db.subscribe(() => { emitted += 1; });
   const restored = await db.replaceVault({
-    schemaVersion: 3,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     notes: [{
       id: 'restored', title: 'Restored', content: 'exact', tags: [],
       banner: { position: 25, type: 'gradient', value: 'linear-gradient(90deg, #111, #222)' },
       createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T11:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null,
+      deletedAt: null, pinned: false, parentId: null, aliases: ['Previous restored title'],
       futureMetadata: { kept: true, order: ['z', 'a'] },
       ...JSON.parse('{"__proto__":{"polluted":true}}'),
     }],
@@ -231,7 +232,7 @@ function memoryBackend({ failNotes = false } = {}) {
   ok('verified vault replacement commits the complete batch', restored === true
     && backend.values.get('notes')[0].id === 'restored'
     && backend.values.get('config').custom === 'kept'
-    && backend.values.get('schemaVersion') === 3);
+    && backend.values.get('schemaVersion') === CURRENT_SCHEMA_VERSION);
   ok('verified vault replacement updates memory only after persistence', db.getNote('restored')?.content === 'exact' && db.getNote('old') === null);
   ok('verified vault replacement preserves additive note metadata without prototype pollution',
     db.getNote('restored').toJSON().futureMetadata.kept === true
@@ -254,7 +255,7 @@ function memoryBackend({ failNotes = false } = {}) {
   const db = new Database({ storageBackend: backend });
   db.createNote({ id: 'preserved', title: 'Preserved' });
   await db.flush();
-  const result = await db.replaceVault({ schemaVersion: 3, notes: [], config: {} });
+  const result = await db.replaceVault({ schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} });
   ok('failed IndexedDB vault replacement forbids fallback and leaves memory untouched',
     result === false && fallbackOption === false && db.getNote('preserved') !== null);
 }
@@ -265,11 +266,11 @@ function memoryBackend({ failNotes = false } = {}) {
     id: 'unsafe', title: 'Unsafe', content: '', tags: [],
     banner: { type: 'image', value: 'javascript:alert(1)', position: 50 },
     createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T10:00:00.000Z',
-    deletedAt: null, pinned: false, parentId: null,
+    deletedAt: null, pinned: false, parentId: null, aliases: [],
   };
   let rejected = false;
   try {
-    await db.replaceVault({ schemaVersion: 3, notes: [malformed], config: {} });
+    await db.replaceVault({ schemaVersion: CURRENT_SCHEMA_VERSION, notes: [malformed], config: {} });
   } catch (error) {
     rejected = /cannot be applied exactly/.test(error.message);
   }
@@ -369,11 +370,11 @@ function memoryBackend({ failNotes = false } = {}) {
   db.saveNote(old);
   await db.flush();
   const blocked = await db.replaceVault({
-    schemaVersion: 3,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     notes: [{
       id: 'new-vault', title: 'New vault', content: 'restored', tags: [], banner: null,
       createdAt: '2026-08-20T00:00:00.000Z', updatedAt: '2026-08-20T00:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null,
+      deletedAt: null, pinned: false, parentId: null, aliases: [],
     }],
     config: {},
   });

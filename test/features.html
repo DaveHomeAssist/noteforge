@@ -23,6 +23,8 @@
   import { SettingsView } from '/src/components/settings-view.js';
   import { HistoryView, buildHistoryDiff } from '/src/components/history-view.js';
   import { BackupView } from '/src/components/backup-view.js';
+  import { LinkToolsView } from '/src/components/link-tools-view.js';
+  import { OutlineView } from '/src/components/outline-view.js';
   import { GraphView } from '/src/components/graph.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
@@ -763,13 +765,20 @@
     const db = new Database();
     const a = db.createNote({ title: 'Alpha Notes', content: '# Heading One\n\ntext' });
     db.createNote({ title: 'Beta Plan', content: 'no heading' });
-    let ran = null; let opened = null;
+    let ran = null; let opened = null; let openedHeading = null;
     const cmds = [{ id: 'theme', title: 'Toggle theme', hint: 'x', icon: '🌓', run: () => (ran = 'theme') }];
     const els = mkPaletteEls();
-    const cp = new CommandPalette(els, { getNotes: () => db.getAllNotes(), getCommands: () => cmds, onOpenNote: (id) => (opened = id) });
+    const cp = new CommandPalette(els, {
+      getNotes: () => db.getAllNotes(),
+      getRecentNotes: () => [db.getAllNotes()[1], db.getAllNotes()[0]],
+      getCommands: () => cmds,
+      onOpenNote: (id) => (opened = id),
+      onOpenHeading: (id, anchor) => (openedHeading = { id, anchor }),
+    });
     cp.show();
     check('palette opens', els.overlay.hidden === false);
     check('empty palette lists notes + commands', els.list.querySelectorAll('.palette__item').length >= 3);
+    check('empty palette uses persisted recent-note order instead of updated timestamps', /Beta Plan/.test(els.list.querySelector('.palette__item')?.textContent || ''));
     typeInput(els.input, 'alpha');
     check('fuzzy filters to Alpha and highlights', /Alpha/.test(els.list.textContent) && !!els.list.querySelector('mark'));
     els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -780,11 +789,11 @@
     els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     check('Enter runs the command', ran === 'theme');
     // # headings
-    opened = null;
+    opened = null; openedHeading = null;
     cp.show(); typeInput(els.input, '#head');
     check('"#" searches headings', /Heading One/.test(els.list.textContent));
     els.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    check('selecting a heading opens its note', opened === a.id);
+    check('selecting a heading opens its deterministic anchor', openedHeading?.id === a.id && openedHeading.anchor === 'heading-heading-one');
     // ArrowDown moves selection
     cp.show(); typeInput(els.input, '');
     const activeBefore = els.list.querySelector('.palette__item--active');
@@ -1619,6 +1628,175 @@
       view.close();
     } catch (e) {
       results.push('FAIL  Phase 1 backup view — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 2 link integrity + knowledge navigation ============
+  await (async () => {
+    try {
+      setKnownTitles(['Target']);
+      const template = document.createElement('template');
+      template.innerHTML = renderMarkdown('![[Target#Part|Shown]]');
+      const renderedLink = template.content.querySelector('a[data-wikilink]');
+      check('embedded/fragment wikilinks tokenize from the leading exclamation mark',
+        renderedLink?.dataset.wikilink === 'Target'
+        && renderedLink.dataset.fragment === 'Part'
+        && renderedLink.textContent === 'Shown');
+
+      const editorHost = mkHost();
+      const blockEditor = new BlockEditor(editorHost, {
+        initialMarkdown: '# Repeat\n\n## Repeat\n\n#### Café\n\n###### Final',
+        getTitles: () => [],
+      });
+      check('block editor renders deterministic duplicate and H1-H6 heading targets',
+        [...editorHost.querySelectorAll('[data-heading-anchor]')].map((row) => row.dataset.headingAnchor).join(',')
+          === 'heading-repeat,heading-repeat-2,heading-café,heading-final');
+
+      const outlineHost = document.createElement('aside');
+      scratch.appendChild(outlineHost);
+      let jumped = null;
+      const outline = new OutlineView(outlineHost, {
+        scrollRoot: editorHost,
+        onJump: (anchor) => { jumped = anchor; },
+      });
+      outline.update(blockEditor.serialize());
+      check('outline exposes all heading levels in a labelled navigation region',
+        outlineHost.querySelectorAll('.outline__item').length === 4
+        && outlineHost.querySelector('nav')?.getAttribute('aria-label') === 'Headings in this note');
+      const first = outlineHost.querySelector('.outline__item');
+      first.focus();
+      key(first, 'End');
+      check('outline supports Arrow/Home/End keyboard focus movement', document.activeElement?.dataset.outlineAnchor === 'heading-final');
+      document.activeElement.click();
+      check('outline activation jumps to the exact occurrence-aware anchor', jumped === 'heading-final');
+      outline.update(blockEditor.serialize());
+      check('outline rerender preserves meaningful keyboard focus', document.activeElement?.dataset.outlineAnchor === 'heading-final');
+      outline.destroy();
+      blockEditor.destroy();
+    } catch (e) {
+      results.push('FAIL  Phase 2 outline and fragment rendering — threw: ' + e.message);
+    }
+  })();
+
+  await (async () => {
+    try {
+      const values = new Map();
+      const backend = {
+        async load(keyName, fallback) { return values.has(keyName) ? structuredClone(values.get(keyName)) : fallback; },
+        async save(keyName, value) { values.set(keyName, structuredClone(value)); return true; },
+        async saveMany(entries) { entries.forEach(([keyName, value]) => values.set(keyName, structuredClone(value))); return true; },
+        async getStatus() { return { backend: 'indexeddb' }; },
+      };
+      const safety = [];
+      const db = new Database({ storageBackend: backend, onNotesPersisted: async (batch) => safety.push(...structuredClone(batch)) });
+      const target = db.createNote({ id: 'link-target', title: 'Project', aliases: ['Legacy'], content: '' });
+      const source = db.createNote({ id: 'link-source', title: 'Source', content: '# Ref\n[[Project|shown]] and Project in prose. `Project`' });
+      db.createNote({ id: 'other-title', title: 'Other', content: '' });
+      await db.flush();
+      await db.initializeKnowledgeIndex();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'modal'; overlay.hidden = true;
+      overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel link-tools" tabindex="-1">
+        <h2 class="link-title"></h2><button data-close>Close</button><div class="link-content"></div>
+        <span class="link-status" role="status"></span><button class="link-apply">Apply</button></div>`;
+      scratch.appendChild(overlay);
+      const view = new LinkToolsView({
+        overlay,
+        title: overlay.querySelector('.link-title'),
+        content: overlay.querySelector('.link-content'),
+        status: overlay.querySelector('.link-status'),
+        apply: overlay.querySelector('.link-apply'),
+      }, db);
+
+      view.showRename(target.id, 'Project Atlas');
+      check('rename-safe dialog focuses its title field and previews exact link/note counts',
+        document.activeElement?.id === 'link-rename-input'
+        && /1 exact inbound link across 2 protected notes/.test(overlay.textContent)
+        && /No data changes until Apply rename/.test(overlay.textContent));
+      const renameInput = overlay.querySelector('#link-rename-input');
+      typeInput(renameInput, 'Other');
+      check('rename dialog rejects live title/alias collisions before applying',
+        overlay.querySelector('.link-apply').disabled && /already identifies/.test(overlay.textContent));
+      typeInput(renameInput, 'Project Atlas');
+      overlay.querySelector('.link-apply').click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      check('rename dialog atomically rewrites source Markdown and retains the old title as an alias',
+        db.getNote(target.id).title === 'Project Atlas'
+        && db.getNote(target.id).aliases.includes('Project')
+        && db.getNote(source.id).content.includes('[[Project Atlas|shown]]'));
+      check('rename dialog announces completion after required safety revisions',
+        /Rename completed/.test(overlay.querySelector('.link-status').textContent)
+        && safety.filter((entry) => entry.reason === 'pre_rename').length === 2);
+      view.modal.close();
+
+      const mention = db.unlinkedMentionsFor(target.id).find((entry) => entry.sourceId === source.id);
+      view.showMention(mention);
+      check('unlinked mention dialog previews the exact source conversion without mutation',
+        /Project in prose/.test(overlay.textContent)
+        && db.getNote(source.id).content.includes('and Project in prose'));
+      overlay.querySelector('.link-apply').click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      check('mention conversion writes one wikilink and creates a pre-conversion revision',
+        db.getNote(source.id).content.includes('and [[Project Atlas|Project]] in prose')
+        && safety.at(-1)?.reason === 'pre_link_conversion');
+      view.modal.close();
+
+      db.createNote({ id: 'ambiguous', title: 'Imported', aliases: ['Other'] }, { allowIdentityConflicts: true });
+      view.showReport();
+      check('link integrity report surfaces imported ambiguity instead of guessing',
+        /Title and alias collision/.test(overlay.textContent)
+        && /never guessed/i.test(overlay.textContent));
+      overlay.querySelector('[data-repair-alias]').click();
+      check('repair report provides a previewed conflicting-alias removal action',
+        /Remove alias/.test(overlay.textContent)
+        && /No data changes until/.test(overlay.textContent)
+        && db.getNote('ambiguous').aliases.includes('Other'));
+      overlay.querySelector('.link-apply').click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      check('alias repair is revision-protected and restores unique resolution',
+        db.getNote('ambiguous').aliases.length === 0
+        && view.integrityReport().healthy
+        && safety.at(-1)?.reason === 'pre_alias_repair');
+      view.modal.close();
+    } catch (e) {
+      results.push('FAIL  Phase 2 link tools — threw: ' + e.message);
+    }
+  })();
+
+  await (async () => {
+    try {
+      const db = new Database();
+      const target = db.createNote({ title: 'Context target', content: '# Destination' });
+      const source = db.createNote({
+        title: 'Unsafe <source>',
+        content: '# Ref <img src=x onerror=alert(1)>\nSee [[Context target]] and Context target again.',
+      });
+      await db.initializeKnowledgeIndex();
+      let opened = null;
+      let mentionPreview = null;
+      const container = document.createElement('div'); scratch.appendChild(container);
+      const editor = new Editor(container, db, {
+        openNote: (id, opts) => { opened = { id, opts }; },
+        openOrCreateByTitle: () => {},
+        deleteNote: () => {},
+        togglePin: () => {},
+        requestRename: () => {},
+        previewMention: (mention) => { mentionPreview = mention; },
+      });
+      editor.open(target.id);
+      check('contextual backlink renders escaped source, heading context, and snippet with no executable markup',
+        /Unsafe <source>/.test(container.textContent)
+        && /Ref <img src=x onerror=alert\(1\)>/.test(container.textContent)
+        && !container.querySelector('.backlinks script, .backlinks img'));
+      container.querySelector('.backlinks__item').click();
+      check('contextual backlink navigation carries the source heading anchor',
+        opened?.id === source.id && opened.opts?.headingAnchor === 'heading-ref-img-src-x-onerror-alert-1');
+      container.querySelector('.mention-convert').click();
+      check('unlinked mention Convert hands off the exact indexed occurrence',
+        mentionPreview?.sourceId === source.id && mentionPreview?.targetId === target.id);
+    } catch (e) {
+      results.push('FAIL  Phase 2 contextual backlink editor — threw: ' + e.message);
     }
   })();
 

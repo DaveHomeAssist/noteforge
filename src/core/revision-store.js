@@ -22,6 +22,8 @@ export const REVISION_REASONS = Object.freeze([
   'pre_reconcile',
   'pre_bulk_replace',
   'pre_rename',
+  'pre_alias_repair',
+  'pre_link_conversion',
   'pre_restore',
   'manual',
 ]);

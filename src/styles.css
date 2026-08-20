@@ -109,6 +109,9 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .brand { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
 .sidebar__actions { display: flex; gap: 6px; align-items: center; position: relative; }
 .sidebar__actions .menu { margin-left: auto; position: relative; }
+.nav-controls { display: inline-flex; align-items: center; gap: 2px; }
+.nav-controls .btn { min-width: 30px; padding-inline: 6px; }
+.nav-controls--mobile { margin-left: auto; }
 
 .menu__dropdown {
   position: absolute;
@@ -843,22 +846,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .blk-menu__label { font-size: 14px; }
 .blk-menu__hint { font-size: 11.5px; color: var(--text-muted); }
 
-/* --- backlinks ------------------------------------------------------------ */
-
-.backlinks { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
-.backlinks__title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.backlinks__empty { margin: 4px 0; }
-.backlinks__list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.backlinks__item {
-  color: var(--accent);
-  text-decoration: none;
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
-}
-.backlinks__item:hover { background: var(--accent-weak); }
-
 /* --- graph ---------------------------------------------------------------- */
 
 .graph { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
@@ -1190,7 +1177,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 :root { --editor-measure: 760px; }
 html[data-width="wide"] { --editor-measure: 1040px; }
 html[data-width="full"] { --editor-measure: none; }
-.editor__bar, .editor__tags, .editor__blocks, .backlinks, .editor__meta {
+.editor__bar, .editor__tags, .editor__blocks, .editor__meta {
   max-width: var(--editor-measure);
   margin-inline: auto;
 }

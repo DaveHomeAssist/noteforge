@@ -102,7 +102,7 @@ function assertIsoTimestamp(value, path) {
   }
 }
 
-function assertNote(note, index) {
+function assertNote(note, index, schemaVersion) {
   const path = `notes[${index}]`;
   if (!isRecord(note)) reject('INVALID_NOTE', `${path} must be an object.`);
   for (const field of REQUIRED_NOTE_FIELDS) {
@@ -124,6 +124,12 @@ function assertNote(note, index) {
   if (note.parentId !== null && typeof note.parentId !== 'string') {
     reject('INVALID_NOTE', `${path}.parentId must be a string or null.`);
   }
+  if (schemaVersion >= 4) {
+    if (!Object.hasOwn(note, 'aliases')) reject('INCOMPLETE_NOTE', `${path} is missing aliases.`);
+    if (!Array.isArray(note.aliases) || note.aliases.some((alias) => typeof alias !== 'string')) {
+      reject('INVALID_NOTE', `${path}.aliases must be an array of strings.`);
+    }
+  }
 }
 
 function validateVaultState(state) {
@@ -134,7 +140,7 @@ function validateVaultState(state) {
 
   const ids = new Set();
   state.notes.forEach((note, index) => {
-    assertNote(note, index);
+    assertNote(note, index, state.schemaVersion);
     if (ids.has(note.id)) reject('DUPLICATE_NOTE_ID', `Backup contains duplicate note id "${note.id}".`);
     ids.add(note.id);
   });

@@ -10,7 +10,7 @@
 // new numbered function whenever the on-disk shape changes; never edit an old
 // one (users may still be on that version).
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 const MIGRATIONS = {
   // v0 -> v1: introduce soft-delete. Every note gains an explicit `deletedAt`
@@ -32,6 +32,14 @@ const MIGRATIONS = {
   3: (payload) => {
     const notes = Array.isArray(payload.notes)
       ? payload.notes.map((n) => ({ ...n, parentId: n && typeof n.parentId === 'string' ? n.parentId : null }))
+      : payload.notes;
+    return { ...payload, notes };
+  },
+  // v3 -> v4: introduce canonical-title aliases. Stored spelling/order is
+  // preserved while invalid/duplicate values are removed by the Note model.
+  4: (payload) => {
+    const notes = Array.isArray(payload.notes)
+      ? payload.notes.map((n) => ({ ...n, aliases: Array.isArray(n?.aliases) ? n.aliases : [] }))
       : payload.notes;
     return { ...payload, notes };
   },

@@ -10,7 +10,7 @@
 // Soft-delete: deleteNote() moves a note to the Trash (sets deletedAt); it stays
 // persisted (so it survives reload) but is excluded from every "live" query.
 
-import { Note } from './note.js';
+import { Note, normalizeAliases } from './note.js';
 import { storage } from './storage.js';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { isDescendant, ancestorChain } from '../utils/tree.js';
@@ -54,6 +54,11 @@ export class Database {
     this._pendingHistoryPurges = new Set();
     this.lastPersistedAt = null;
     this.lastRevisionAt = null;
+    this._identitySignatures = new Map();
+    this._titleIndex = new Map();
+    this._aliasIndex = new Map();
+    this._knowledgeIndex = null;
+    this._knowledgeReady = null;
     this.onPersistError = null; // optional (key) => void hook for the UI
     this.onNotesPersisted = onNotesPersisted; // optional async ({ note, reason }[]) => void
     this.onNotesPurged = onNotesPurged; // optional async (noteIds[]) => void
@@ -99,6 +104,7 @@ export class Database {
       && Number.isFinite(Date.parse(storedPersistence.lastPersistedAt))
       ? storedPersistence.lastPersistedAt
       : null;
+    this.#rebuildResolutionIndexes();
 
     // Persist the upgrade exactly once (and stamp the version), avoiding a
     // needless write for users already on the current schema.
@@ -364,6 +370,7 @@ export class Database {
     hydrated.forEach((note) => this.notes.set(note.id, note));
     this.config = { showGraph: false, ...rawConfig };
     this.lastPersistedAt = persistenceAt;
+    this.#rebuildLinkState();
     this.#emit();
     return true;
   }
@@ -391,18 +398,117 @@ export class Database {
     this.#queueWrite(CONFIG_KEY, this.config);
   }
 
+  // --- derived link indexes ----------------------------------------------
+
+  #identitySignature(note) {
+    return JSON.stringify([
+      normalizeTitle(note?.title),
+      ...(Array.isArray(note?.aliases) ? note.aliases.map(normalizeTitle) : []),
+      Boolean(note?.isTrashed),
+    ]);
+  }
+
+  #pushIndex(index, key, note) {
+    if (!key) return;
+    const entries = index.get(key) || [];
+    entries.push(note);
+    index.set(key, entries);
+  }
+
+  #rebuildResolutionIndexes() {
+    this._titleIndex.clear();
+    this._aliasIndex.clear();
+    this._identitySignatures.clear();
+    for (const note of this.getAllNotes()) {
+      this.#pushIndex(this._titleIndex, normalizeTitle(note.title), note);
+      for (const alias of note.aliases || []) this.#pushIndex(this._aliasIndex, normalizeTitle(alias), note);
+      this._identitySignatures.set(note.id, this.#identitySignature(note));
+    }
+
+  }
+
+  #rebuildLinkState() {
+    this.#rebuildResolutionIndexes();
+    this._knowledgeIndex?.rebuild();
+  }
+
+  #resolveFromIndexes(title) {
+    const key = normalizeTitle(title);
+    if (!key) return { status: 'missing', key, note: null, via: null, candidates: [] };
+    const canonical = [...new Map((this._titleIndex.get(key) || []).map((note) => [note.id, note])).values()];
+    if (canonical.length === 1) return { status: 'resolved', key, note: canonical[0], via: 'title', candidates: canonical };
+    if (canonical.length > 1) return { status: 'ambiguous', key, note: null, via: 'title', candidates: canonical };
+    const aliases = [...new Map((this._aliasIndex.get(key) || []).map((note) => [note.id, note])).values()];
+    if (aliases.length === 1) return { status: 'resolved', key, note: aliases[0], via: 'alias', candidates: aliases };
+    if (aliases.length > 1) return { status: 'ambiguous', key, note: null, via: 'alias', candidates: aliases };
+    return { status: 'missing', key, note: null, via: null, candidates: [] };
+  }
+
+  /** Unique canonical and alias targets used by autocomplete/mention analysis. */
+  linkCandidates() {
+    const candidates = [];
+    for (const [key, notes] of this._titleIndex) {
+      const unique = [...new Map(notes.map((note) => [note.id, note])).values()];
+      if (unique.length === 1) candidates.push({ name: unique[0].title, targetId: unique[0].id, targetTitle: unique[0].title, key });
+    }
+    for (const [key, notes] of this._aliasIndex) {
+      if (this._titleIndex.has(key)) continue; // canonical title always outranks aliases
+      const unique = [...new Map(notes.map((note) => [note.id, note])).values()];
+      if (unique.length !== 1) continue;
+      const alias = unique[0].aliases.find((value) => normalizeTitle(value) === key);
+      if (alias) candidates.push({ name: alias, targetId: unique[0].id, targetTitle: unique[0].title, key });
+    }
+    return candidates;
+  }
+
+  /** Load the rebuildable contextual-link index after the first usable note. */
+  async initializeKnowledgeIndex() {
+    if (this._knowledgeIndex) return this._knowledgeIndex;
+    if (this._knowledgeReady) return this._knowledgeReady;
+    this._knowledgeReady = import('./knowledge-index.js')
+      .then(({ KnowledgeIndex }) => {
+        this._knowledgeIndex = new KnowledgeIndex(this);
+        this.#emit();
+        return this._knowledgeIndex;
+      })
+      .catch((error) => {
+        this._knowledgeReady = null;
+        throw error;
+      });
+    return this._knowledgeReady;
+  }
+
   // --- CRUD ---------------------------------------------------------------
 
   saveNote(note, { captureRevision = true, reason = 'autosave' } = {}) {
+    const previousIdentity = this._identitySignatures.get(note.id) ?? null;
     this.notes.set(note.id, note);
+    const nextIdentity = this.#identitySignature(note);
+    if (previousIdentity !== nextIdentity) {
+      this.#rebuildResolutionIndexes();
+      this._knowledgeIndex?.rebuild();
+    } else {
+      this._knowledgeIndex?.refreshSource(note);
+    }
     const captures = captureRevision ? [{ note: note.toJSON(), reason }] : [];
     this.#persist(captures);
     this.#emit();
     return note;
   }
 
-  createNote(fields = {}) {
+  createNote(fields = {}, { allowIdentityConflicts = false } = {}) {
     const note = new Note(fields);
+    if (!allowIdentityConflicts) {
+      const identity = this.#validateIdentityCandidate(null, note.title, note.aliases);
+      if (!identity.valid) {
+        const error = new Error(identity.message);
+        error.code = identity.code;
+        error.collision = identity.collision;
+        throw error;
+      }
+      note.title = identity.title;
+      note.aliases = identity.aliases;
+    }
     // A brand-new blank/default state is not useful history. Its first durable
     // user edit becomes the initial revision boundary instead.
     return this.saveNote(note, { captureRevision: false });
@@ -454,6 +560,7 @@ export class Database {
     const note = this.notes.get(id);
     if (!note || note.isTrashed) return false;
     note.markTrashed();
+    this.#rebuildLinkState();
     this.#persist();
     this.#emit();
     return true;
@@ -464,6 +571,7 @@ export class Database {
     const note = this.notes.get(id);
     if (!note || !note.isTrashed) return false;
     note.restore();
+    this.#rebuildLinkState();
     this.#persist();
     this.#emit();
     return true;
@@ -473,6 +581,7 @@ export class Database {
   purgeNote(id) {
     const existed = this.notes.delete(id);
     if (existed) {
+      this.#rebuildLinkState();
       this.#persist([], [id]);
       this.#emit();
     }
@@ -491,6 +600,7 @@ export class Database {
       }
     }
     if (purged) {
+      this.#rebuildLinkState();
       this.#persist([], purgedIds);
       this.#emit();
     }
@@ -524,15 +634,121 @@ export class Database {
 
   // --- resolution & search ------------------------------------------------
 
-  /** Resolve a wikilink target (by title, case-insensitive) to a live Note. */
-  resolveTitle(title) {
-    const key = normalizeTitle(title);
-    return this.getAllNotes().find((n) => normalizeTitle(n.title) === key) || null;
+  /** Canonical-title-first, unique-alias-second resolution with ambiguity detail. */
+  resolveTitleResult(title) {
+    const result = this.#resolveFromIndexes(title);
+    return {
+      ...result,
+      candidates: result.candidates.map((note) => ({ id: note.id, title: note.title })),
+    };
   }
 
-  /** All live titles currently in use — feeds the wikilink renderer. */
+  /** Resolve a wikilink target to one live Note, never guessing ambiguity. */
+  resolveTitle(title) {
+    return this.#resolveFromIndexes(title).note;
+  }
+
+  /** Canonical live titles. */
   allTitles() {
     return this.getAllNotes().map((n) => n.title);
+  }
+
+  /** Every currently resolvable canonical title or unique alias. */
+  allLinkNames() {
+    return this.linkCandidates().map((candidate) => candidate.name);
+  }
+
+  #validateIdentityCandidate(noteId, title, aliases = []) {
+    const storedTitle = String(title ?? '').trim();
+    const titleKey = normalizeTitle(storedTitle);
+    if (!titleKey) return { valid: false, code: 'blank_title', message: 'A note title cannot be blank.' };
+    const normalizedAliases = normalizeAliases(aliases, storedTitle);
+    const proposed = [
+      { kind: 'title', value: storedTitle, key: titleKey },
+      ...normalizedAliases.map((value) => ({ kind: 'alias', value, key: normalizeTitle(value) })),
+    ];
+    for (const other of this.getAllNotes()) {
+      if (other.id === noteId) continue;
+      const otherNames = [other.title, ...(other.aliases || [])];
+      for (const candidate of proposed) {
+        const collision = otherNames.find((value) => normalizeTitle(value) === candidate.key);
+        if (collision) {
+          return {
+            valid: false,
+            code: 'identity_collision',
+            message: `“${candidate.value}” already identifies “${other.title}”. Choose a unique title.`,
+            collision: { noteId: other.id, noteTitle: other.title, value: collision, kind: candidate.kind },
+          };
+        }
+      }
+    }
+    return { valid: true, title: storedTitle, aliases: normalizedAliases };
+  }
+
+  validateLinkIdentity(noteId, title, aliases = []) {
+    const current = this.getNote(noteId);
+    if (!current) return { valid: false, code: 'missing_note', message: 'The note no longer exists.' };
+    return this.#validateIdentityCandidate(noteId, title, aliases);
+  }
+
+  /** Validate a proposed live identity before an interactive create. */
+  validateNewLinkIdentity(title, aliases = []) {
+    return this.#validateIdentityCandidate(null, title, aliases);
+  }
+
+  /** Return a canonical title that cannot resolve to any live title or alias. */
+  availableTitle(requested = 'Untitled') {
+    const base = String(requested ?? '').trim() || 'Untitled';
+    if (this.validateNewLinkIdentity(base).valid) return base;
+    for (let suffix = 2; suffix < 100_000; suffix += 1) {
+      const candidate = `${base} ${suffix}`;
+      if (this.validateNewLinkIdentity(candidate).valid) return candidate;
+    }
+    throw new Error('Could not generate a unique note title.');
+  }
+
+  /** Atomic persistence boundary used by previewed, lazily loaded link tools. */
+  async commitPlannedNotes(replacements, captures, reason) {
+    await this.flush();
+    if (this._writeQueue.size || this._draining) throw new Error('Current note changes are still pending; try again after they save.');
+    const historyAvailable = await this.captureRevisionBoundary(captures, reason);
+    if (!historyAvailable) throw new Error('Browser-local revision history is unavailable, so this source rewrite was not applied.');
+
+    const replacementById = new Map(replacements.map((raw) => [raw.id, Note.fromJSON(raw)]));
+    const nextNotes = this.#rawNotes().map((note) => replacementById.get(note.id) || note);
+    const rawNotes = nextNotes.map((note) => note.toJSON());
+    const persistenceAt = new Date().toISOString();
+    let saved = false;
+    if (typeof this.storage.saveMany === 'function') {
+      const backend = typeof this.storage.getStatus === 'function'
+        ? await this.storage.getStatus()
+        : typeof this.storage.status === 'function'
+          ? await this.storage.status()
+          : null;
+      saved = await this.storage.saveMany([
+        [NOTES_KEY, rawNotes],
+        [PERSISTENCE_KEY, { lastPersistedAt: persistenceAt }],
+      ], { allowFallback: backend?.backend !== 'indexeddb' });
+    } else {
+      saved = await this.storage.save(NOTES_KEY, rawNotes);
+      if (saved) await this.storage.save(PERSISTENCE_KEY, { lastPersistedAt: persistenceAt });
+    }
+    if (!saved) throw new Error('The planned source rewrite could not be saved; no in-memory notes were changed.');
+
+    this.notes.clear();
+    nextNotes.forEach((note) => this.notes.set(note.id, note));
+    this.lastPersistedAt = persistenceAt;
+    this.#rebuildLinkState();
+    this.#emit();
+    return true;
+  }
+
+  backlinkOccurrencesFor(id) {
+    return this._knowledgeIndex?.backlinkOccurrencesFor(id) || [];
+  }
+
+  unlinkedMentionsFor(id) {
+    return this._knowledgeIndex?.unlinkedMentionsFor(id) || [];
   }
 
   /** A trashed note whose title matches (case-insensitive), or null. Lets the
@@ -573,16 +789,13 @@ export class Database {
 
   // --- link graph ---------------------------------------------------------
 
-  /** Live notes that link *to* the given note via a [[wikilink]] on its title. */
+  /** Unique live source notes that link to the given note. */
   backlinksFor(id) {
-    const note = this.getNote(id);
-    if (!note) return [];
-    const target = normalizeTitle(note.title);
-    return this.getAllNotes().filter(
-      (other) =>
-        other.id !== id &&
-        other.outgoingLinks().some((link) => normalizeTitle(link) === target)
-    );
+    if (!this._knowledgeIndex) {
+      return this.getAllNotes().filter((source) => source.id !== id && source.outgoingLinks().some((target) => this.resolveTitle(target)?.id === id));
+    }
+    const ids = new Set(this.backlinkOccurrencesFor(id).map((occurrence) => occurrence.sourceId));
+    return [...ids].map((sourceId) => this.getNote(sourceId)).filter(Boolean);
   }
 
   /**
@@ -591,14 +804,11 @@ export class Database {
    */
   graph() {
     const nodes = this.getAllNotes();
+    if (this._knowledgeIndex) return { nodes, edges: this._knowledgeIndex.graphEdges() };
     const edges = [];
-    for (const note of nodes) {
-      for (const link of note.outgoingLinks()) {
-        const target = this.resolveTitle(link);
-        if (target && target.id !== note.id) {
-          edges.push({ source: note.id, target: target.id });
-        }
-      }
+    for (const source of nodes) {
+      const targets = new Set(source.outgoingLinks().map((target) => this.resolveTitle(target)?.id).filter(Boolean));
+      for (const target of targets) if (target !== source.id) edges.push({ source: source.id, target });
     }
     return { nodes, edges };
   }

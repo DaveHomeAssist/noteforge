@@ -20,6 +20,37 @@ function formatDateTime(value) {
   });
 }
 
+/** Create the lazy Backup center dialog only when the feature is first opened. */
+export function createBackupElements(root = document.body) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal';
+  overlay.id = 'backup-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
+    <div class="modal__panel recovery-modal backup-modal" role="dialog" aria-modal="true" aria-labelledby="backup-title" tabindex="-1">
+      <header class="modal__header"><div><h2 class="modal__title" id="backup-title">🛟 Backup center</h2><p class="muted recovery-modal__subtitle">Storage health, local recovery, and portable backups</p></div><button class="btn btn--ghost" data-close title="Close" aria-label="Close backup center">✕</button></header>
+      <div class="backup-view"><div id="backup-health"></div>
+        <section class="backup-actions" aria-labelledby="portable-backup-title"><h3 id="portable-backup-title">Portable JSON backup</h3><p>Download a verified, device-independent copy containing live notes, Trash, settings, IDs, and integrity data.</p><button id="backup-download" class="btn btn--primary">Download JSON backup</button></section>
+        <section class="backup-actions" aria-labelledby="verify-backup-title"><h3 id="verify-backup-title">Verify or restore a backup</h3><label class="backup-file-label" for="backup-file">Choose a NoteForge JSON backup</label><input id="backup-file" type="file" accept="application/json,.json"><div class="backup-actions__buttons"><button id="backup-verify" class="btn btn--ghost" disabled>Verify backup</button><button id="backup-preview-restore" class="btn btn--ghost" disabled>Restore preview</button><button id="backup-restore" class="btn btn--danger-ghost" disabled>Restore verified backup</button></div><div id="backup-preview" class="backup-view__preview"><p class="muted">Choose a JSON backup to begin.</p></div></section>
+        <section class="backup-actions" aria-labelledby="local-snapshot-title"><div class="backup-actions__heading"><div><h3 id="local-snapshot-title">Local snapshots</h3><p>Rolling browser-local recovery aids. These can be lost with site data.</p></div><button id="backup-create-snapshot" class="btn btn--ghost">Create today's snapshot</button></div><div id="backup-snapshots"></div></section>
+      </div><footer class="recovery-modal__footer"><span id="backup-status" class="recovery-modal__status" role="status" aria-live="polite"></span></footer>
+    </div>`;
+  root.appendChild(overlay);
+  return {
+    overlay,
+    health: overlay.querySelector('#backup-health'),
+    snapshots: overlay.querySelector('#backup-snapshots'),
+    status: overlay.querySelector('#backup-status'),
+    download: overlay.querySelector('#backup-download'),
+    createSnapshot: overlay.querySelector('#backup-create-snapshot'),
+    file: overlay.querySelector('#backup-file'),
+    verify: overlay.querySelector('#backup-verify'),
+    preview: overlay.querySelector('#backup-preview'),
+    previewRestore: overlay.querySelector('#backup-preview-restore'),
+    restore: overlay.querySelector('#backup-restore'),
+  };
+}
+
 function formatBytes(value) {
   const bytes = Number(value);
   if (!Number.isFinite(bytes) || bytes < 0) return 'Unavailable';

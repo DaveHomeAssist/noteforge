@@ -38,6 +38,23 @@ export function normalizeBanner(banner) {
   return { type, value, position };
 }
 
+/** Preserve first-seen spelling while removing blanks, title duplicates, and
+ * case/Unicode-equivalent aliases. */
+export function normalizeAliases(aliases, title = '') {
+  const titleKey = normalizeTitle(title);
+  const seen = new Set(titleKey ? [titleKey] : []);
+  const result = [];
+  for (const value of Array.isArray(aliases) ? aliases : []) {
+    if (typeof value !== 'string') continue;
+    const stored = value.trim();
+    const key = normalizeTitle(stored);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(stored);
+  }
+  return result;
+}
+
 export class Note {
   constructor({
     id = uid(),
@@ -50,6 +67,7 @@ export class Note {
     deletedAt = null,
     pinned = false,
     parentId = null,
+    aliases = [],
     ...extra
   } = {}) {
     // Preserve additive/unknown JSON metadata so a portable backup can restore
@@ -69,6 +87,9 @@ export class Note {
     this.pinned = !!pinned;
     // Parent note id for the outline tree (null = top level).
     this.parentId = typeof parentId === 'string' && parentId !== id ? parentId : null;
+    // Alternate human-readable link targets. Canonical title always wins when
+    // resolving; collisions across notes are diagnosed by Database.
+    this.aliases = normalizeAliases(aliases, title);
   }
 
   static fromJSON(data) {
@@ -90,6 +111,7 @@ export class Note {
       deletedAt: this.deletedAt,
       pinned: this.pinned,
       parentId: this.parentId,
+      aliases: [...this.aliases],
     };
   }
 
@@ -113,6 +135,12 @@ export class Note {
     this.pinned = !!pinned;
   }
 
+  setAliases(aliases) {
+    this.aliases = normalizeAliases(aliases, this.title);
+    this.touch();
+    return this.aliases;
+  }
+
   /** Set (or clear) the banner. Pass null to remove. Returns the normalized value. */
   setBanner(banner) {
     this.banner = normalizeBanner(banner);
@@ -129,8 +157,13 @@ export class Note {
     this.updatedAt = new Date().toISOString();
   }
 
-  update({ title, content, tags }) {
-    if (title !== undefined) this.title = title;
+  update({ title, content, tags, aliases }) {
+    if (title !== undefined) {
+      this.title = title;
+      this.aliases = normalizeAliases(aliases === undefined ? this.aliases : aliases, title);
+    } else if (aliases !== undefined) {
+      this.aliases = normalizeAliases(aliases, this.title);
+    }
     if (content !== undefined) this.content = content;
     if (tags !== undefined) this.tags = Array.isArray(tags) ? [...tags] : this.tags;
     this.touch();

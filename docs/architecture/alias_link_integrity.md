@@ -1,10 +1,13 @@
 # Canonical titles, aliases, and rename-safe links
 
-Status: accepted Phase 0 decision
+Status: implemented and locally verified in Phase 2
 
 ## Context
 
-Current wikilinks are extracted with a regular expression and resolved by case-insensitive title. That is insufficient for safe rewrites because code, escaped text, display aliases, fragments, duplicate titles, and future transclusion syntax need source-aware handling.
+The original wikilinks were extracted with a regular expression and resolved by
+case-insensitive title. That was insufficient for safe rewrites because code,
+escaped text, display aliases, fragments, duplicate titles, and future
+transclusion syntax need source-aware handling.
 
 ## Decision
 
@@ -63,3 +66,8 @@ The confirmation identifies the number of notes and links. A no-link rename stil
 ## Consequences
 
 Rename is deliberately a planned multi-note transaction rather than a title-field edit. The shared parser is more work than a regex but prevents each downstream link feature from inventing incompatible syntax or exclusion rules.
+
+The contextual knowledge index, outline, Link tools, and navigation reducer load
+after the first usable note. Their emitted chunks are included in the production
+service-worker precache, so first use remains available after an online install
+followed by an offline restart.

@@ -5,6 +5,7 @@
 import { fuzzyMatch, fuzzyHighlight } from '../utils/fuzzy.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
+import { extractHeadings } from '../utils/headings.js';
 
 const RECENT_LIMIT = 6;
 const MAX_RESULTS = 50;
@@ -12,13 +13,16 @@ const MAX_RESULTS = 50;
 export class CommandPalette {
   /**
    * @param {{ overlay:HTMLElement, input:HTMLInputElement, list:HTMLElement }} els
-   * @param {{ getNotes:()=>object[], getCommands:()=>object[], onOpenNote:(id:string)=>void }} opts
+   * @param {{ getNotes:()=>object[], getRecentNotes?:()=>object[], getCommands:()=>object[],
+   *   onOpenNote:(id:string)=>void, onOpenHeading?:(id:string,anchor:string)=>void }} opts
    */
-  constructor(els, { getNotes, getCommands, onOpenNote }) {
+  constructor(els, { getNotes, getRecentNotes, getCommands, onOpenNote, onOpenHeading }) {
     this.els = els;
     this.getNotes = getNotes;
     this.getCommands = getCommands;
     this.onOpenNote = onOpenNote;
+    this.getRecentNotes = getRecentNotes || (() => []);
+    this.onOpenHeading = onOpenHeading || ((id) => this.onOpenNote(id));
     this.modal = new Modal(els.overlay, { initialFocus: () => this.els.input });
     this.items = [];
     this.active = 0;
@@ -82,10 +86,11 @@ export class CommandPalette {
     const notes = this.getNotes();
     const cmds = this.getCommands();
     if (!q) {
-      const recent = [...notes]
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      const persistedRecent = this.getRecentNotes();
+      const recent = (persistedRecent.length ? persistedRecent : [...notes]
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
         .slice(0, RECENT_LIMIT)
-        .map((n) => this.#noteItem(n, []));
+        .map((n) => this.#noteItem(n, [], 'Recent note'));
       return recent.concat(cmds.map((c) => this.#cmdItem(c, [])));
     }
     const scored = [];
@@ -129,14 +134,8 @@ export class CommandPalette {
   #allHeadings() {
     const out = [];
     for (const n of this.getNotes()) {
-      let inFence = false;
-      for (const line of String(n.content || '').split('\n')) {
-        // Only a column-0 ``` is a fence (matches blocks.js); indented backticks
-        // are literal text and must not toggle fence state or hide real headings.
-        if (/^```/.test(line)) { inFence = !inFence; continue; }
-        if (inFence) continue;
-        const m = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-        if (m) out.push({ noteId: n.id, noteTitle: n.title || 'Untitled', text: m[2], level: m[1].length });
+      for (const heading of extractHeadings(n.content)) {
+        out.push({ noteId: n.id, noteTitle: n.title || 'Untitled', ...heading });
       }
     }
     return out;
@@ -144,11 +143,11 @@ export class CommandPalette {
 
   // --- item factories -----------------------------------------------------
 
-  #noteItem(note, positions) {
+  #noteItem(note, positions, sub = null) {
     return {
       icon: note.pinned ? '📌' : '📄',
       labelHtml: fuzzyHighlight(note.title || 'Untitled', positions),
-      sub: note.tags.length ? note.tags.map((t) => '#' + t).join(' ') : 'Note',
+      sub: sub || (note.tags.length ? note.tags.map((t) => '#' + t).join(' ') : 'Note'),
       run: () => this.onOpenNote(note.id),
     };
   }
@@ -167,7 +166,7 @@ export class CommandPalette {
       icon: 'H' + h.level,
       labelHtml: fuzzyHighlight(h.text, positions),
       sub: h.noteTitle,
-      run: () => this.onOpenNote(h.noteId),
+      run: () => this.onOpenHeading(h.noteId, h.anchor),
     };
   }
 

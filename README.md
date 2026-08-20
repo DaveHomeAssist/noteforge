@@ -52,9 +52,15 @@ and dark mode — all stored in your browser, no backend required.
 - **Markdown shortcuts** — `# ` → heading, `- ` → bullet, `1. ` → numbered,
   `[] ` → to-do, `> ` → quote, ` ``` ` → code, `---` → divider. Enter splits /
   continues lists; Backspace at the start demotes then merges; Tab indents.
-- **`[[Wikilinks]]`** — type `[[` for a title autocomplete; `[[Title|alias]]`
-  supported. Missing targets render dimmed and are created on click.
-- **Backlinks** — every note shows which notes link to it, computed live.
+- **Rename-safe `[[wikilinks]]`** — type `[[` for canonical-title and alias
+  autocomplete. Display text, heading fragments, and embeds parse from one
+  source-aware grammar; rename previews every affected note/link, captures safety
+  revisions, rewrites atomically, and keeps the old title as an alias.
+- **Outline, contextual backlinks, and mentions** — an H1–H6 outline jumps to
+  deterministic duplicate-safe anchors; backlinks show source heading/snippet;
+  plain-text mentions can be previewed and converted to exact wikilinks.
+- **Knowledge navigation** — labelled Back/Forward controls keep bounded session
+  history, while the command palette presents 50 persisted unique recent notes.
 - **Graph view** (🕸️) — a force-directed map of how your notes connect.
 - **Tags** — add `#tags` as chips; filter the sidebar by tag.
 - **Pin & sort** — pin notes to float them to the top; sort the sidebar by
@@ -97,6 +103,7 @@ export operate on the same `.md` content and are unaffected by the editor.
 | `Ctrl/⌘ + N` | New note |
 | `Ctrl/⌘ + K` | Focus search |
 | `Ctrl/⌘ + G` | Toggle graph view |
+| `Alt + Left` / `Alt + Right` | Back / forward through opened notes |
 | `Ctrl/⌘ + Z` / `Shift+Ctrl/⌘ + Z` | Undo / redo (within the editor) |
 | `/` | Open the block slash menu |
 | `[[` | Wikilink title autocomplete |
@@ -129,6 +136,10 @@ unavailable (e.g. private mode) the app transparently falls back to
 on-disk format upgradeable. Deleted notes are soft-deleted to the Trash so they
 survive a reload until purged.
 
+Schema version 4 adds normalized note aliases without changing the permanent note
+ID or Markdown authority. Canonical titles always outrank aliases; ambiguous
+imported identities remain intact but are reported for explicit repair.
+
 Revision history and rolling snapshots use namespaced keys in the same unchanged
 `my-notes-app` IndexedDB database and share content-addressed blobs. They are
 browser-local recovery aids, not independent backups. If IndexedDB is unavailable,
@@ -146,7 +157,7 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (259 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (260 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
@@ -156,16 +167,21 @@ schema-version-3 preservation fixtures (including a 1,000-note vault). Dedicated
 database, revision, backup, and integrated-recovery suites add 88 Phase 1 checks
 covering durable capture ordering, SHA-256 deduplication, retention/garbage
 collection, quota/fallback behavior, rolling snapshots, malformed backups, restore
-safety, large embedded images, and atomic full-vault replacement.
-`test/features.html` (320 assertions) drives
+safety, large embedded images, and atomic full-vault replacement. The 12-check
+link-integrity suite covers schema-v4 aliases, parser ranges/exclusions, atomic
+rename and repair plans, heading anchors, contextual indexes, navigation, backup
+fidelity, and a 1,000-note incremental-update budget. The complete Node gate is
+360 checks.
+`test/features.html` (339 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
 graph and recovery views in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
-`document.title`, then runs 15 integrated recovery checks at 390 px plus three
-production/offline checks and fails on
+`document.title`, then runs 15 integrated recovery checks and 16 Phase 2 link and
+navigation checks at 390 px, plus four production/offline checks (including
+first-use Link tools) and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -186,18 +202,22 @@ src/
 │   ├── settings-view.js   # Settings modal (theme/font/width/autosave/default template)
 │   ├── history-view.js    # Accessible revision compare/restore/restore-copy workflow
 │   ├── backup-view.js     # Storage health, local snapshots, portable verify/restore UI
+│   ├── outline-view.js    # Keyboard H1-H6 outline and deterministic heading jumps
+│   ├── link-tools-view.js # Previewed rename, mention conversion, ambiguity repair
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
 │   ├── note-list.js    # Sidebar: nested outline tree, sort, pin, tag filter, scoped + fuzzy-ranked search, virtualized
 │   └── graph.js        # Self-contained force-directed SVG link graph (keyboard-navigable)
 ├── core/
-│   ├── note.js         # Note model: content + metadata (tags, banner, deletedAt, pinned, parentId)
+│   ├── note.js         # Note model: content + metadata (aliases, tags, banner, Trash, hierarchy)
 │   ├── database.js     # In-memory store + pub/sub + coalesced async persistence + soft-delete/Trash
 │   ├── migrations.js   # Pure schema-version migration runner (Node-testable)
 │   ├── storage.js      # IndexedDB + fallback, namespaced keys, atomic batch/status APIs
 │   ├── revision-store.js # Content-addressed revisions, retention/GC, rolling snapshots
 │   ├── recovery-service.js # Durable history and verified restore application boundary
-│   └── backup.js       # Deterministic portable envelope, SHA-256 verify, restore preview
+│   ├── backup.js       # Deterministic portable envelope, SHA-256 verify, restore preview
+│   ├── knowledge-index.js # Rebuildable contextual backlinks and unlinked mentions
+│   └── link-operations.js # Atomic rename/repair/conversion plans with revision gates
 ├── ui/
 │   ├── theme.js        # Resolved data-theme from light/dark/system (matchMedia), persisted
 │   └── settings.js     # Pure settings defaults / normalize / theme resolution
@@ -207,7 +227,10 @@ src/
 │   ├── export.js       # Pure note-export builder: self-contained shareable HTML doc + filename slug
 │   ├── download.js     # Tiny shared blob-download helper (note HTML/MD, graph SVG, JSON backup)
 │   ├── vault.js        # Save-to-folder: safe/de-duped .md filenames + File System Access write loop
-│   ├── wikilinks.js    # Pure [[wikilink]] extraction (DOM-free; used by the data layer)
+│   ├── wikilinks.js    # Source-aware link tokens/ranges and exact target rewrites
+│   ├── link-analysis.js # Context snippets and exclusion-aware mention scanning
+│   ├── headings.js     # H1-H6 extraction and occurrence-aware anchors
+│   ├── navigation.js   # Bounded session history and persisted recent-note reducer
 │   ├── markdown.js     # marked + wikilink extension + DOMPurify sanitize + renderInline()
 │   ├── fuzzy.js        # Pure fuzzy subsequence matcher + safe highlight (palette/search)
 │   ├── search-query.js # Pure scoped-search parsing (tag:/in:title/…) + note ranking
@@ -218,6 +241,7 @@ public/                 # manifest.webmanifest, sw.js (service worker), icon.svg
 test/roundtrip.test.mjs # Node invariants: blocks, migrations, note model, fuzzy, search, settings, manifest
 test/features.html      # Browser feature suite (editor, banner, Trash, palette, settings, graph)
 test/run-features.mjs   # Headless runner for features.html (npm run test:browser)
+test/link-integrity.test.mjs # Node invariants for Phase 2 identity/link/navigation behavior
 vite.config.js          # Build + dev server; injects the Content-Security-Policy
 ```
 

@@ -10,7 +10,8 @@ export class Editor {
   /**
    * @param {HTMLElement} container
    * @param {import('../core/database.js').Database} db
-   * @param {{ openNote:(id:string)=>void, openOrCreateByTitle:(t:string)=>void }} actions
+   * @param {{ openNote:(id:string,opts?:object)=>void, openOrCreateByTitle:(t:string,fragment?:string)=>void,
+   *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void }} actions
    */
   constructor(container, db, actions) {
     this.container = container;
@@ -19,6 +20,8 @@ export class Editor {
     this.currentId = null;
     this.blockEditor = null;
     this.banner = null;
+    this.OutlineView = null;
+    this.outlineReady = null;
     this.autosave = debounce(() => this.#save(), Number(db.config?.autosaveMs) || 400);
     this.#renderEmpty();
   }
@@ -30,7 +33,23 @@ export class Editor {
     this.autosave = debounce(() => this.#save(), n);
   }
 
-  open(id, { focus = null, discardPending = false } = {}) {
+  /** Load the optional heading outline after the first usable editor paint. */
+  async enableOutline() {
+    if (this.OutlineView) return this.outline;
+    if (this.outlineReady) return this.outlineReady;
+    this.outlineReady = import('./outline-view.js').then(({ OutlineView }) => {
+      this.OutlineView = OutlineView;
+      const note = this.currentId ? this.db.getNote(this.currentId) : null;
+      if (note) this.#mountOutline(note.content);
+      return this.outline;
+    }).catch((error) => {
+      this.outlineReady = null;
+      throw error;
+    });
+    return this.outlineReady;
+  }
+
+  open(id, { focus = null, discardPending = false, headingAnchor = null } = {}) {
     // Persist the OUTGOING note's buffered (debounced) edits before we switch —
     // flush runs #save() synchronously while currentId/blockEditor still point at
     // the note being left, so a fast note-switch never drops unsaved typing.
@@ -45,6 +64,8 @@ export class Editor {
       if (el) { el.focus(); el.select(); }
     } else if (focus === 'content') {
       this.blockEditor?.focusFirst();
+    } else if (headingAnchor) {
+      queueMicrotask(() => this.blockEditor?.jumpToHeading(headingAnchor));
     }
   }
 
@@ -94,6 +115,13 @@ export class Editor {
     btn.setAttribute('aria-pressed', String(note.pinned));
   }
 
+  reflectTitle(id) {
+    if (id !== this.currentId) return;
+    const input = this.container.querySelector('.editor__title');
+    const note = this.db.getNote(id);
+    if (input && note) input.value = note.title;
+  }
+
   // --- rendering ----------------------------------------------------------
 
   #teardown() {
@@ -104,6 +132,10 @@ export class Editor {
     if (this.banner) {
       this.banner.destroy();
       this.banner = null;
+    }
+    if (this.outline) {
+      this.outline.destroy();
+      this.outline = null;
     }
   }
 
@@ -125,7 +157,9 @@ export class Editor {
       ? this.blockEditor.exportHistory()
       : null;
     this.#teardown();
-    const backlinks = this.db.backlinksFor(note.id);
+    const backlinks = this.db.backlinkOccurrencesFor(note.id);
+    const mentions = this.db.unlinkedMentionsFor(note.id);
+    this._mentions = mentions;
     this.container.innerHTML = `
       <div class="editor__banner"></div>
       ${this.#breadcrumbHtml(note)}
@@ -146,20 +180,41 @@ export class Editor {
         <input type="text" class="editor__tag-input" placeholder="+ add tag" />
       </div>
 
-      <div class="editor__blocks"></div>
+      <div class="editor__workspace">
+        <div class="editor__document">
+          <div class="editor__blocks"></div>
 
-      <div class="backlinks">
-        <h3 class="backlinks__title">🔗 Backlinks <span class="muted">(${backlinks.length})</span></h3>
-        ${backlinks.length === 0
-          ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
-          : `<ul class="backlinks__list">${backlinks.map((b) => `
-              <li><a href="#" class="backlinks__item" data-id="${escapeHtml(b.id)}">${escapeHtml(b.title)}</a></li>
-            `).join('')}</ul>`
-        }
-      </div>
+          <section class="backlinks" aria-labelledby="backlinks-title">
+            <h3 class="backlinks__title" id="backlinks-title">🔗 Backlinks <span class="muted">(${backlinks.length})</span></h3>
+            ${backlinks.length === 0
+              ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
+              : `<ul class="backlinks__list">${backlinks.map((b) => `
+                  <li><a href="#" class="backlinks__item" data-id="${escapeHtml(b.sourceId)}" data-context-anchor="${escapeHtml(b.headingAnchor || '')}" aria-label="Open ${escapeHtml(b.sourceTitle)}${b.heading ? ` at ${escapeHtml(b.heading)}` : ''}">
+                    <strong>${escapeHtml(b.sourceTitle)}</strong>
+                    ${b.heading ? `<span class="backlinks__heading">${escapeHtml(b.heading)}</span>` : ''}
+                    <span class="backlinks__snippet">${escapeHtml(b.snippet || b.target)}</span>
+                  </a></li>
+                `).join('')}</ul>`
+            }
+          </section>
 
-      <div class="editor__meta muted">
-        Created ${formatDate(note.createdAt)} · Updated ${formatDate(note.updatedAt)}
+          <section class="mentions" aria-labelledby="mentions-title">
+            <h3 class="backlinks__title" id="mentions-title">💬 Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
+            ${mentions.length === 0
+              ? `<p class="muted backlinks__empty">No unlinked mentions found.</p>`
+              : `<ul class="mentions__list">${mentions.map((mention, index) => `
+                  <li class="mentions__item">
+                    <div><strong>${escapeHtml(mention.sourceTitle)}</strong>${mention.heading ? `<span class="mentions__heading">${escapeHtml(mention.heading)}</span>` : ''}<p>${escapeHtml(mention.snippet || mention.text)}</p></div>
+                    <button type="button" class="btn btn--ghost mention-convert" data-mention-index="${index}" aria-label="Preview converting mention in ${escapeHtml(mention.sourceTitle)} to a wikilink">Convert</button>
+                  </li>`).join('')}</ul>`
+            }
+          </section>
+
+          <div class="editor__meta muted">
+            Created ${formatDate(note.createdAt)} · Updated ${formatDate(note.updatedAt)}
+          </div>
+        </div>
+        <aside class="editor__outline" aria-label="Note outline"></aside>
       </div>
     `;
 
@@ -167,14 +222,19 @@ export class Editor {
     this.blockEditor = new BlockEditor(host, {
       initialMarkdown: note.content,
       history,
-      onChange: () => this.autosave(),
-      onOpenWikilink: (title) => {
-        this.autosave.flush();
-        this.actions.openOrCreateByTitle(title);
+      onChange: () => {
+        this.autosave();
+        this.outline?.update(this.blockEditor.serialize());
       },
-      getTitles: () => this.db.allTitles(),
+      onOpenWikilink: (title, fragment) => {
+        this.autosave.flush();
+        this.actions.openOrCreateByTitle(title, fragment);
+      },
+      getTitles: () => this.db.allLinkNames(),
     });
     this._blockEditorNoteId = note.id;
+
+    if (this.OutlineView) this.#mountOutline(note.content);
 
     this.banner = new BannerControl(this.container.querySelector('.editor__banner'), {
       getBanner: () => this.db.getNote(note.id)?.banner || null,
@@ -182,6 +242,17 @@ export class Editor {
     });
 
     this.#wire(note);
+  }
+
+  #mountOutline(markdown) {
+    const host = this.container.querySelector('.editor__outline');
+    if (!host || !this.OutlineView) return;
+    this.outline?.destroy();
+    this.outline = new this.OutlineView(host, {
+      scrollRoot: this.container,
+      onJump: (anchor) => this.blockEditor?.jumpToHeading(anchor),
+    });
+    this.outline.update(markdown);
   }
 
   /** Ancestor breadcrumb ("Parent › Sub › This") for a nested note. */
@@ -200,8 +271,17 @@ export class Editor {
       a.addEventListener('click', (e) => { e.preventDefault(); this.actions.openNote(a.dataset.id); })
     );
 
-    this.container.querySelector('.editor__title')
-      .addEventListener('input', () => this.autosave());
+    const titleInput = this.container.querySelector('.editor__title');
+    titleInput.addEventListener('change', () => {
+      const proposed = titleInput.value.trim() || 'Untitled';
+      if (proposed === note.title) return;
+      this.actions.requestRename?.(note.id, proposed);
+      this.reflectTitle(note.id);
+    });
+    titleInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); titleInput.blur(); }
+      else if (event.key === 'Escape') { event.preventDefault(); this.reflectTitle(note.id); titleInput.blur(); }
+    });
 
     this.container.querySelector('.editor__pin').addEventListener('click', () => {
       this.actions.togglePin(note.id); // the app flushes pending edits + persists
@@ -240,9 +320,16 @@ export class Editor {
     this.container.querySelectorAll('.backlinks__item').forEach((a) =>
       a.addEventListener('click', (e) => {
         e.preventDefault();
-        this.actions.openNote(a.dataset.id);
+        this.actions.openNote(a.dataset.id, { headingAnchor: a.dataset.contextAnchor || null });
       })
     );
+
+    this.container.querySelectorAll('.mention-convert').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mention = this._mentions?.[Number(button.dataset.mentionIndex)];
+        if (mention) this.actions.previewMention?.(mention);
+      });
+    });
   }
 
   #setBanner(id, banner) {
@@ -264,11 +351,9 @@ export class Editor {
     if (!this.currentId) return;
     const note = this.db.getNote(this.currentId);
     if (!note) return;
-    const titleEl = this.container.querySelector('.editor__title');
-    const nextTitle = titleEl ? titleEl.value.trim() || 'Untitled' : note.title;
     const nextContent = this.blockEditor ? this.blockEditor.serialize() : note.content;
-    if (nextTitle === note.title && nextContent === note.content) return; // no-op
-    note.update({ title: nextTitle, content: nextContent });
+    if (nextContent === note.content) return; // no-op
+    note.update({ content: nextContent });
     this.db.saveNote(note);
   }
 }

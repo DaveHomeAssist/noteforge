@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Database } from '../src/core/database.js';
+import { CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
 import { RecoveryService } from '../src/core/recovery-service.js';
 import { REVISION_STORAGE_PREFIXES, RevisionStore } from '../src/core/revision-store.js';
 
@@ -134,7 +135,7 @@ test('rolling local snapshots preserve notes, Trash, config, and are period-idem
   assert.deepEqual(materialized.notes.map((note) => note.id), [live.id, trashed.id]);
   assert.equal(materialized.notes.find((note) => note.id === trashed.id).deletedAt !== null, true);
   assert.deepEqual(materialized.config.unknownSetting, { kept: true });
-  assert.equal(materialized.vaultSchemaVersion, 3);
+  assert.equal(materialized.vaultSchemaVersion, CURRENT_SCHEMA_VERSION);
 });
 
 test('storage health reports queued failed current-note writes even when the backend otherwise looks healthy', async () => {

@@ -53,6 +53,11 @@ async function rejectsCode(run, code) {
 }
 
 const makeBackup = (state = fixture, options = {}) => createBackup(state, { createdAt: CREATED_AT, ...options });
+const asCurrentState = (state) => ({
+  schemaVersion: 4,
+  notes: state.notes.map((note) => ({ ...structuredClone(note), aliases: [...(note.aliases || [])] })),
+  config: structuredClone(state.config),
+});
 
 await test('creates a versioned NoteForge portable-backup envelope', async () => {
   const backup = await makeBackup();
@@ -191,7 +196,7 @@ await test('restore preview identifies add, update, remove, unchanged, Trash, an
     notes: [fixture.notes[0], fixture.notes[1], fixture.notes.find((note) => note.id === 'v3-trash')],
     config: { showGraph: true, themeMode: 'dark' },
   };
-  const current = structuredClone({
+  const current = asCurrentState({
     schemaVersion: 3,
     notes: [
       desired.notes[0],
@@ -226,13 +231,13 @@ await test('restore preview identifies add, update, remove, unchanged, Trash, an
 
 await test('restore preview contains an exact detached restore payload and mutates neither side', async () => {
   const desired = structuredClone(fixture);
-  const current = structuredClone(fixture);
+  const current = asCurrentState(fixture);
   current.notes[0].content = 'newer local text';
   const desiredBefore = structuredClone(desired);
   const currentBefore = structuredClone(current);
   const backup = await makeBackup(desired);
   const preview = await createRestorePreview(current, serializeBackup(backup));
-  equal(preview.restoreState, desired);
+  equal(preview.restoreState, asCurrentState(desired));
   preview.restoreState.notes[0].content = 'preview mutation';
   equal(desired, desiredBefore);
   equal(current, currentBefore);

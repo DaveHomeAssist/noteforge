@@ -34,8 +34,9 @@ stronger architecture remain available when the product calls for them. Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 347 Node checks (`npm test`) + 320 browser feature assertions,
-  15 integrated 390 px recovery checks, and three production/offline checks
+- **Quality** — 360 Node checks (`npm test`) + 339 browser feature assertions,
+  15 integrated recovery checks, 16 integrated Phase 2 checks at 390 px, and four
+  production/offline checks
   (`npm run test:browser`, headless via
   Playwright), gated in CI on pull requests
   and every main push; an
@@ -67,7 +68,7 @@ is in `docs/implementation/feature_acceptance_matrix.md`.
    revisions; content-addressed retention/GC; restore and restore-as-copy safety;
    rolling local snapshots; storage/quota health; and complete SHA-256-verified,
    previewed portable backups now precede every later mutation feature.
-3. **Phase 2 — Link integrity and knowledge navigation.** Rename-safe links,
+3. **Phase 2 — Link integrity and knowledge navigation. ✅** Rename-safe links,
    aliases, outline, contextual backlinks, mentions, and back/forward/recents.
 4. **Phase 3 — Retrieval, lifecycle, and bulk operations.** Saved searches,
    Archive, find/replace, and ID-based bulk actions.
@@ -262,7 +263,7 @@ note can be shared as a link/file.
 ## Suggested near-term sequence
 
 ~~`Rounds 1–4 + depth round`~~ ✅ → ~~`Phase 0 contracts`~~ ✅ →
-~~`Phase 1 recovery`~~ ✅ → **`Phase 2 link integrity and navigation`**
-→ `Phase 3 retrieval/lifecycle` → `Phase 4 daily workflow`
+~~`Phase 1 recovery`~~ ✅ → ~~`Phase 2 link integrity and navigation`~~ ✅
+→ **`Phase 3 retrieval/lifecycle`** → `Phase 4 daily workflow`
 → `Phase 5 properties/references` → `Phase 6 workspace/reconciliation`
 → `Phase 7 hardening` → `Phase 8 canonical release`.

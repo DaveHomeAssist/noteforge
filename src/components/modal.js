@@ -89,6 +89,11 @@ export class Modal {
     this.#restoreFocus();
   }
 
+  /** Replace a trigger that was re-rendered while the dialog stayed open. */
+  setReturnFocus(element) {
+    if (element && typeof element.focus === 'function') this._returnFocus = element;
+  }
+
   /** (Re)apply the initial focus — call after rebuilding panel contents. */
   focusInitial() {
     const el = this.#resolveInitial();

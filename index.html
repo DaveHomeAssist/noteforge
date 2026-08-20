@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#3b6ef6" />
   <title>NoteForge</title>
-<meta name="description" content="NoteForge is a browser notes app with markdown, wikilinks, backlinks, tags, graph view, templates, offline support, and local export.">
+<meta name="description" content="NoteForge is a local-first notes app with Markdown, wikilinks, backlinks, tags, graph view, templates, offline use, and export.">
 <link rel="canonical" href="https://systembydave.com/noteforge/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="NoteForge">
 <meta property="og:title" content="NoteForge">
-<meta property="og:description" content="NoteForge is a browser notes app with markdown, wikilinks, backlinks, tags, graph view, templates, offline support, and local export.">
+<meta property="og:description" content="NoteForge is a local-first notes app with Markdown, wikilinks, backlinks, tags, graph view, templates, offline use, and export.">
 <meta property="og:url" content="https://systembydave.com/noteforge/">
 <meta property="og:image" content="https://systembydave.com/noteforge/og-image.svg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NoteForge">
-<meta name="twitter:description" content="NoteForge is a browser notes app with markdown, wikilinks, backlinks, tags, graph view, templates, offline support, and local export.">
+<meta name="twitter:description" content="NoteForge is a local-first notes app with Markdown, wikilinks, backlinks, tags, graph view, templates, offline use, and export.">
 <meta name="twitter:image" content="https://systembydave.com/noteforge/og-image.svg">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📝</text></svg>" />
+  <link rel="icon" href="/icon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/icon.svg" />
   <link rel="stylesheet" href="/src/styles.css" />
@@ -27,6 +27,10 @@
   <!-- Mobile-only top bar with the sidebar toggle -->
   <div class="mobile-bar">
     <button id="sidebar-toggle" class="btn btn--ghost" aria-label="Open notes sidebar" aria-expanded="false" aria-controls="app">☰</button>
+    <div class="nav-controls nav-controls--mobile" aria-label="Note history">
+      <button id="mobile-nav-back" class="btn btn--ghost" aria-label="Back" disabled>←</button>
+      <button id="mobile-nav-forward" class="btn btn--ghost" aria-label="Forward" disabled>→</button>
+    </div>
     <span class="mobile-bar__title">📝 NoteForge</span>
   </div>
   <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
@@ -37,6 +41,10 @@
       <header class="sidebar__header">
         <h1 class="brand">📝 NoteForge</h1>
         <div class="sidebar__actions">
+          <div class="nav-controls" aria-label="Note history">
+            <button id="nav-back" class="btn btn--ghost" aria-label="Back" title="Alt+Left" disabled>←</button>
+            <button id="nav-forward" class="btn btn--ghost" aria-label="Forward" title="Alt+Right" disabled>→</button>
+          </div>
           <button id="new-note-btn" class="btn btn--primary" title="New note (Ctrl+N)">＋ New</button>
           <button id="theme-btn" class="btn btn--ghost" title="Toggle theme" aria-label="Toggle theme">🌙</button>
           <button id="graph-btn" class="btn btn--ghost" title="Toggle graph view" aria-label="Toggle graph view">🕸️</button>
@@ -49,6 +57,7 @@
               <button id="settings-btn" class="menu__item">⚙ Settings</button>
               <button id="history-btn" class="menu__item" disabled>↶ Revision history</button>
               <button id="backup-btn" class="menu__item">🛟 Backup center</button>
+              <button id="link-report-btn" class="menu__item">🔗 Link integrity report</button>
               <button id="export-btn" class="menu__item">⬇ Export JSON</button>
               <button id="import-btn" class="menu__item">⬆ Import JSON</button>
               <button id="seed-btn" class="menu__item">✨ Load sample notes</button>
@@ -126,80 +135,6 @@
         </div>
       </header>
       <div id="settings-form" class="settings"></div>
-    </div>
-  </div>
-
-  <!-- Browser-local revision history -->
-  <div class="modal" id="history-overlay" hidden>
-    <div class="modal__backdrop" data-close></div>
-    <div class="modal__panel recovery-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1">
-      <header class="modal__header">
-        <div>
-          <h2 class="modal__title" id="history-title">↶ Revision history</h2>
-          <p class="muted recovery-modal__subtitle">Browser-local recovery points for the current note</p>
-        </div>
-        <button class="btn btn--ghost" data-close title="Close" aria-label="Close revision history">✕</button>
-      </header>
-      <div class="history-view">
-        <nav id="history-list" class="history-view__list" aria-label="Note revisions"></nav>
-        <div class="history-view__detail">
-          <div id="history-preview" class="history-view__preview"></div>
-          <div id="history-diff" class="history-view__diff"></div>
-        </div>
-      </div>
-      <footer class="recovery-modal__footer">
-        <span id="history-status" class="recovery-modal__status" role="status" aria-live="polite"></span>
-        <div class="modal__actions">
-          <button id="history-restore-copy" class="btn btn--ghost" disabled>Restore as copy</button>
-          <button id="history-restore" class="btn btn--primary" disabled>Restore revision</button>
-        </div>
-      </footer>
-    </div>
-  </div>
-
-  <!-- Storage health and portable backups -->
-  <div class="modal" id="backup-overlay" hidden>
-    <div class="modal__backdrop" data-close></div>
-    <div class="modal__panel recovery-modal backup-modal" role="dialog" aria-modal="true" aria-labelledby="backup-title" tabindex="-1">
-      <header class="modal__header">
-        <div>
-          <h2 class="modal__title" id="backup-title">🛟 Backup center</h2>
-          <p class="muted recovery-modal__subtitle">Storage health, local recovery, and portable backups</p>
-        </div>
-        <button class="btn btn--ghost" data-close title="Close" aria-label="Close backup center">✕</button>
-      </header>
-      <div class="backup-view">
-        <div id="backup-health"></div>
-        <section class="backup-actions" aria-labelledby="portable-backup-title">
-          <h3 id="portable-backup-title">Portable JSON backup</h3>
-          <p>Download a verified, device-independent copy containing live notes, Trash, settings, IDs, and integrity data.</p>
-          <button id="backup-download" class="btn btn--primary">Download JSON backup</button>
-        </section>
-        <section class="backup-actions" aria-labelledby="verify-backup-title">
-          <h3 id="verify-backup-title">Verify or restore a backup</h3>
-          <label class="backup-file-label" for="backup-file">Choose a NoteForge JSON backup</label>
-          <input id="backup-file" type="file" accept="application/json,.json" />
-          <div class="backup-actions__buttons">
-            <button id="backup-verify" class="btn btn--ghost" disabled>Verify backup</button>
-            <button id="backup-preview-restore" class="btn btn--ghost" disabled>Restore preview</button>
-            <button id="backup-restore" class="btn btn--danger-ghost" disabled>Restore verified backup</button>
-          </div>
-          <div id="backup-preview" class="backup-view__preview"><p class="muted">Choose a JSON backup to begin.</p></div>
-        </section>
-        <section class="backup-actions" aria-labelledby="local-snapshot-title">
-          <div class="backup-actions__heading">
-            <div>
-              <h3 id="local-snapshot-title">Local snapshots</h3>
-              <p>Rolling browser-local recovery aids. These can be lost with site data.</p>
-            </div>
-            <button id="backup-create-snapshot" class="btn btn--ghost">Create today's snapshot</button>
-          </div>
-          <div id="backup-snapshots"></div>
-        </section>
-      </div>
-      <footer class="recovery-modal__footer">
-        <span id="backup-status" class="recovery-modal__status" role="status" aria-live="polite"></span>
-      </footer>
     </div>
   </div>
 

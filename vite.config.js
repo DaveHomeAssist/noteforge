@@ -81,13 +81,32 @@ function cspPlugin() {
   };
 }
 
+function minifyHtmlPlugin() {
+  return {
+    name: 'minify-html',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html
+          .replace(/<!--(?!\[if)[\s\S]*?-->/g, '')
+          .replace(/>\s+</g, '><')
+          .replace(/\n\s+/g, ' ')
+          .replace(/\s+\/>/g, '>')
+          .replace(/\s([a-zA-Z_:][\w:.-]*)="([a-zA-Z0-9._:/#-]+)"/g, ' $1=$2')
+          .trim();
+      },
+    },
+  };
+}
+
 export default defineConfig(({ command, isPreview }) => ({
   root: '.',
   // Production is served from the /noteforge/ sub-path (systembydave.com/noteforge/,
   // and a davehomeassist.github.io/noteforge/ mirror); dev + the test servers stay at
   // root so nothing else has to change.
   base: command === 'build' || isPreview ? '/noteforge/' : '/',
-  plugins: [cspPlugin(), swVersionPlugin()],
+  plugins: [cspPlugin(), minifyHtmlPlugin(), swVersionPlugin()],
   server: {
     port: 5175,
     open: true,

@@ -20,6 +20,7 @@ import { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } from '../utils
 import { downloadText } from '../utils/download.js';
 import { writeVaultToDir } from '../utils/vault.js';
 import { parseNoteMergeImport, selectImportableNotes } from '../utils/json-import.js';
+import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 
 class App {
   constructor() {
@@ -29,6 +30,12 @@ class App {
     this.recoveryReady = null;
     this.currentId = null;
     this.view = 'editor'; // 'editor' | 'graph'
+    this.navigation = { back: [], current: null, forward: [] };
+    this.recentNoteIds = [];
+    this.navigationController = null;
+    this.navigationReady = null;
+    this.linkTools = null;
+    this.linkToolsReady = null;
 
     this.el = {
       editor: document.getElementById('editor'),
@@ -61,25 +68,12 @@ class App {
       settingsOverlay: document.getElementById('settings-overlay'),
       settingsForm: document.getElementById('settings-form'),
       historyBtn: document.getElementById('history-btn'),
-      historyOverlay: document.getElementById('history-overlay'),
-      historyList: document.getElementById('history-list'),
-      historyPreview: document.getElementById('history-preview'),
-      historyDiff: document.getElementById('history-diff'),
-      historyStatus: document.getElementById('history-status'),
-      historyRestore: document.getElementById('history-restore'),
-      historyRestoreCopy: document.getElementById('history-restore-copy'),
       backupBtn: document.getElementById('backup-btn'),
-      backupOverlay: document.getElementById('backup-overlay'),
-      backupHealth: document.getElementById('backup-health'),
-      backupSnapshots: document.getElementById('backup-snapshots'),
-      backupStatus: document.getElementById('backup-status'),
-      backupDownload: document.getElementById('backup-download'),
-      backupCreateSnapshot: document.getElementById('backup-create-snapshot'),
-      backupFile: document.getElementById('backup-file'),
-      backupVerify: document.getElementById('backup-verify'),
-      backupPreview: document.getElementById('backup-preview'),
-      backupPreviewRestore: document.getElementById('backup-preview-restore'),
-      backupRestore: document.getElementById('backup-restore'),
+      linkReportBtn: document.getElementById('link-report-btn'),
+      navBack: document.getElementById('nav-back'),
+      navForward: document.getElementById('nav-forward'),
+      mobileNavBack: document.getElementById('mobile-nav-back'),
+      mobileNavForward: document.getElementById('mobile-nav-forward'),
       app: document.getElementById('app'),
       sidebar: document.querySelector('.sidebar'),
       mainEl: document.querySelector('.main'),
@@ -98,6 +92,8 @@ class App {
 
     this.ready = this.#init()
       .then(() => {
+        this.#scheduleNavigationInitialization();
+        this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
         return this;
       })
@@ -109,6 +105,12 @@ class App {
 
   async #init() {
     await this.db.init(); // async: load + migrate persisted state before rendering
+    this.recentNoteIds = [...new Set(Array.isArray(this.db.config.recentNoteIds) ? this.db.config.recentNoteIds : [])]
+      .filter((id) => typeof id === 'string' && this.db.getNote(id))
+      .slice(0, 50);
+    if (JSON.stringify(this.recentNoteIds) !== JSON.stringify(this.db.config.recentNoteIds || [])) {
+      this.db.setConfig({ recentNoteIds: this.recentNoteIds });
+    }
     // Surface a persistence failure (both storage backends down) so silent
     // data loss becomes a visible, dismissible warning instead of console-only.
     this.db.onPersistError = () => this.#showStorageError();
@@ -116,9 +118,11 @@ class App {
 
     const actions = {
       openNote: (id) => this.openNote(id),
-      openOrCreateByTitle: (title) => this.openOrCreateByTitle(title),
+      openOrCreateByTitle: (title, fragment) => this.openOrCreateByTitle(title, fragment),
       deleteNote: (id) => this.deleteNote(id),
       togglePin: (id) => this.togglePin(id),
+      requestRename: (id, title) => this.#showRename(id, title),
+      previewMention: (mention) => this.#showMention(mention),
     };
 
     this.editor = new Editor(this.el.editor, this.db, actions);
@@ -145,8 +149,10 @@ class App {
       { overlay: this.el.paletteOverlay, input: this.el.paletteInput, list: this.el.paletteList },
       {
         getNotes: () => this.db.getAllNotes(),
+        getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
         getCommands: () => this.#commands(),
         onOpenNote: (id) => this.openNote(id),
+        onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
       }
     );
     this.theme = new Theme(this.db, this.el.themeBtn);
@@ -166,6 +172,7 @@ class App {
       this.noteList.setActive(this.currentId);
       this.editor.refresh();
       this.el.historyBtn.disabled = !this.currentId || !this.db.getNote(this.currentId);
+      this.#pruneNavigationState();
       if (this.view === 'graph') this.graph.render(this.currentId);
     });
 
@@ -182,43 +189,93 @@ class App {
     } else {
       this.noteList.render();
       const first = this.db.getNotesSorted()[0];
-      if (first) this.openNote(first.id); // undefined when all notes are trashed -> empty editor
+      if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
   }
 
   // --- note selection -----------------------------------------------------
 
-  openNote(id, opts) {
+  openNote(id, opts = {}) {
     const note = this.db.getNote(id);
     if (!note) return;
+    if (opts.origin === 'reload') this.navigation.current = id;
+    else void this.#ensureNavigation().then((navigation) => {
+      navigation.recordOpen(id, { replay: Boolean(opts.replay) });
+      this.#syncNavigationFrom(navigation);
+    }).catch((error) => {
+      console.warn('[navigation] note-open history unavailable:', error);
+    });
     this.currentId = id;
     this.el.historyBtn.disabled = false;
     this.setView('editor');
-    this.editor.open(id, opts);
+    const headingAnchor = opts.headingAnchor || resolveHeadingAnchor(extractHeadings(note.content), opts.fragment);
+    this.editor.open(id, { ...opts, headingAnchor });
     this.noteList.reveal(id); // expand collapsed ancestors so the active note is visible in the outline
     this.noteList.setActive(id);
+    this.#syncNavigationControls();
     this.#closeSidebar(); // on mobile, reveal the editor after picking a note
+  }
+
+  #pruneNavigationState() {
+    const valid = (id) => Boolean(this.db.getNote(id));
+    if (this.navigationController) {
+      this.navigationController.prune(valid);
+      this.#syncNavigationFrom(this.navigationController);
+    } else {
+      this.navigation.back = this.navigation.back.filter(valid);
+      this.navigation.forward = this.navigation.forward.filter(valid);
+      if (this.navigation.current && !valid(this.navigation.current)) this.navigation.current = null;
+      this.recentNoteIds = this.recentNoteIds.filter(valid);
+    }
+    this.#syncNavigationControls();
+  }
+
+  #syncNavigationControls() {
+    const backDisabled = !this.navigation.back.some((id) => Boolean(this.db.getNote(id)));
+    const forwardDisabled = !this.navigation.forward.some((id) => Boolean(this.db.getNote(id)));
+    for (const button of [this.el.navBack, this.el.mobileNavBack]) if (button) button.disabled = backDisabled;
+    for (const button of [this.el.navForward, this.el.mobileNavForward]) if (button) button.disabled = forwardDisabled;
+  }
+
+  async goBack() {
+    this.editor?.flushPending();
+    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    const navigation = await this.#ensureNavigation();
+    const id = navigation.back((noteId) => Boolean(this.db.getNote(noteId)));
+    if (!id) return;
+    this.#syncNavigationFrom(navigation);
+    this.openNote(id, { origin: 'back', replay: true });
+  }
+
+  async goForward() {
+    this.editor?.flushPending();
+    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    const navigation = await this.#ensureNavigation();
+    const id = navigation.forward((noteId) => Boolean(this.db.getNote(noteId)));
+    if (!id) return;
+    this.#syncNavigationFrom(navigation);
+    this.openNote(id, { origin: 'forward', replay: true });
   }
 
   newNote() {
     this.editor?.flushPending(); // persist the outgoing note's buffered title/block edits first
     const tpl = templateById(this.db.config.defaultTemplate); // null unless a default is set
     if (tpl) return this.newFromTemplate(tpl);
-    const note = this.db.createNote({ title: 'Untitled', content: '' });
+    const note = this.db.createNote({ title: this.db.availableTitle('Untitled'), content: '' });
     this.openNote(note.id, { focus: 'title' });
   }
 
   newFromTemplate(tpl) {
     this.editor?.flushPending();
     const { title, content } = tpl.build();
-    const note = this.db.createNote({ title, content });
+    const note = this.db.createNote({ title: this.db.availableTitle(title), content });
     this.openNote(note.id, { focus: 'content' });
   }
 
   /** Create a new note nested under `parentId`. */
   newChild(parentId) {
     this.editor?.flushPending();
-    const note = this.db.createNote({ title: 'Untitled', content: '', parentId });
+    const note = this.db.createNote({ title: this.db.availableTitle('Untitled'), content: '', parentId });
     this.noteList.expandTo(note.id); // reveal it if the parent was collapsed
     this.noteList.render();
     this.openNote(note.id, { focus: 'title' });
@@ -251,7 +308,7 @@ class App {
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open);
   }
 
   #toggleSidebar() {
@@ -348,22 +405,59 @@ class App {
     await this.backup.show();
   }
 
+  async #ensureLinkTools() {
+    if (this.linkTools) return this.linkTools;
+    if (this.linkToolsReady) return this.linkToolsReady;
+    this.linkToolsReady = Promise.all([
+      import('../components/link-tools-view.js'),
+      import('../core/knowledge-index.css'),
+      this.db.initializeKnowledgeIndex(),
+    ]).then(([{ LinkToolsView, createLinkToolsElements }]) => {
+      this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
+        onApplied: ({ mode, result }) => {
+          if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
+          else if (mode === 'mention' && result.target) this.editor?.refresh();
+          this.linkTools?.modal.setReturnFocus(this.el.editor.querySelector('.editor__title'));
+        },
+      });
+      return this.linkTools;
+    }).catch((error) => {
+      this.linkToolsReady = null;
+      throw error;
+    });
+    return this.linkToolsReady;
+  }
+
+  async #showRename(noteId, proposedTitle) {
+    const note = this.db.getNote(noteId);
+    if (!note) return;
+    this.editor?.flushPending();
+    await this.db.flush();
+    const tools = await this.#ensureLinkTools();
+    tools.showRename(noteId, proposedTitle);
+  }
+
+  async #showMention(mention) {
+    this.editor?.flushPending();
+    await this.db.flush();
+    const tools = await this.#ensureLinkTools();
+    tools.showMention(mention);
+  }
+
+  async #showLinkReport() {
+    this.#closeMenu();
+    const tools = await this.#ensureLinkTools();
+    tools.showReport();
+  }
+
   async #ensureHistory() {
     if (this.history) return this.history;
-    const [{ HistoryView }] = await Promise.all([
+    const [{ HistoryView, createHistoryElements }] = await Promise.all([
       import('../components/history-view.js'),
       this.#ensureRecovery(),
     ]);
     this.history = new HistoryView(
-      {
-        overlay: this.el.historyOverlay,
-        list: this.el.historyList,
-        preview: this.el.historyPreview,
-        diff: this.el.historyDiff,
-        status: this.el.historyStatus,
-        restore: this.el.historyRestore,
-        restoreCopy: this.el.historyRestoreCopy,
-      },
+      createHistoryElements(),
       this.recovery,
       {
         confirmRestore: ({ message }) => confirm(message),
@@ -376,24 +470,12 @@ class App {
 
   async #ensureBackup() {
     if (this.backup) return this.backup;
-    const [{ BackupView }] = await Promise.all([
+    const [{ BackupView, createBackupElements }] = await Promise.all([
       import('../components/backup-view.js'),
       this.#ensureRecovery(),
     ]);
     this.backup = new BackupView(
-      {
-        overlay: this.el.backupOverlay,
-        health: this.el.backupHealth,
-        snapshots: this.el.backupSnapshots,
-        status: this.el.backupStatus,
-        download: this.el.backupDownload,
-        createSnapshot: this.el.backupCreateSnapshot,
-        file: this.el.backupFile,
-        verify: this.el.backupVerify,
-        preview: this.el.backupPreview,
-        previewRestore: this.el.backupPreviewRestore,
-        restore: this.el.backupRestore,
-      },
+      createBackupElements(),
       this.recovery,
       {
         confirmRestore: ({ message }) => confirm(message),
@@ -436,6 +518,51 @@ class App {
     else setTimeout(initialize, 0);
   }
 
+  #scheduleKnowledgeInitialization() {
+    const initialize = () => {
+      void Promise.all([
+        import('../core/knowledge-index.css'),
+        this.db.initializeKnowledgeIndex(),
+        this.editor.enableOutline(),
+      ]).catch((error) => {
+        console.warn('[links] deferred contextual index unavailable:', error);
+      });
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 1_000 });
+    else setTimeout(initialize, 0);
+  }
+
+  #ensureNavigation() {
+    if (this.navigationController) return Promise.resolve(this.navigationController);
+    if (this.navigationReady) return this.navigationReady;
+    this.navigationReady = import('../utils/navigation.js').then(({ NavigationController }) => {
+      this.navigationController = new NavigationController(this.db, {
+        state: this.navigation,
+        recentIds: this.recentNoteIds,
+      });
+      this.#syncNavigationFrom(this.navigationController);
+      return this.navigationController;
+    }).catch((error) => {
+      this.navigationReady = null;
+      throw error;
+    });
+    return this.navigationReady;
+  }
+
+  #scheduleNavigationInitialization() {
+    const initialize = () => void this.#ensureNavigation().catch((error) => {
+      console.warn('[navigation] deferred initialization unavailable:', error);
+    });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 500 });
+    else setTimeout(initialize, 0);
+  }
+
+  #syncNavigationFrom(controller) {
+    this.navigation = controller.state;
+    this.recentNoteIds = controller.recentIds;
+    this.#syncNavigationControls();
+  }
+
   #openFirstRestoredNote() {
     this.currentId = null;
     const first = this.db.getNotesSorted()[0];
@@ -472,11 +599,14 @@ class App {
         run: () => this.newFromTemplate(t),
       })),
       { id: 'search', title: 'Search notes', hint: 'Sidebar', icon: '🔍', run: () => this.#focusSearch() },
+      { id: 'back', title: 'Go back to previous note', hint: 'Navigation · Alt+Left', icon: '←', run: () => this.goBack() },
+      { id: 'forward', title: 'Go forward to next note', hint: 'Navigation · Alt+Right', icon: '→', run: () => this.goForward() },
       { id: 'graph', title: this.view === 'graph' ? 'Close graph view' : 'Open graph view', hint: 'View', icon: '🕸️', run: () => this.toggleGraph() },
       { id: 'theme', title: 'Toggle dark / light theme', hint: 'Appearance', icon: '🌓', run: () => this.theme.toggle() },
       { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.trash.show() },
       { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.settings.show() },
       { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
+      { id: 'link-report', title: 'Open link integrity report', hint: 'Knowledge graph', icon: '🔗', run: () => this.#showLinkReport() },
       { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
       { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
@@ -497,16 +627,20 @@ class App {
     return cmds;
   }
 
-  openOrCreateByTitle(title) {
-    const existing = this.db.resolveTitle(title);
-    if (existing) return this.openNote(existing.id);
+  openOrCreateByTitle(title, fragment = null) {
+    const resolution = this.db.resolveTitleResult(title);
+    if (resolution.status === 'resolved') return this.openNote(resolution.note.id, { fragment });
+    if (resolution.status === 'ambiguous') {
+      void this.#showLinkReport();
+      return;
+    }
     // If a note with this title is sitting in the Trash, restore it rather than
     // forking a second, live note with a duplicate title (which would make
     // wikilink/backlink/graph resolution ambiguous once both are live).
     const trashed = this.db.findTrashedByTitle(title);
     if (trashed) {
       this.db.restoreNote(trashed.id);
-      return this.openNote(trashed.id);
+      return this.openNote(trashed.id, { fragment });
     }
     const note = this.db.createNote({ title: title.trim() || 'Untitled', content: '' });
     this.openNote(note.id, { focus: 'content' });
@@ -577,6 +711,9 @@ class App {
     });
     this.el.historyBtn?.addEventListener('click', () => this.#showHistory());
     this.el.backupBtn?.addEventListener('click', () => this.#showBackup());
+    this.el.linkReportBtn?.addEventListener('click', () => this.#showLinkReport());
+    for (const button of [this.el.navBack, this.el.mobileNavBack]) button?.addEventListener('click', () => this.goBack());
+    for (const button of [this.el.navForward, this.el.mobileNavForward]) button?.addEventListener('click', () => this.goForward());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
     this.el.sidebarBackdrop?.addEventListener('click', () => this.#closeSidebar());
   }
@@ -645,9 +782,10 @@ class App {
           tags: Array.isArray(data.tags) ? data.tags : [],
           banner: data.banner || null,
           pinned: !!data.pinned,
+          aliases: Array.isArray(data.aliases) ? data.aliases : [],
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
-        });
+        }, { allowIdentityConflicts: true });
         if (data.id) idMap.set(data.id, note.id);
         if (typeof data.parentId === 'string') pendingParents.push({ id: note.id, oldParent: data.parentId });
         imported++;
@@ -663,7 +801,14 @@ class App {
         const first = this.db.getNotesSorted()[0];
         if (first) this.openNote(first.id);
       }
-      alert(`Imported ${imported} note${imported === 1 ? '' : 's'}.`);
+      const tools = await this.#ensureLinkTools();
+      const report = tools.integrityReport();
+      if (report.healthy) {
+        alert(`Imported ${imported} note${imported === 1 ? '' : 's'}.`);
+      } else {
+        alert(`Imported ${imported} note${imported === 1 ? '' : 's'}. ${report.ambiguities.length} ambiguous title or alias group${report.ambiguities.length === 1 ? '' : 's'} need repair; NoteForge will never guess those link targets.`);
+        tools.showReport();
+      }
     } catch (err) {
       alert(`Import failed: ${err.message}`);
     } finally {
@@ -674,6 +819,12 @@ class App {
   #seed() {
     let firstId = null;
     for (const data of sampleNotes) {
+      const existing = this.db.resolveTitleResult(data.title);
+      if (existing.status === 'resolved') {
+        if (!firstId) firstId = existing.note.id;
+        continue;
+      }
+      if (existing.status === 'ambiguous') continue;
       const note = this.db.createNote(data);
       if (!firstId) firstId = note.id;
     }
@@ -689,7 +840,7 @@ class App {
       // Command palette toggles even from within itself.
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        if ((this.trash?.open || this.settings?.open || this.history?.open || this.backup?.open) && !this.palette?.open) return; // don't stack over another modal
+        if (this.#anyModalOpen() && !this.palette?.open) return; // don't stack over another modal
         this.palette.toggle();
         return;
       }
@@ -707,6 +858,12 @@ class App {
       } else if (mod && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         this.toggleGraph();
+      } else if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        void this.goBack();
+      } else if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        void this.goForward();
       } else if (e.key === 'Escape') {
         if (!this.el.menuDropdown.hidden) { this.#closeMenu(); this.el.menuBtn.focus(); }
         else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();

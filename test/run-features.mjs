@@ -43,6 +43,28 @@ function captureRuntimeErrors(page, errors) {
   });
 }
 
+async function warmLazyAppModules(browser, base) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.evaluate(() => Promise.all([
+      import('/src/components/history-view.js'),
+      import('/src/components/backup-view.js'),
+      import('/src/components/link-tools-view.js'),
+      import('/src/core/revision-store.js'),
+      import('/src/core/recovery-service.js'),
+      import('/src/core/backup.js'),
+      import('/src/core/knowledge-index.js'),
+      import('/src/utils/navigation.js'),
+    ]));
+  } finally {
+    await context.close();
+  }
+}
+
 async function runRecoverySmoke(browser, base, runtimeErrors) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
@@ -66,7 +88,6 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 
     stage = 'persisting an edit';
-    await page.locator('.editor__title').fill('Recovery browser smoke');
     await page.locator('.blk[contenteditable="true"]').first().fill('Durable browser edit');
     const debouncedEdit = await page.evaluate(() => ({
       editor: document.querySelector('.blk[contenteditable="true"]')?.textContent || '',
@@ -236,6 +257,182 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Link-integrity smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  let stage = 'booting the app';
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.recovery), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => Promise.all([
+      window.app.db.initializeKnowledgeIndex(),
+      window.app.editor.enableOutline(),
+    ]));
+
+    stage = 'creating the Phase 2 fixture';
+    await page.evaluate(async () => {
+      const target = window.app.db.createNote({
+        id: 'phase2-target',
+        title: 'Phase2 Target',
+        aliases: ['Previous Phase2'],
+        content: '# Repeat\n\n## Repeat\n\n#### Café\n\n###### Final',
+      });
+      window.app.db.createNote({
+        id: 'phase2-source',
+        title: 'Phase2 Source',
+        content: '# Source context\n[[Phase2 Target|shown]]\nPhase2 Target appears in prose.\n`[[Phase2 Target]]`\n[[Previous Phase2]]',
+      });
+      await window.app.db.flush();
+      window.app.openNote(target.id);
+    });
+    await page.locator('.editor__title').waitFor({ state: 'visible' });
+    check('390px Phase 2 editor and navigation chrome have no horizontal overflow',
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    check('contextual backlinks and unlinked mentions render from one live index',
+      await page.locator('.backlinks__item').count() === 2
+      && await page.locator('.mention-convert').count() === 1
+      && /Source context/.test(await page.locator('.backlinks').innerText()));
+
+    stage = 'jumping through the mobile heading outline';
+    await page.locator('.outline__summary').click();
+    check('mobile outline exposes deterministic duplicate heading anchors',
+      await page.locator('.outline__item').evaluateAll((items) => items.map((item) => item.dataset.outlineAnchor).join(','))
+        === 'heading-repeat,heading-repeat-2,heading-café,heading-final');
+    await page.locator('[data-outline-anchor="heading-final"]').click();
+    check('outline click lands focus on the exact rendered heading after editor render',
+      await page.evaluate(() => document.activeElement?.id === 'heading-final'));
+
+    stage = 'previewing and applying a rename-safe title edit';
+    await page.locator('.editor__title').fill('Phase2 Atlas');
+    await page.locator('.editor__title').press('Enter');
+    await page.locator('#link-tools-overlay').waitFor({ state: 'visible' });
+    check('full-app rename preview reports exact protected notes and links before mutation',
+      /1 exact inbound link across 2 protected notes/.test(await page.locator('#link-tools-overlay').innerText())
+      && await page.evaluate(() => window.app.db.getNote('phase2-target')?.title === 'Phase2 Target'));
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'p', ctrlKey: true, bubbles: true, cancelable: true,
+    })));
+    check('command-palette shortcut cannot stack a second modal over Link tools',
+      await page.locator('#palette-overlay').isHidden());
+    await page.locator('#link-tools-apply').click();
+    await page.waitForFunction(() => /Rename completed/.test(document.querySelector('#link-tools-status')?.textContent || ''));
+    check('full-app rename atomically rewrites links, preserves excluded code, and resolves old aliases',
+      await page.evaluate(() => {
+        const target = window.app.db.getNote('phase2-target');
+        const source = window.app.db.getNote('phase2-source');
+        return target?.title === 'Phase2 Atlas'
+          && target.aliases.includes('Phase2 Target')
+          && target.aliases.includes('Previous Phase2')
+          && source?.content.includes('[[Phase2 Atlas|shown]]')
+          && source.content.includes('`[[Phase2 Target]]`')
+          && source.content.includes('[[Previous Phase2]]')
+          && window.app.db.resolveTitle('Phase2 Target')?.id === target.id
+          && window.app.db.resolveTitle('Previous Phase2')?.id === target.id;
+      }));
+    check('full-app rename captured pre-change revisions for every protected note',
+      await page.evaluate(async () => {
+        const batches = await Promise.all([
+          window.app.recovery.listRevisions('phase2-target'),
+          window.app.recovery.listRevisions('phase2-source'),
+        ]);
+        return batches.every((revisions) => revisions.some((revision) => revision.reason === 'pre_rename'));
+      }));
+    await page.keyboard.press('Escape');
+    check('closing the rename dialog restores focus to the re-rendered title control',
+      await page.evaluate(() => document.activeElement?.classList.contains('editor__title')));
+
+    stage = 'previewing and applying an unlinked mention';
+    await page.locator('.mention-convert').click();
+    await page.locator('#link-tools-overlay').waitFor({ state: 'visible' });
+    check('full-app mention conversion preview names source, target, heading, and exact edit',
+      /Phase2 Source/.test(await page.locator('#link-tools-overlay').innerText())
+      && /Phase2 Atlas/.test(await page.locator('#link-tools-overlay').innerText())
+      && /Source context/.test(await page.locator('#link-tools-overlay').innerText())
+      && /No data changes until/.test(await page.locator('#link-tools-overlay').innerText()));
+    await page.locator('#link-tools-apply').click();
+    await page.waitForFunction(() => /Mention converted/.test(document.querySelector('#link-tools-status')?.textContent || ''));
+    check('full-app mention conversion edits one exact source range with a safety revision',
+      await page.evaluate(async () => {
+        const source = window.app.db.getNote('phase2-source');
+        const revisions = await window.app.recovery.listRevisions('phase2-source');
+        return source?.content.includes('[[Phase2 Atlas|Phase2 Target]] appears in prose.')
+          && revisions.some((revision) => revision.reason === 'pre_link_conversion');
+      }));
+    await page.keyboard.press('Escape');
+
+    stage = 'using back and forward navigation';
+    await page.locator('.backlinks__item').first().click();
+    await page.waitForFunction(() => window.app.currentId === 'phase2-source');
+    check('alias and canonical links render as resolved after rename',
+      await page.locator('a.wikilink--missing').count() === 0
+      && await page.locator('a[data-wikilink]').count() >= 3);
+    await page.locator('#mobile-nav-back').click();
+    await page.waitForFunction(() => window.app.currentId === 'phase2-target');
+    await page.locator('#mobile-nav-forward').click();
+    await page.waitForFunction(() => window.app.currentId === 'phase2-source');
+    check('mobile Back and Forward replay history without duplicate entries',
+      await page.evaluate(() => window.app.navigation.current === 'phase2-source'
+        && window.app.navigation.back.at(-1) === 'phase2-target'
+        && window.app.navigation.forward.length === 0));
+
+    stage = 'importing an ambiguous alias for repair reporting';
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('#import-file').setInputFiles({
+      name: 'phase2-alias-import.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([{
+        id: 'external-id',
+        title: 'Imported ambiguous alias',
+        content: '# Imported',
+        aliases: ['Phase2 Atlas'],
+      }])),
+    });
+    await page.locator('#link-tools-overlay').waitFor({ state: 'visible' });
+    check('merge import preserves aliases and opens the ambiguity repair report instead of guessing',
+      await page.evaluate(() => {
+        const imported = window.app.db.getAllNotes().find((note) => note.title === 'Imported ambiguous alias');
+        return imported?.aliases[0] === 'Phase2 Atlas'
+          && window.app.db.resolveTitle('Phase2 Atlas')?.id === 'phase2-target';
+      })
+      && /Title and alias collision/.test(await page.locator('#link-tools-overlay').innerText()));
+    await page.keyboard.press('Escape');
+
+    stage = 'verifying persisted recents after reload';
+    await page.evaluate(() => window.app.db.flush());
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    check('persisted recents survive reload while session history starts without a duplicate reload entry',
+      await page.evaluate(() => window.app.recentNoteIds.slice(0, 2).join(',') === 'phase2-source,phase2-target'
+        && window.app.navigation.back.length === 0));
+    await page.locator('#sidebar-toggle').click();
+    await page.locator('#menu-btn').click();
+    await page.locator('#palette-btn').click();
+    check('command palette presents persisted recent-note order after reload',
+      /Phase2 Source/.test(await page.locator('.palette__item').first().innerText()));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      navigation: window.app?.navigation,
+      recents: window.app?.recentNoteIds,
+      linkStatus: document.querySelector('#link-tools-status')?.textContent || '',
+      linkText: document.querySelector('#link-tools-overlay')?.innerText || '',
+    })).catch(() => null);
+    throw new Error(`Link-integrity smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -250,7 +447,8 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     const appUrl = new URL('/noteforge/', root).href;
     const shellResponse = await fetch(appUrl);
     const shellHtml = await shellResponse.text();
-    const entryPath = shellHtml.match(/<script[^>]+src="([^"]+)"/)?.[1];
+    const entryMatch = shellHtml.match(/<script[^>]+src=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/);
+    const entryPath = entryMatch?.[1] || entryMatch?.[2] || entryMatch?.[3];
     if (!shellResponse.ok || !entryPath) throw new Error(`Production shell preflight failed (${shellResponse.status})`);
     const entryResponse = await fetch(new URL(entryPath, root));
     const entryType = entryResponse.headers.get('content-type') || '';
@@ -288,6 +486,18 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     });
     if (!worker.ready || !worker.controller) throw new Error(`Service worker did not become ready and controlling: ${JSON.stringify(worker)}`);
 
+    // The app intentionally starts recovery/index initialization after its first
+    // usable paint. Let those startup requests settle before the deliberate
+    // offline navigation so the browser does not report navigation-aborted
+    // requests as runtime failures. The History, Backup, and Link-tools views
+    // remain unopened/cold and are still exercised for first use while offline.
+    await page.waitForFunction(() => Boolean(window.app?.recovery), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => Promise.all([
+      window.app.recoveryReady,
+      window.app.db.initializeKnowledgeIndex(),
+      window.app.editor.enableOutline(),
+    ]));
+
     stage = 'reloading the production app offline';
     await context.setOffline(true);
     await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
@@ -316,6 +526,13 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
       throw new Error(`Unexpected offline backup filename: ${download.suggestedFilename()}`);
     }
     checks.push('PASS  production Backup center and backup-core lazy chunks work on first use offline');
+    await page.keyboard.press('Escape');
+
+    stage = 'opening Link integrity report for the first time offline';
+    await page.locator('#menu-btn').click();
+    await page.locator('#link-report-btn').click();
+    await page.locator('#link-tools-overlay').waitFor({ state: 'visible' });
+    checks.push('PASS  production Link tools lazy chunk opens on first use offline');
     return checks.join('\n');
   } catch (error) {
     throw new Error(`Production offline smoke failed while ${stage}: ${error?.message || error}`);
@@ -368,6 +585,11 @@ async function main() {
     { timeout: TIMEOUT }
   );
 
+  // The integrated app uses several genuinely post-usable chunks. Transform
+  // them before error capture so Vite's one-time dependency discovery cannot
+  // abort an authoritative delayed-import request.
+  await warmLazyAppModules(browser, base);
+
   const runtimeErrors = [];
   captureRuntimeErrors(page, runtimeErrors);
 
@@ -388,11 +610,12 @@ async function main() {
     // and result extraction even though the rerun remains healthy.
     output = await page.locator('#out').textContent({ timeout: TIMEOUT });
     const recoveryOutput = await runRecoverySmoke(browser, base, runtimeErrors);
+    const linkIntegrityOutput = await runLinkIntegritySmoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
     output = `Runner error: ${err.message || err}`;

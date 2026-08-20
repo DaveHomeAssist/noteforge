@@ -12,11 +12,37 @@ const REASON_LABELS = {
   pre_reconcile: 'Before reconciliation',
   pre_bulk_replace: 'Before bulk replace',
   pre_rename: 'Before rename',
+  pre_alias_repair: 'Before alias repair',
+  pre_link_conversion: 'Before link conversion',
   pre_restore: 'Before restore',
   manual: 'Manual snapshot',
 };
 
 const asArray = (value) => (Array.isArray(value) ? value : []);
+
+/** Create the lazy History dialog only when the feature is first opened. */
+export function createHistoryElements(root = document.body) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal';
+  overlay.id = 'history-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
+    <div class="modal__panel recovery-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1">
+      <header class="modal__header"><div><h2 class="modal__title" id="history-title">↶ Revision history</h2><p class="muted recovery-modal__subtitle">Browser-local recovery points for the current note</p></div><button class="btn btn--ghost" data-close title="Close" aria-label="Close revision history">✕</button></header>
+      <div class="history-view"><nav id="history-list" class="history-view__list" aria-label="Note revisions"></nav><div class="history-view__detail"><div id="history-preview" class="history-view__preview"></div><div id="history-diff" class="history-view__diff"></div></div></div>
+      <footer class="recovery-modal__footer"><span id="history-status" class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button id="history-restore-copy" class="btn btn--ghost" disabled>Restore as copy</button><button id="history-restore" class="btn btn--primary" disabled>Restore revision</button></div></footer>
+    </div>`;
+  root.appendChild(overlay);
+  return {
+    overlay,
+    list: overlay.querySelector('#history-list'),
+    preview: overlay.querySelector('#history-preview'),
+    diff: overlay.querySelector('#history-diff'),
+    status: overlay.querySelector('#history-status'),
+    restore: overlay.querySelector('#history-restore'),
+    restoreCopy: overlay.querySelector('#history-restore-copy'),
+  };
+}
 
 function dateValue(value) {
   const ms = new Date(value || 0).getTime();

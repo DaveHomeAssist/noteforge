@@ -9,7 +9,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { escapeHtml, escapeAttr, normalizeTitle } from './helpers.js';
-import { WIKILINK_RE, extractWikilinks } from './wikilinks.js';
+import { parseWikilinks, extractWikilinks } from './wikilinks.js';
 
 // Re-export so existing importers of markdown.js keep working.
 export { extractWikilinks };
@@ -26,17 +26,19 @@ const wikilinkExtension = {
   name: 'wikilink',
   level: 'inline',
   start(src) {
-    const i = src.indexOf('[[');
-    return i < 0 ? undefined : i;
+    const link = src.indexOf('[[');
+    if (link < 0) return undefined;
+    return link > 0 && src[link - 1] === '!' ? link - 1 : link;
   },
   tokenizer(src) {
-    const m = WIKILINK_RE.exec(src);
-    if (m && m.index === 0) {
+    const token = parseWikilinks(src)[0];
+    if (token && token.start === 0) {
       return {
         type: 'wikilink',
-        raw: m[0],
-        target: m[1].trim(),
-        alias: (m[2] || m[1]).trim(),
+        raw: token.raw,
+        target: token.target,
+        alias: token.display || `${token.target}${token.fragment ? `#${token.fragment}` : ''}`,
+        fragment: token.fragment,
       };
     }
     return undefined;
@@ -45,7 +47,7 @@ const wikilinkExtension = {
     const exists = knownTitles.has(normalizeTitle(token.target));
     const cls = exists ? 'wikilink' : 'wikilink wikilink--missing';
     return (
-      `<a href="#" class="${cls}" data-wikilink="${escapeAttr(token.target)}">` +
+      `<a href="#" class="${cls}" data-wikilink="${escapeAttr(token.target)}"${token.fragment ? ` data-fragment="${escapeAttr(token.fragment)}"` : ''}>` +
       `${escapeHtml(token.alias)}</a>`
     );
   },
@@ -73,7 +75,7 @@ const PURIFY_CONFIG = {
   // Allow collapsible <details>/<summary> (with the `open` state) so toggle
   // blocks render as native disclosure widgets. Everything else is sanitized.
   ADD_TAGS: ['details', 'summary'],
-  ADD_ATTR: ['data-wikilink', 'target', 'rel', 'open'],
+  ADD_ATTR: ['data-wikilink', 'data-fragment', 'target', 'rel', 'open'],
 };
 
 /** Render markdown (with wikilinks) to sanitized HTML. */

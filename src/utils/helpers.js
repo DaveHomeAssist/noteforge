@@ -66,7 +66,15 @@ export function formatDate(iso) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Case-insensitive title match, trimmed. Used to resolve wikilinks. */
+/**
+ * Comparison-only normalization for titles and aliases. Stored spelling is
+ * never rewritten: resolution uses Unicode compatibility normalization,
+ * collapsed whitespace, and locale-independent case folding.
+ */
 export function normalizeTitle(title) {
-  return String(title ?? '').trim().toLowerCase();
+  return String(title ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .toLowerCase();
 }

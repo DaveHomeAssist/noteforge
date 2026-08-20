@@ -36,6 +36,17 @@ they are initialized after `app.ready` during idle time or on first recovery use
 are build-time precached for offline first use. Full HTML/CSS/JavaScript output is
 312,704 bytes. No dependency was added in this phase.
 
+Phase 2 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+6,353 bytes + directly referenced CSS 31,477 bytes + directly referenced JavaScript
+219,249 bytes = 257,079-byte initial shell, 101 bytes below the authoritative
+257,180-byte ceiling. JavaScript is 2,062 bytes above its diagnostic ceiling, offset
+by HTML being 2,147 bytes below its diagnostic ceiling and CSS being 16 bytes below;
+the combined budget remains green without an exception. The production HTML is
+minified during the build, and navigation, outline, contextual indexing, Link tools,
+and recovery remain genuinely post-usable chunks. Deferred CSS/JavaScript totals
+101,990 bytes and is build-time precached for offline first use; full HTML/CSS/
+JavaScript output is 359,069 bytes. No dependency was added in this phase.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

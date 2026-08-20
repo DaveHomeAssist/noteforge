@@ -11,6 +11,7 @@ import { parse, serialize, makeBlock, numberedLabels, LIST_TYPES } from '../util
 import { renderInline, renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { fileToBannerDataURL } from '../utils/image.js';
+import { nextHeadingAnchor } from '../utils/headings.js';
 
 const MULTILINE = new Set(['code', 'raw']); // edited as plain multi-line text
 const NONTEXT = new Set(['divider', 'date', 'image']); // not text-editable: select & delete
@@ -63,6 +64,13 @@ const el = (tag, cls) => {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function blockHeading(block) {
+  if (block.type === 'heading') return { level: block.meta?.level || 1, text: block.text };
+  if (block.type !== 'raw') return null;
+  const match = /^(#{4,6})\s+(.+?)\s*$/.exec(block.text || '');
+  return match ? { level: match[1].length, text: match[2] } : null;
+}
 
 /**
  * Format an ISO date (YYYY-MM-DD) as a friendly label, parsed as local time.
@@ -155,6 +163,19 @@ export class BlockEditor {
     if (first) this.#focusBlock(first.id, 'start');
   }
 
+  jumpToHeading(anchor, { focus = true } = {}) {
+    const row = [...this.host.querySelectorAll('[data-heading-anchor]')]
+      .find((element) => element.dataset.headingAnchor === anchor);
+    if (!row) return false;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+    if (focus) {
+      row.tabIndex = -1;
+      row.focus({ preventScroll: true });
+    }
+    return true;
+  }
+
   destroy() {
     this.destroyed = true; // any in-flight image insert resolving later becomes a no-op
     this.imageBusy = false;
@@ -181,6 +202,15 @@ export class BlockEditor {
     try {
       setKnownTitles(this.getTitles());
       const numbers = numberedLabels(this.blocks);
+      const headingCounts = new Map();
+      this.headingAnchors = new Map();
+      for (const block of this.blocks) {
+        const heading = blockHeading(block);
+        if (heading) this.headingAnchors.set(block.id, {
+          ...heading,
+          anchor: nextHeadingAnchor(heading.text, headingCounts),
+        });
+      }
       this.host.innerHTML = '';
       for (const block of this.blocks) {
         this.host.appendChild(this.#buildRow(block, numbers));
@@ -194,7 +224,14 @@ export class BlockEditor {
     const row = el('div', 'blk-row');
     row.dataset.id = block.id;
     row.dataset.type = block.type;
-    if (block.type === 'heading') row.dataset.level = block.meta?.level || 1;
+    const heading = this.headingAnchors?.get(block.id);
+    if (heading) {
+      row.dataset.level = heading.level;
+      row.dataset.headingAnchor = heading.anchor;
+      row.id = heading.anchor;
+      row.setAttribute('role', 'heading');
+      row.setAttribute('aria-level', String(heading.level));
+    }
     row.style.setProperty('--indent', block.meta?.indent || 0);
     if (block.id === this.selectedId || this.selectedIds.has(block.id)) row.classList.add('blk-row--selected');
 
@@ -1027,7 +1064,7 @@ export class BlockEditor {
     const link = e.target.closest('a[data-wikilink]');
     if (link) {
       e.preventDefault();
-      this.onOpenWikilink(link.dataset.wikilink);
+      this.onOpenWikilink(link.dataset.wikilink, link.dataset.fragment || null);
       return;
     }
     const check = e.target.closest('.blk-check');
