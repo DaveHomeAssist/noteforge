@@ -1,0 +1,375 @@
+1. PROJECT SUMMARY
+
+Objective:
+Build and release the 20-feature NoteForge daily-driver program while preserving local-first ownership, lossless Markdown round-tripping, existing user data, offline operation, accessibility, and the canonical System by Dave deployment.
+
+Key Outcomes:
+- Ship all 20 planned capabilities: local revision history, rename-safe wikilinks, saved searches, idempotent Daily notes, Quick Capture, heading outline, find/replace, Archive, contextual backlinks, unlinked mentions, task dashboard, note properties, calendar, web clipper, back/forward/recents, tabs and split view, bulk note actions, backup center, folder import/reconciliation, and block links/transclusion.
+- Preserve every existing schema-version-3 vault through tested forward migrations while retaining the IndexedDB identifier `my-notes-app`, all note IDs, Markdown content, images, tags, banners, nesting, Trash state, settings, and migration behavior.
+- Keep Markdown as the source of truth: every new content syntax must pass parse/serialize fixed-point tests, and every new metadata field must survive JSON backup/export/import without loss.
+- Keep every release green through `npm test`, `npm run test:browser`, `npm run build`, and `npm audit --audit-level=high`, with zero unexpected page, console, request, or HTTP errors in the browser runner.
+- Publish each completed release to the GitHub Pages mirror and the canonical `https://systembydave.com/noteforge/` route, with exact source provenance, canonical/mirror bundle parity, service-worker update proof, and disposable-profile interaction checks.
+
+Assumptions:
+- The phrase “based on the most recent user request” means this plan must implement the 20 features from the immediately preceding NoteForge brainstorm, not merely select one feature. The features are grouped into independently releasable phases to keep the program reviewable.
+- No delivery deadline, budget, or team size was supplied. Timelines assume one senior JavaScript developer working primarily on NoteForge, with part-time UX/accessibility review and release verification; elapsed time increases if only one person performs every review.
+- NoteForge remains a local-first static PWA with no mandatory account, server, cloud sync, collaboration system, telemetry, or remote database. Cloud sync and inline-WYSIWYG/editor-framework adoption remain excluded architectural forks.
+- Existing product behavior and visual language are authoritative where no mockup was supplied. New UI uses the current component, modal, command-palette, tokenized CSS, mobile breakpoint, keyboard, focus-management, and reduced-motion conventions.
+- Schema changes are permitted for these new features, but they must be additive, sequential migrations from the existing schema-version-3 payload. The value and meaning of schema version 3 and the IndexedDB identifier `my-notes-app` must not be altered.
+- Node.js 22 remains the supported local and CI baseline. Existing dependency major versions remain fixed unless a separate reviewed decision authorizes a major upgrade. The `yaml` package may be added for standards-compliant frontmatter parsing only after license, bundle-size, CSP, and `npm audit` checks pass; it must be lockfile-pinned and isolated behind a small adapter.
+- Quick Capture supports text, URL, clipboard, and local image capture inside the app. The static PWA share target uses a GET action for title/text/URL on supporting platforms; shared binary files fall back to the in-app image picker because GitHub Pages cannot accept a POST upload endpoint.
+- Web clipping ships first as a local bookmarklet plus a NoteForge capture route. A separately distributed browser extension is not required for acceptance and would need its own store-signing and review plan.
+- Folder reconciliation is manual and user-initiated. It reads a selected directory, previews additions/changes/conflicts, and applies only confirmed operations; it is not background or two-way cloud sync.
+- “Lock” or encryption features, print/PDF export, and a spatial canvas are not part of this 20-feature scope because they were not included in the final prioritized list. They remain candidates for a later program.
+- GitHub authentication, Pages permissions, and both existing repository remotes remain available to the release owner. Missing access changes release readiness to Blocked but does not change implementation scope.
+
+2. PHASED IMPLEMENTATION PLAN
+
+Phase Name: Phase 0: Baseline, Contracts, and Release Controls
+
+Goal:
+Freeze the verified starting point and define the data, UX, migration, performance, security, and acceptance contracts that every later phase must satisfy.
+
+Key Milestones:
+- Record the starting commit, clean worktree, Node/npm versions, `npm ci`, `npm test`, `npm run test:browser`, `npm run build`, and `npm audit --audit-level=high` results in `docs/implementation/baseline.md`; the baseline must retain at least 227 Node assertions and 306 browser assertions with zero failures.
+- Create `docs/implementation/feature_acceptance_matrix.md` with one row for each of the 20 features, its owning phase, data changes, UI surfaces, keyboard/mobile/accessibility behavior, unit/browser tests, and explicit exit criteria.
+- Add sanitized schema-version-3 fixtures covering blank notes, nested notes, images, banners, aliases in wikilink display text, Trash, settings, large vaults, and malformed imports under `test/fixtures/`; prove current migration and import code reads them without mutation or loss.
+- Create architecture decisions for revision retention, alias/link rewriting, frontmatter parsing, task due-date syntax, manual folder reconciliation, and multi-pane state under `docs/architecture/`; resolve each decision to the behavior stated in later phases.
+- Define performance budgets: 1,000-note search interaction under 150 ms on the CI reference machine, editor input without observable caret loss, initial app shell under the existing bundle plus 20%, and no unbounded revision or backup storage growth.
+- Define the release checklist in `docs/implementation/release_checklist.md`, including NoteForge CI, System by Dave synchronization/provenance, exact-SHA workflow checks, live metadata, service worker, desktop, and 390 px smoke tests.
+
+Dependencies:
+- Clean `/Users/daverobertson/Code/noteforge` checkout on `main` matching `origin/main`.
+- Existing Node 22 toolchain, npm lockfile, Playwright/Chrome fallback, and GitHub CLI authentication.
+
+Required Resources:
+- Senior JavaScript developer/NoteForge maintainer.
+- Node.js 22, npm, Git, GitHub CLI, Playwright, Chrome, and the existing NoteForge test/build scripts.
+- Review access to `/Users/daverobertson/Code/system-by-dave` for release-contract validation.
+
+Estimated Timeline:
+3–5 days.
+
+Owner / Responsible Party:
+NoteForge maintainer, with acceptance-matrix review by the product owner.
+
+Risks / Failure Points:
+- An incomplete schema-version-3 fixture set could allow a later migration to pass tests while corrupting real vault variants.
+- Unmeasured performance baselines would make regressions subjective and delay release decisions.
+- Ambiguous syntax for properties, task dates, or block IDs would create incompatible Markdown before implementation begins.
+
+Phase Name: Phase 1: Revision History and Backup Center
+
+Goal:
+Add recovery from accidental edits and visible storage/backup health before new metadata and high-volume workflow features increase migration risk.
+
+Key Milestones:
+- Extend `src/core/storage.js` with namespaced key enumeration and batched reads/writes without changing `DB_NAME`, `STORE`, or existing note/config keys; add fallback behavior that reports revision-history unavailability when durable IndexedDB is unavailable.
+- Add `src/core/revision-store.js` with revision records containing note ID, timestamp, content hash, metadata hash, reason, and parent revision; store identical content once by SHA-256 and enforce configurable per-note count and age retention limits.
+- Capture revisions only at durable boundaries—after a completed autosave, before import/reconciliation, before destructive bulk replacement, and before restoring another revision—rather than on every keystroke.
+- Add `src/components/history-view.js` with chronological preview, text diff, Restore, and Restore as Copy actions; restoration must create a safety revision first and must never silently overwrite the current note.
+- Add `src/components/backup-view.js` showing IndexedDB/fallback status, storage usage/quota when available, last successful persistence, last portable backup, rolling local vault snapshots, Download JSON Backup, Verify Backup, and Restore Preview.
+- Add retention, hash-deduplication, restore, quota-error, fallback-storage, malformed-backup, keyboard, focus-trap, mobile, and large-image regression coverage; update README and ROADMAP when the phase ships.
+
+Dependencies:
+- Phase 0 baseline, fixtures, revision-retention decision, and release checklist completed.
+
+Required Resources:
+- NoteForge maintainer.
+- Browser IndexedDB, Web Crypto SHA-256, StorageManager quota API where available, existing JSON import/export utilities, and Playwright.
+- UX/accessibility reviewer for history comparison and restore confirmation flows.
+
+Estimated Timeline:
+2–3 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with accessibility review by the designated QA reviewer.
+
+Risks / Failure Points:
+- Image-bearing Markdown can inflate revision storage; missing deduplication or retention would exhaust browser quota and jeopardize saves.
+- A restore implementation that bypasses the serialized persistence queue could race with autosave and resurrect stale content.
+- Treating an in-IndexedDB snapshot as an independent backup could mislead users; the UI must distinguish local history from a downloaded portable backup.
+- Private-mode/localStorage fallback cannot safely support large revision history and must degrade visibly rather than fail silently.
+
+Phase Name: Phase 2: Link Integrity and Knowledge Navigation
+
+Goal:
+Make title changes safe and improve movement through notes, headings, backlinks, and inferred relationships.
+
+Key Milestones:
+- Add an `aliases` array to the Note model through an additive migration; normalize aliases case-insensitively, reject ambiguous alias/title collisions, and preserve them in JSON import/export and backups.
+- Implement rename-safe wikilinks: before changing a title, count exact inbound `[[Old Title]]` and `[[Old Title|display]]` targets; atomically rewrite targets to the new title while preserving display aliases, add the previous title to note aliases, and create pre-change revisions for affected notes.
+- Update title resolution, autocomplete, graph edges, backlinks, missing-link rendering, and duplicate-title checks to resolve canonical titles first and unique aliases second; surface ambiguous imported aliases as a repair report instead of guessing.
+- Add a heading-outline component derived from the existing Markdown/block parser, with active-heading tracking, keyboard navigation, and click-to-jump that works after editor re-render and on 390 px layouts.
+- Upgrade backlinks to show sanitized referring snippets and heading context; add an Unlinked Mentions view that excludes code, URLs, existing wikilinks, and the note itself, with a previewed Convert to Wikilink action.
+- Add per-session back/forward navigation and persisted recent notes, exposed in the command palette and accessible controls; navigation history must not create duplicate entries during reload, Trash restoration, or programmatic opens.
+
+Dependencies:
+- Phase 1 revision capture and restore APIs available so link rewrites and mention conversions have recovery points.
+- Phase 0 alias/link-rewrite contract finalized.
+
+Required Resources:
+- NoteForge maintainer.
+- Existing `wikilinks.js`, `markdown.js`, `database.js`, `graph.js`, `editor.js`, command palette, and block parser.
+- Accessibility reviewer for outline and navigation controls.
+
+Estimated Timeline:
+3–4 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with product-owner review of rename confirmation and ambiguity repair copy.
+
+Risks / Failure Points:
+- Regex-only rewriting could alter code blocks, escaped text, or display aliases; transformations must use the wikilink parser and fixed-point tests.
+- Imported duplicate titles or aliases can make link targets ambiguous; the import/repair report must block destructive rewrites until ambiguity is resolved.
+- Unlinked-mention scanning can become expensive on large vaults; index normalized titles and scan incrementally after saves.
+- Heading anchors can become unstable when identical headings repeat; generate deterministic occurrence-aware anchors per render.
+
+Phase Name: Phase 3: Retrieval, Lifecycle, and Bulk Operations
+
+Goal:
+Turn existing search and note organization into reusable workflows while adding safe Archive, find/replace, and batch operations.
+
+Key Milestones:
+- Add saved-search records to persisted config with stable ID, name, icon, query, sort mode, and optional active tag; provide create, rename, reorder, run, and delete controls plus command-palette entries.
+- Add `archivedAt` through an additive migration; exclude archived notes from normal lists, graph, task views, and title autocomplete while making them available in an Archive view and explicit `is:archived` search.
+- Add current-note find/replace with next/previous navigation, case and whole-word options, match count, and a replacement preview that preserves block parsing and editor selection.
+- Add vault-wide find/replace as a preview-only result set followed by explicit Apply; create revisions for every affected note, skip Trash unless selected, and report changed, unchanged, skipped, and failed notes.
+- Add sidebar note multi-select with keyboard range selection and batch tag, archive/unarchive, reparent, export, and move-to-Trash actions; reject parent cycles and require confirmation for destructive batches.
+- Add unit/browser coverage for malformed saved queries, archived parent/child behavior, virtualized selection, partial batch failures, replacement escaping, undo/revision interaction, empty states, mobile controls, and accessible status announcements.
+
+Dependencies:
+- Phase 2 canonical title/alias resolution complete.
+- Phase 1 recovery points complete for bulk replacement and batch changes.
+
+Required Resources:
+- NoteForge maintainer.
+- Existing search-query parser, NoteList virtualization, tree helpers, modal system, command palette, export utilities, and revision store.
+- Keyboard/accessibility test support.
+
+Estimated Timeline:
+2–3 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with QA ownership of large-list and destructive-action scenarios.
+
+Risks / Failure Points:
+- Bulk UI that conflicts with drag-to-nest or virtualized rows could act on the wrong IDs; selection state must live outside rendered DOM windows.
+- Archive filtering could orphan visible children or hide valid backlink targets; define promotion and explicit-include behavior in pure tree/query tests.
+- Vault-wide replacement can corrupt Markdown if it operates on rendered HTML; all changes must operate on source Markdown with per-note previews.
+
+Phase Name: Phase 4: Daily Workflow, Capture, Tasks, and Calendar
+
+Goal:
+Make NoteForge fast enough for daily capture and useful as a lightweight personal action system without adding a backend.
+
+Key Milestones:
+- Add an Open Today’s Note command that uses the local `YYYY-MM-DD` title, opens an existing live note, offers to restore a matching trashed note, or creates one from the Daily template; repeated invocation must never create a duplicate.
+- Add a Quick Capture modal and command accepting plain text, URL, clipboard content, and a local image; default the destination to an Inbox note, allow choosing another note/new note, and flush the destination through the normal persistence queue.
+- Add a GET-based PWA `share_target` for title/text/URL capture, parse only allowlisted query parameters, clear the URL after import, and fall back to the Quick Capture modal when the platform does not support share targets.
+- Define task due dates as a Markdown-preserving `@due(YYYY-MM-DD)` suffix on task-list lines; extend parsing without changing ordinary `@date()` blocks, and add due-date editing through the task UI.
+- Add a task dashboard aggregating unchecked/checked tasks by Today, Overdue, Upcoming, No Date, note, and tag; toggling a task must update the exact source line and create normal autosave/history entries.
+- Add month/week calendar views derived from Daily-note titles, `@date()` blocks, and task `@due()` markers; selecting an item opens its source note and selecting an empty day opens/creates that Daily note.
+
+Dependencies:
+- Phase 3 saved views and Archive semantics complete so task/calendar queries share one filtering model.
+- Phase 2 navigation history complete for dashboard-to-note transitions.
+- Phase 1 revisions complete for source-line task mutations.
+
+Required Resources:
+- NoteForge maintainer.
+- Existing template, date-block, Markdown task-list, image, command-palette, manifest, PWA, and storage modules.
+- Real Android/Chromium PWA or equivalent supported device for share-target validation; unsupported browsers receive documented fallback behavior.
+
+Estimated Timeline:
+3–4 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with mobile/PWA validation by the QA reviewer.
+
+Risks / Failure Points:
+- Local dates around daylight-saving or time-zone changes can open the wrong Daily note; derive dates from local calendar fields and test boundary dates.
+- Source-line task toggling can target the wrong duplicate task; identify tasks by note ID plus stable parsed block occurrence and verify content before applying.
+- Static hosting cannot process POST-based shared files; binary capture must remain an in-app action and the manifest must not advertise unsupported behavior.
+- Calendar rendering can become dense or inaccessible on small screens; provide agenda fallback and keyboard navigation.
+
+Phase Name: Phase 5: Properties, Frontmatter, Block Links, and Transclusion
+
+Goal:
+Add portable structured metadata and precise reusable references without abandoning Markdown as the source of truth.
+
+Key Milestones:
+- Add a small `src/utils/frontmatter.js` adapter around a lockfile-pinned `yaml` dependency after license, bundle, CSP, and audit checks; parse only a leading YAML document, preserve unknown keys, and serialize deterministically without reformatting the note body.
+- Add a properties editor for text, number, boolean, ISO date, URL, single-select, and multi-select values; reject unsafe URLs, report invalid YAML without hiding the raw content, and expose property filters through the existing search-query engine.
+- Move aliases into a documented frontmatter `aliases` property while retaining compatibility with alias metadata created in Phase 2; migrate once, preserve imported unknown properties, and keep JSON backup/import lossless.
+- Define stable block IDs as a trailing `^identifier` marker on eligible Markdown blocks; validate uniqueness within a note, preserve IDs through block moves/edits, and expose Copy Block Link.
+- Support navigation to `[[Note#Heading]]` and `[[Note#^block-id]]`, then add read-only transclusion syntax `![[Note#^block-id]]`; render transclusions through the existing sanitized Markdown path with cycle and depth limits.
+- Add round-trip, malformed-frontmatter, unknown-property, duplicate-block-ID, rename, nested-transclusion, cycle, XSS, export, clipboard, mobile, and keyboard tests; document the supported syntax and interoperability limits.
+
+Dependencies:
+- Phase 2 alias and heading-navigation behavior complete.
+- Phase 4 task/date syntax stable before frontmatter property filters and calendar integration are finalized.
+- Phase 1 revisions available before migrations rewrite alias storage.
+
+Required Resources:
+- NoteForge maintainer and security reviewer.
+- npm registry access for the approved `yaml` dependency, existing DOMPurify/marked pipeline, block parser, wikilink parser, and migration runner.
+
+Estimated Timeline:
+4–6 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with dependency/security approval by the repository maintainer responsible for releases.
+
+Risks / Failure Points:
+- YAML serialization can rewrite user formatting or comments; preserve the original frontmatter when unchanged and limit generated edits to properties changed in the UI.
+- Transclusion cycles or deep graphs can freeze rendering; enforce visited-reference tracking, a documented depth cap, and visible cycle placeholders.
+- Block IDs can be lost during split/merge operations; define deterministic ownership rules and cover every block mutation path.
+- A new dependency can expand the bundle or advisory surface; fail the phase if audit, license, or bundle-budget gates are not met.
+
+Phase Name: Phase 6: Multi-Note Workspace, Web Clipper, and Folder Reconciliation
+
+Goal:
+Support research and comparison workflows across multiple notes and provide controlled paths for bringing external Markdown and web material into the local vault.
+
+Key Milestones:
+- Add a workspace state model for open tabs, active tab, optional two-pane split, pane ratio, and per-pane note/scroll position; persist only IDs/layout, tolerate deleted/archived notes, and restore a valid default workspace after reload.
+- Add accessible tab and split-view controls with close/reopen, move-to-other-pane, keyboard cycling, drag reorder, responsive collapse to one pane below the mobile breakpoint, and independent editor instances that flush before switching.
+- Add a NoteForge bookmarklet generator and `/noteforge/?capture=...` intake route for page title, URL, selected text, and optional sanitized article text; require an explicit Save destination and preserve the source URL in Markdown/frontmatter.
+- Add `src/utils/vault-import.js` to read a user-selected directory, map `.md` files to existing notes by embedded NoteForge ID first and normalized path/title second, and produce a deterministic Add/Update/Conflict/Unchanged plan without mutating the vault.
+- Add a reconciliation UI that previews source and destination, supports per-item decisions, creates a portable backup plus pre-change revisions, applies confirmed actions through the database queue, and emits a completion report with no hidden deletions.
+- Add cross-browser fallback tests, two-editor autosave race tests, mobile split-collapse tests, malicious clip/import sanitization, filename collision, nested-folder, unknown-frontmatter, interrupted reconciliation, and re-run idempotence tests.
+
+Dependencies:
+- Phase 5 stable frontmatter IDs and properties complete for reliable file identity.
+- Phase 1 backup/revision services complete before reconciliation writes.
+- Phase 2 navigation stack complete before tabs and panes replace single-note navigation.
+
+Required Resources:
+- NoteForge maintainer.
+- File System Access API on Chromium for direct folder selection, `<input webkitdirectory>` or file-input fallback where supported, existing export utilities, Playwright, and at least one manual Safari/Firefox compatibility pass.
+- Security review for imported HTML/Markdown, query parameters, and bookmarklet payload boundaries.
+
+Estimated Timeline:
+5–7 weeks.
+
+Owner / Responsible Party:
+Senior JavaScript developer, with security and cross-browser QA review before release.
+
+Risks / Failure Points:
+- Multiple editor instances can overwrite one another when the same note is open twice; prevent simultaneous editing of one note or introduce explicit single-writer ownership with visible handoff.
+- Filename/title matching without stable IDs can merge unrelated files; classify uncertain matches as conflicts requiring an explicit choice.
+- Bookmarklet/query payloads can exceed URL limits or carry unsafe markup; impose size limits, treat content as text until sanitized, and direct large captures to clipboard import.
+- File System Access permissions and directory APIs differ by browser; unsupported paths must remain read-only fallbacks rather than partial writes.
+
+Phase Name: Phase 7: Program Integration, Performance, and Accessibility Hardening
+
+Goal:
+Make the complete 20-feature system coherent, fast, recoverable, accessible, and ready for production release on both live surfaces.
+
+Key Milestones:
+- Run migration chains against every Phase 0 fixture and randomized large vaults from schema version 3 through the final schema; compare note IDs, Markdown, images, aliases, properties, hierarchy, Archive/Trash, revisions, and settings before/after.
+- Profile 1,000-note and image-heavy vaults; move backlink/unlinked/task/calendar/property indexes to incremental updates, virtualize new long lists, and meet the Phase 0 interaction and bundle budgets or document an approved exception.
+- Complete keyboard-only, focus-order, modal, announcement, reduced-motion, high-contrast, 200% zoom, desktop resize, and 390 px audits for every new surface; repair failures and add automated regression coverage where the browser suite can represent them.
+- Run adversarial security tests covering malformed YAML, dangerous URLs, clip/import XSS, transclusion cycles, storage quota failures, prototype-shaped JSON keys, path traversal, oversized input, stale service workers, and CSP enforcement.
+- Update `README.md`, `ROADMAP.md`, feature syntax/reference docs, migration notes, backup/restore instructions, browser-compatibility table, and operator release checklist; remove no legacy behavior without an explicit migration note.
+- Produce one release candidate with a clean `npm ci`, full tests, build, audit, generated-artifact inspection, clean `git diff --check`, and no unexplained warnings or worktree changes.
+
+Dependencies:
+- Phases 1–6 feature-complete behind passing local tests.
+- Phase 0 budgets, fixtures, and release checklist available.
+
+Required Resources:
+- NoteForge maintainer, accessibility reviewer, security reviewer, and release operator.
+- Node 22, npm, Playwright/Chrome, manual Safari/Firefox access, large-vault fixtures, browser storage inspection, and GitHub Actions.
+
+Estimated Timeline:
+2–3 weeks.
+
+Owner / Responsible Party:
+Release lead, with sign-off from development, accessibility QA, and security review roles.
+
+Risks / Failure Points:
+- Cross-feature interactions may pass isolated tests but fail under multi-pane autosave, imports, revisions, and service-worker updates; end-to-end scenarios must combine these paths.
+- Indexing all derived views eagerly can cause startup or save latency; derived indexes must be rebuildable and excluded from authoritative backups.
+- Accessibility fixes applied late can force component API changes; each earlier phase must still run its own accessibility checks.
+- Browser storage eviction remains possible even with backup tooling; user-facing backup status must never claim device-independent durability.
+
+Phase Name: Phase 8: Canonical Release and Live Verification
+
+Goal:
+Publish the reviewed NoteForge release to the mirror and canonical route, prove exact provenance and live behavior, and close the program with clean repositories.
+
+Key Milestones:
+- Commit and push the final NoteForge release from a clean worktree; verify `origin/main` contains the reviewed 40-character SHA and the exact-SHA `Deploy NoteForge` workflow completes successfully.
+- Build NoteForge under Node 22 from the reviewed commit and run the System by Dave `sync:noteforge` command with that exact dist/SHA; run `verify:noteforge`, run a second sync, and prove it reports no changes or repository diff.
+- Run all System by Dave verification gates: AV suite, gear reference, indexing, portfolio schemas, public navigation, Throwline, NoteForge provenance, AV Workbook typecheck/tests/build, sitemap generation, `npm audit --audit-level=high`, generated-file diff checks, and `git diff --check`.
+- Commit and push System by Dave, verify `origin/main`, and require the exact-SHA `Deploy site to Pages` workflow to complete successfully before live claims.
+- In disposable browser profiles, verify both `https://systembydave.com/noteforge/` and `https://davehomeassist.github.io/noteforge/`: zero page/console/request/HTTP errors; representative flows for all 20 features; desktop and 390 px layout; canonical metadata; CSP; service-worker update/cache cleanup; offline reload; migration/backup restore; and no existing-profile data loss.
+- Fetch live `source_provenance.json`, hash every declared artifact, compare canonical/mirror JS and CSS bundles, confirm the live sitemap entry, and leave both repositories clean with a completion report listing completed, failed, skipped, and remaining follow-up.
+
+Dependencies:
+- Phase 7 release candidate approved with no unresolved blocker.
+- GitHub Pages, repository push rights, GitHub CLI authentication, and the canonical System by Dave synchronization scripts available.
+
+Required Resources:
+- Release operator with push and Pages access to `DaveHomeAssist/noteforge` and `DaveHomeAssist/system-by-dave`.
+- Node 22, npm, Git, GitHub CLI, Playwright/Chrome, network access, and both local repositories.
+
+Estimated Timeline:
+2–4 days, excluding external CI or Pages incidents.
+
+Owner / Responsible Party:
+Release operator/NoteForge maintainer.
+
+Risks / Failure Points:
+- A Pages workflow can succeed before CDN content converges; live verification must poll for the exact asset/provenance hashes rather than rely on workflow status alone.
+- A dirty or diverged System by Dave worktree can overwrite unrelated work; stop before synchronization if preflight is not clean and aligned.
+- Service-worker cache persistence can mask stale content; use a disposable profile and verify the active worker script and single expected cache version.
+- Canonical shell navigation can overlap NoteForge mobile controls; retain the established breadcrumb/mobile integration smoke at 390 px.
+
+3. EXECUTION NOTES
+
+Critical Sequencing Constraints:
+- Complete Phase 0 before editing storage or schemas; later migrations require trusted schema-version-3 fixtures, explicit syntax contracts, and measured baselines.
+- Ship revision history and backup recovery before rename rewrites, bulk replacement, frontmatter migration, or folder reconciliation; each of those operations needs a tested recovery point.
+- Complete canonical title/alias resolution before contextual backlinks, unlinked mentions, properties aliases, block links, and folder identity matching; otherwise each later feature would encode a different resolution rule.
+- Stabilize Archive and saved-query semantics before task and calendar aggregation so every derived view applies the same live/archived/trashed filters.
+- Stabilize `@due()` and date behavior before property/calendar integration; changing task syntax after indexes and frontmatter filters ship would require avoidable migration work.
+- Complete frontmatter and stable block IDs before folder reconciliation; external Markdown needs durable IDs to distinguish an update from an unrelated same-title file.
+- Complete navigation history before tabs/split view; pane navigation must reuse one canonical history model rather than create parallel implementations.
+- Do not merge a phase to `main` until its vertical slice, migrations, tests, docs, accessibility checks, and rollback path pass. Commit and push focused branches during work; merge only reviewed, releasable slices.
+- Do not synchronize System by Dave until the reviewed NoteForge commit is built under Node 22 and its exact-SHA mirror deployment is green.
+
+Parallelizable Work:
+- During Phase 0, fixture creation, UX wireframes, architecture decisions, performance-corpus generation, and release-checklist drafting can proceed concurrently because they touch separate artifacts.
+- In Phase 1, history-view UI can be built against a mock revision-store contract while the storage/revision implementation and pure retention tests proceed separately.
+- In Phase 2, heading outline/navigation history can proceed in parallel with alias/link-rewrite internals after the resolution contract is frozen.
+- In Phase 3, saved-search UI and current-note find/replace can proceed in parallel; Archive and bulk actions should share one developer because both modify note-list filtering and selection.
+- In Phase 4, Quick Capture/PWA manifest work can proceed in parallel with pure task/date parsing; task dashboard must wait for the parser contract, while calendar UI can use fixture data.
+- In Phase 5, properties UI can proceed against a mock frontmatter adapter while block-ID parsing/transclusion tests proceed separately; integration waits for both parsers to stabilize.
+- In Phase 6, bookmarklet/capture-route work can proceed in parallel with folder diff planning; tabs/split-view work should remain isolated because it touches App, Editor, persistence, and most browser tests.
+- Documentation, accessibility test cases, and adversarial fixtures should be updated continuously within every phase rather than deferred entirely to Phase 7.
+
+Quick Wins:
+- Add the idempotent Open Today’s Note command and command-palette entry using the existing Daily template and title resolver; this can deliver a visible workflow improvement in under one day once the acceptance test is written.
+- Add session back/forward navigation around the existing `openNote()` path in under one day; persistence of recents can follow in Phase 2.
+- Persist and render one named saved search using the existing query string and sort mode in under one day; editing/reordering and migration hardening follow in Phase 3.
+- Add a non-destructive Archive command and filtered Archive view prototype behind fixture data in under one day after the schema contract is finalized.
+- Add a heading-outline read-only prototype derived from existing parsed headings in under one day; active tracking, duplicate anchors, keyboard behavior, and mobile polish remain part of Phase 2 acceptance.
+
+Long-Lead Tasks:
+- Revision content deduplication, retention, quota handling, restore correctness, and recovery UX require multi-browser storage testing and cannot be compressed into a cosmetic feature sprint.
+- Standards-compliant frontmatter, stable block IDs, transclusion cycles, and lossless parse/serialize guarantees require extensive adversarial and migration coverage.
+- Tabs/split view changes editor ownership and autosave concurrency; it requires a deliberate single-writer model and broad regression testing.
+- Folder import/reconciliation requires durable external identity, cross-browser file-access fallbacks, conflict UX, interruption recovery, and repeated idempotence testing.
+- PWA share-target and bookmarklet behavior needs real-device/browser validation; browser support and store policies are external constraints even though no extension-store approval is required for the first release.
+- Final canonical release requires two repositories, two exact-SHA GitHub Actions workflows, CDN convergence, and fresh-profile live verification.
+
+4. NEXT ACTIONS
+
+1. Run `git status --short --branch && node --version && npm --version && npm ci && npm test && npm run test:browser && npm run build && npm audit --audit-level=high` in `/Users/daverobertson/Code/noteforge` and write the exact results to `docs/implementation/baseline.md`.
+2. Create `docs/implementation/feature_acceptance_matrix.md` with exactly 20 rows mapping each feature in this plan to its phase, source files, data changes, desktop/mobile/keyboard behavior, automated tests, and exit criteria.
+3. Add `test/fixtures/schema-v3-comprehensive.json` containing nested live and trashed notes, tags, pins, banners, data-URL images, wikilink aliases, and non-default settings, then add a Node test proving the current loader preserves every field.
+4. Create `docs/architecture/revision_history.md` defining the revision record, SHA-256 content deduplication, capture boundaries, retention policy, quota failure behavior, restore-as-copy semantics, and local-history-versus-portable-backup wording specified in Phase 1.
+5. Add failing Node tests to `test/roundtrip.test.mjs` for revision deduplication, per-note retention, safety revision creation, restore as copy, and IndexedDB-unavailable fallback before implementing `src/core/revision-store.js`.
