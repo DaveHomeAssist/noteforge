@@ -49,7 +49,7 @@ export class RecoveryService {
   async capturePersisted(captures) {
     const results = [];
     for (const capture of captures) {
-      results.push(await this.revisions.capture(capture.note, { reason: capture.reason }));
+      results.push(await this.revisions.capture(capture.note, { reason: capture.reason, force: capture.force === true }));
     }
     return results;
   }

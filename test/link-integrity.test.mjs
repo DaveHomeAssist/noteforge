@@ -21,6 +21,7 @@ import {
   pruneNavigation,
   normalizeRecentIds,
   recordRecent,
+  NavigationController,
   RECENT_LIMIT,
 } from '../src/utils/navigation.js';
 
@@ -339,6 +340,17 @@ test('session history is bounded and recents persist as 50 unique live note IDs'
   assert.equal(recent[0], 'note-50');
   assert.equal(new Set(recent).size, RECENT_LIMIT);
   assert.deepEqual(normalizeRecentIds(['missing', 'note-50', 'note-50'], (id) => id !== 'missing'), ['note-50']);
+
+  const controller = new NavigationController({
+    getNote: (id) => ['a', 'b', 'c'].includes(id) ? { id } : null,
+    setConfig() {},
+  }, { state });
+  controller.replaceCurrent('a');
+  assert.equal(controller.state.current, 'a');
+  assert.deepEqual(controller.state.back, ['a', 'b']);
+  assert.equal(Object.isFrozen(controller.state), true, 'reload replacement keeps navigation immutable');
+  controller.replaceCurrent('missing');
+  assert.equal(controller.state.current, null);
 });
 
 test('aliases survive a deterministic schema-v4 portable backup', async () => {

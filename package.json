@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/roundtrip.test.mjs && node test/database-durability.test.mjs && node test/revision.test.mjs && node test/backup.test.mjs && node test/recovery.test.mjs && node test/link-integrity.test.mjs && node test/phase3.test.mjs && node test/phase4.test.mjs && node test/phase5.test.mjs",
+    "test": "node test/roundtrip.test.mjs && node test/database-durability.test.mjs && node test/revision.test.mjs && node test/backup.test.mjs && node test/recovery.test.mjs && node test/link-integrity.test.mjs && node test/phase3.test.mjs && node test/phase4.test.mjs && node test/phase5.test.mjs && node test/phase6.test.mjs",
     "test:browser": "node test/run-features.mjs",
     "test:all": "npm test && node test/run-features.mjs"
   },

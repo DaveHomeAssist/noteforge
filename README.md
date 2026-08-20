@@ -74,6 +74,11 @@ and dark mode — all stored in your browser, no backend required.
   and their hierarchy out of normal lists, graph, autocomplete, and backlinks
   without moving them to Trash; `is:archived` and the Archive view expose them
   explicitly.
+- **Tabs and two-pane workspace** — keep up to 20 unique note tabs across two
+  independently scrollable panes. Every tab/pane handoff flushes through the
+  durable note queue first; keyboard cycling, reorder, close/reopen, pane moves,
+  a bounded splitter, and the single-pane mobile presentation preserve one
+  editable owner per note.
 - **Find, replace, and note batches** — current-note find/replace includes
   next/previous, case, whole-word, source preview, match counts, and one-step
   undo. Vault-wide replacement previews every result and scope before a confirmed
@@ -101,9 +106,15 @@ and dark mode — all stored in your browser, no backend required.
 - **Export a note** (from the command palette) — **as a self-contained HTML page**
   (rendered, styled, offline-ready, safe to share) or **as raw Markdown** (`.md`).
   **Export the graph** as a standalone **SVG** image from the graph toolbar.
-- **Save your vault to a folder** — write every note out as an **Obsidian-compatible
-  `.md` file** into a folder you pick (via the File System Access API, on Chromium
-  browsers), titles preserved so `[[wikilinks]]` keep resolving.
+- **Web clipper** — generate a draggable bookmarklet that sends bounded title,
+  source URL, selection, or page text into Quick Capture for explicit review.
+  Intake is one-shot, never auto-saves, and falls back to a manual clipboard
+  handoff when a URL would be too large.
+- **Save and reconcile a Markdown folder** — export Obsidian-compatible `.md`
+  files, then manually scan selected files into a deterministic
+  Add/Update/Conflict/Unchanged plan. Applying requires per-item decisions, a
+  verified portable safety backup, pre-change revisions, and a stale-source
+  recheck; Phase 6 never infers deletions.
 - **Templates** — start a Daily / Meeting / Project note prefilled with a date
   block and headings (from the palette or the ⋯ menu).
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
@@ -137,6 +148,7 @@ export operate on the same `.md` content and are unaffected by the editor.
 | `Ctrl/⌘ + K` | Focus search |
 | `Ctrl/⌘ + F` | Find and replace in the current note or vault |
 | `Ctrl/⌘ + G` | Toggle graph view |
+| `Ctrl + Page Up` / `Ctrl + Page Down` | Cycle tabs in the active pane |
 | `Alt + Left` / `Alt + Right` | Back / forward through opened notes |
 | `Ctrl/⌘ + Z` / `Shift+Ctrl/⌘ + Z` | Undo / redo (within the editor) |
 | `/` | Open the block slash menu |
@@ -192,7 +204,9 @@ the smaller fallback quota. Use **⋯ → Backup center → Download JSON backup
 portable artifact. See [Recovery and backups](docs/recovery.md) for retention,
 verification, restore, and browser-support details. See
 [Properties, block links, and transclusion](docs/properties_and_block_links.md) for
-the portable syntax and repair behavior introduced in Phase 5.
+the portable syntax and repair behavior introduced in Phase 5. See
+[Workspace, clipper, and folder reconciliation](docs/workspace_clipper_reconciliation.md)
+for Phase 6 limits, browser fallbacks, and recovery boundaries.
 
 ## Tests
 
@@ -225,8 +239,13 @@ capture durability, calendar aggregation, and a 1,000-note derivation budget. Th
 complete Node gate also includes 9 Phase 5 checks for lossless YAML boundaries,
 typed validation, migration, property filtering, stable block IDs, exact
 fragments, bounded transclusion, XSS safety, and exact backup/Markdown-export
-fidelity. The complete Node gate is 395 checks.
-`test/features.html` (376 assertions) drives
+fidelity.
+The 22-check Phase 6 suite covers debounced durability, workspace normalization
+and single-writer ownership, bounded clipper intake, safe folder paths and stable
+identity, deterministic plans, explicit decisions, portable-backup/revision gates,
+atomic replacement, stale-source rejection, concurrent scans, idempotence, and
+prototype-shaped IDs. The complete Node gate is 417 checks.
+`test/features.html` (394 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
@@ -236,9 +255,10 @@ runs it headlessly via
 `document.title`, then runs 15 integrated recovery checks, 16 Phase 2 link and
 navigation checks, 17 integrated Phase 3 checks, 28 integrated Phase 4 checks at
 390 px and a 200%-equivalent viewport, 14 integrated Phase 5 properties/block-link/
-transclusion checks, and nine production/offline checks
+transclusion checks, 18 integrated Phase 6 workspace/clipper/reconciliation checks,
+and ten production/offline checks
 (including first-use recovery, Link tools, Archive, saved view, find/replace,
-bulk action, Phase 4, and Phase 5 chunks), and fails on
+bulk action, Phase 4, Phase 5, and Phase 6 chunks), and fails on
 unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
@@ -250,6 +270,7 @@ src/
 │   ├── main.js         # App controller: wiring, views, shortcuts, palette, settings, mobile
 │   ├── phase4.js       # Lazy Daily, capture, task-dashboard, and calendar orchestration
 │   ├── phase5.js       # Lazy properties, alias migration, block references, and transclusion
+│   ├── phase6.js       # Lazy workspace, clipper, and folder-reconciliation orchestration
 │   ├── templates.js    # Daily / meeting / project note templates
 │   ├── pwa.js          # Registers the service worker (production only)
 │   └── seed.js         # Sample interlinked notes for first run
@@ -271,6 +292,9 @@ src/
 │   ├── calendar-view.js # Keyboard month/week grid and equivalent mobile agenda
 │   ├── properties-view.js # Typed and raw lossless YAML property editor
 │   ├── block-editor-phase5.js # Raw frontmatter and Copy Block Link enhancements
+│   ├── workspace-view.js # Single-writer tabs, two panes, splitter, and mobile pane switching
+│   ├── clipper-view.js # Bookmarklet setup and manual-copy fallback
+│   ├── reconciliation-view.js # Previewed, paginated folder plan and explicit apply UI
 │   ├── bulk-actions-view.js # ID-based multi-note action bar and result announcements
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
@@ -288,7 +312,8 @@ src/
 │   ├── link-operations.js # Atomic rename/repair/conversion plans with revision gates
 │   ├── bulk-operations.js # Previewed/stale-safe replace and multi-note transaction plans
 │   ├── capture-service.js # Durable Inbox/existing/new capture routing
-│   └── task-service.js # Exact source-verified task mutation boundary
+│   ├── task-service.js # Exact source-verified task mutation boundary
+│   └── reconciliation-service.js # Backup/revision/stale-check/atomic folder apply boundary
 ├── ui/
 │   ├── theme.js        # Resolved data-theme from light/dark/system (matchMedia), persisted
 │   └── settings.js     # Pure settings defaults / normalize / theme resolution
@@ -317,6 +342,9 @@ src/
 │   ├── frontmatter.js  # Sole yaml adapter: strict parse, lossless edits, typed values
 │   ├── block-links.js  # Stable block-ID validation, inspection, and resolution
 │   ├── transclusion.js # Read-only sanitized block embeds with cycle/depth budgets
+│   ├── workspace.js    # Pure bounded two-pane/tab state transitions
+│   ├── clipper.js      # Bounded one-shot intake and bookmarklet builder
+│   ├── vault-import.js # Safe paths, stable identity, hashes, and deterministic folder plans
 │   ├── image.js        # Client-side image downscale/compress (banners + inline images)
 │   └── helpers.js      # ids, escaping, debounce, dates
 └── styles.css          # Tokenized light/dark theme
@@ -328,6 +356,7 @@ test/link-integrity.test.mjs # Node invariants for Phase 2 identity/link/navigat
 test/phase3.test.mjs     # Node invariants for Archive, saved views, replacement, and batches
 test/phase4.test.mjs     # Node invariants for Daily, capture, tasks, and calendar
 test/phase5.test.mjs     # Node invariants for frontmatter, properties, block refs, and embeds
+test/phase6.test.mjs     # Node invariants for workspace, clipper, and folder reconciliation
 vite.config.js          # Build + dev server; injects the Content-Security-Policy
 ```
 

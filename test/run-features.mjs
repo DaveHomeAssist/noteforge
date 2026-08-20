@@ -65,13 +65,18 @@ async function warmLazyAppModules(browser, base) {
     '/src/components/calendar-view.js',
     '/src/components/block-editor-phase5.js',
     '/src/components/properties-view.js',
+    '/src/components/workspace-view.js',
+    '/src/components/clipper-view.js',
+    '/src/components/reconciliation-view.js',
     '/src/app/phase4.js',
     '/src/app/phase5.js',
+    '/src/app/phase6.js',
     '/src/core/capture-service.js',
     '/src/core/task-service.js',
     '/src/core/revision-store.js',
     '/src/core/recovery-service.js',
     '/src/core/backup.js',
+    '/src/core/reconciliation-service.js',
     '/src/core/knowledge-index.js',
     '/src/core/knowledge-index.css',
     '/src/utils/navigation.js',
@@ -83,6 +88,9 @@ async function warmLazyAppModules(browser, base) {
     '/src/utils/frontmatter.js',
     '/src/utils/block-links.js',
     '/src/utils/transclusion.js',
+    '/src/utils/workspace.js',
+    '/src/utils/clipper.js',
+    '/src/utils/vault-import.js',
   ];
   try {
     await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
@@ -1209,6 +1217,209 @@ async function runPhase5Smoke(browser, base, runtimeErrors) {
   }
 }
 
+async function runPhase6Smoke(browser, base, runtimeErrors) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.__phase6Clipboard = '';
+    window.__phase6Xss = 0;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => { window.__phase6Clipboard = value; },
+        readText: async () => window.__phase6Clipboard,
+      },
+    });
+  });
+  page.on('dialog', (dialog) => dialog.accept());
+  captureRuntimeErrors(page, runtimeErrors);
+  const checks = [];
+  const check = (name, condition) => {
+    if (!condition) throw new Error(`Phase 6 smoke failed: ${name}`);
+    checks.push(`PASS  ${name}`);
+  };
+  let stage = 'booting the app';
+  try {
+    await page.goto(base, { waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    await page.waitForFunction(() => Boolean(window.app?.phase6?.workspace), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.phase6.ready);
+
+    stage = 'creating workspace fixtures';
+    await page.evaluate(async () => {
+      const db = window.app.db;
+      for (const data of [
+        { id: 'phase6-a', title: 'Phase6 A', content: 'A original' },
+        { id: 'phase6-b', title: 'Phase6 B', content: 'B original' },
+        { id: 'phase6-c', title: 'Phase6 C', content: 'C original' },
+      ]) if (!db.notes.has(data.id)) db.createNote(data);
+      await db.flush();
+      await window.app.openNote('phase6-a');
+    });
+    check('Phase 6 workspace mounts an accessible tablist around the existing editor',
+      await page.evaluate(() => document.querySelector('#workspace [role="tablist"]')?.getAttribute('aria-label') === 'Primary open notes'
+        && document.querySelector('[data-tab="phase6-a"]')?.getAttribute('aria-selected') === 'true'));
+
+    stage = 'flushing a pending editor during a tab handoff';
+    await page.locator('#workspace [data-pane="primary"] .blk').fill('A pending handoff');
+    await page.evaluate(() => window.app.openNote('phase6-b'));
+    check('Phase 6 note switch flushes editor bytes still inside the autosave debounce',
+      await page.evaluate(() => window.app.db.getNote('phase6-a').content === 'A pending handoff'
+        && window.app.currentId === 'phase6-b'));
+
+    stage = 'opening two independent editor panes';
+    await page.evaluate(async () => {
+      await window.app.openNote('phase6-a');
+      await window.app.workspace.moveToOtherPane('phase6-a');
+    });
+    check('Phase 6 split owns each open note in exactly one pane',
+      await page.evaluate(() => {
+        const state = window.app.workspace.state;
+        const all = [...state.panes.primary.tabs, ...state.panes.secondary.tabs];
+        return state.split.enabled && new Set(all).size === all.length
+          && state.panes.secondary.tabs.includes('phase6-a')
+          && state.panes.primary.tabs.includes('phase6-b');
+      }));
+    await page.locator('#workspace [data-pane="primary"] .blk').fill('B independent pane');
+    await page.locator('#workspace [data-pane="secondary"] .blk').fill('A independent pane');
+    await page.evaluate(async () => { window.app.workspace.flushPending(); await window.app.db.flush(); });
+    check('Phase 6 two-editor autosaves commit distinct notes without cross-pane overwrite',
+      await page.evaluate(() => window.app.db.getNote('phase6-a').content === 'A independent pane'
+        && window.app.db.getNote('phase6-b').content === 'B independent pane'));
+
+    stage = 'using workspace keyboard and drag controls';
+    await page.evaluate(() => window.app.openNote('phase6-c'));
+    await page.keyboard.press('Control+PageUp');
+    await page.waitForFunction(() => window.app.currentId === 'phase6-a');
+    check('Phase 6 Control PageUp cycles tabs through the durable handoff path', true);
+    await page.locator('#workspace [role="separator"]').focus();
+    await page.keyboard.press('ArrowRight');
+    check('Phase 6 splitter keyboard resizing persists a bounded 55 percent ratio',
+      await page.evaluate(() => window.app.workspace.state.split.ratio === 0.55
+        && document.querySelector('#workspace [role="separator"]')?.getAttribute('aria-valuenow') === '55'));
+    await page.locator('[data-tab="phase6-c"]').dragTo(page.locator('[data-tab="phase6-a"]'));
+    check('Phase 6 drag reorder changes presentation order without duplicating note ownership',
+      await page.evaluate(() => window.app.workspace.state.panes.secondary.tabs.indexOf('phase6-c')
+        < window.app.workspace.state.panes.secondary.tabs.indexOf('phase6-a')));
+
+    stage = 'collapsing split view on mobile';
+    await page.setViewportSize({ width: 390, height: 844 });
+    check('390px Phase 6 collapses to one visible pane with no horizontal overflow',
+      await page.evaluate(() => [...document.querySelectorAll('#workspace .workspace__pane')].filter((pane) => getComputedStyle(pane).display !== 'none').length === 1
+        && document.documentElement.scrollWidth <= window.innerWidth));
+    await page.locator('[data-pane-visible="primary"]').click();
+    await page.waitForFunction(() => window.app.workspace.state.activePane === 'primary');
+    check('Phase 6 mobile pane switch preserves the hidden pane state and activates its existing owner',
+      await page.evaluate(() => window.app.currentId === 'phase6-b'
+        && window.app.workspace.state.panes.secondary.tabs.includes('phase6-a')));
+
+    stage = 'reviewing a malicious clipper intake without auto-save';
+    const beforeClipCount = await page.evaluate(() => window.app.db.notes.size);
+    await page.evaluate(async () => {
+      history.pushState({}, '', '?capture=clipper&title=Unsafe%20Page&url=https%3A%2F%2Fexample.com%2Fsource&selection=%3Cscript%3Ewindow.__phase6Xss%3D1%3C%2Fscript%3E');
+      await window.app.phase6.openClipperIntake(location.href);
+    });
+    await page.locator('#quick-capture-overlay').waitFor({ state: 'visible' });
+    check('Phase 6 clipper intake clears its query and remains explicit review-only text',
+      await page.evaluate((before) => location.search === ''
+        && window.app.db.notes.size === before
+        && document.querySelector('#capture-text')?.value === '<script>window.__phase6Xss=1</script>'
+        && window.__phase6Xss === 0, beforeClipCount));
+    await page.locator('#capture-destination').selectOption('new');
+    await page.locator('#capture-new-title').fill('Phase6 Web Clip');
+    await page.locator('#quick-capture-form button[type="submit"]').click();
+    await page.waitForFunction(() => /Saved to/.test(document.querySelector('#quick-capture-status')?.textContent || ''));
+    check('Phase 6 clipper saves only after destination approval and preserves the source URL in Markdown',
+      await page.evaluate(() => {
+        const clipped = window.app.db.getAllNotes().find((note) => note.title === 'Phase6 Web Clip');
+        return clipped?.content.includes('<script>window.__phase6Xss=1</script>')
+          && clipped.content.includes('[Unsafe Page](https://example.com/source)')
+          && window.__phase6Xss === 0;
+      }));
+    await page.keyboard.press('Escape');
+
+    stage = 'opening the bookmarklet generator';
+    await page.evaluate(() => window.app.phase6.showClipper());
+    await page.locator('#clipper-overlay').waitFor({ state: 'visible' });
+    check('Phase 6 bookmarklet generator exposes a draggable local-first capture action',
+      await page.evaluate(() => document.querySelector('.clipper-bookmarklet')?.draggable
+        && document.querySelector('.clipper-bookmarklet')?.href.startsWith('javascript:')
+        && /Nothing is sent to a server/.test(document.querySelector('#clipper-overlay')?.textContent || '')));
+    await page.keyboard.press('Escape');
+
+    stage = 'reconciling one Markdown file through the full backup boundary';
+    await page.evaluate(() => window.app.openNote('phase6-b'));
+    await page.evaluate(() => window.app.phase6.showReconciliation());
+    await page.locator('#reconciliation-overlay').waitFor({ state: 'visible' });
+    const importedSource = '---\nnoteforge_id: phase6-a\nfuture: { preserve: true }\n---\nReconciled <img src=x onerror="window.__phase6Xss=2">';
+    await page.locator('#reconciliation-overlay [data-files]').setInputFiles({
+      name: 'Phase6 A.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from(importedSource),
+    });
+    await page.waitForFunction(() => /0 add · 1 update · 0 conflict/.test(document.querySelector('.reconciliation-summary')?.textContent || ''));
+    check('Phase 6 folder preview renders imported HTML as inert Markdown and names zero deletions',
+      await page.evaluate(() => !document.querySelector('.reconciliation-items img, .reconciliation-items script')
+        && /onerror/.test(document.querySelector('.reconciliation-items')?.textContent || '')
+        && /0 deletions/.test(document.querySelector('.reconciliation-summary')?.textContent || '')));
+    await page.locator('.reconciliation-decision select').selectOption('apply');
+    const [safetyDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#reconciliation-overlay [data-apply]').click(),
+    ]);
+    await page.waitForFunction(() => /Folder reconciliation completed/.test(document.querySelector('#reconciliation-overlay [role="status"]')?.textContent || ''));
+    check('Phase 6 confirmed folder apply downloads a portable safety backup before mutation', /^noteforge-backup-/.test(safetyDownload.suggestedFilename()));
+    check('Phase 6 folder apply preserves unknown frontmatter, all other notes, and creates a pre-change revision',
+      await page.evaluate(async (expected) => {
+        const revisions = await window.app.recovery.listRevisions('phase6-a');
+        return window.app.db.getNote('phase6-a')?.content === expected
+          && window.app.db.getNote('phase6-b')?.content === 'B independent pane'
+          && window.app.db.getNote('phase6-c')?.content === 'C original'
+          && revisions.some((revision) => revision.reason === 'pre_reconcile')
+          && window.__phase6Xss === 0;
+      }, importedSource));
+    check('Phase 6 completion report is available and explicitly reports zero deletions',
+      await page.evaluate(() => !document.querySelector('#reconciliation-overlay [data-report]')?.hidden
+        && /deleted 0/i.test(document.querySelector('#reconciliation-overlay [role="status"]')?.textContent || '')));
+    await page.locator('#reconciliation-overlay [data-files]').setInputFiles({
+      name: 'Phase6 A.md', mimeType: 'text/markdown', buffer: Buffer.from(importedSource),
+    });
+    await page.waitForFunction(() => /0 add · 0 update · 0 conflict · 1 unchanged/.test(document.querySelector('.reconciliation-summary')?.textContent || ''));
+    check('Phase 6 identical reconciliation rerun is idempotent and proposes no writes', true);
+    await page.keyboard.press('Escape');
+
+    stage = 'reloading workspace and imported state';
+    await page.evaluate(async () => { window.app.workspace.flushPending(); await window.app.db.flush(); });
+    await page.reload({ waitUntil: 'load', timeout: TIMEOUT });
+    await page.waitForFunction(() => Boolean(window.app?.phase6?.workspace), undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.phase6.ready);
+    check('Phase 6 workspace IDs, split ratio, pane ownership, and imported bytes survive reload',
+      await page.evaluate((expected) => {
+        const state = window.app.workspace.state;
+        const all = [...state.panes.primary.tabs, ...state.panes.secondary.tabs];
+        return state.split.enabled && state.split.ratio === 0.55
+          && new Set(all).size === all.length
+          && state.panes.secondary.tabs.includes('phase6-a')
+          && window.app.db.getNote('phase6-a')?.content === expected;
+      }, importedSource));
+    return checks.join('\n');
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      currentId: window.app?.currentId,
+      workspace: window.app?.workspace?.state,
+      phase6Content: window.app?.db?.getNote?.('phase6-a')?.content,
+      appStatus: document.querySelector('#app-status')?.textContent || '',
+      captureStatus: document.querySelector('#quick-capture-status')?.textContent || '',
+      reconciliationStatus: document.querySelector('#reconciliation-overlay [role="status"]')?.textContent || '',
+      openOverlay: [...document.querySelectorAll('.modal:not([hidden])')].map((node) => node.id),
+    })).catch(() => null);
+    throw new Error(`Phase 6 smoke failed while ${stage}: ${error?.message || error}; diagnostics: ${JSON.stringify(diagnostics)}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function runProductionOfflineSmoke(browser, runtimeErrors) {
   await buildProduction();
   const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
@@ -1357,6 +1568,17 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     await page.locator('.note-item [data-select]').first().click();
     await page.locator('.bulk-actions').waitFor({ state: 'visible' });
     checks.push('PASS  production multi-select bulk-action chunk opens on first use offline');
+
+    stage = 'opening Phase 6 clipper and folder reconciliation for the first time offline';
+    await page.locator('#menu-btn').click();
+    await page.locator('#clipper-btn').click();
+    await page.locator('#clipper-overlay').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    await page.locator('#menu-btn').click();
+    await page.locator('#reconcile-btn').click();
+    await page.locator('#reconciliation-overlay').waitFor({ state: 'visible' });
+    if (!await page.locator('#workspace [role="tablist"]').count()) throw new Error('Workspace tablist did not restore offline.');
+    checks.push('PASS  production Phase 6 workspace, clipper, and reconciliation chunks work offline');
     return checks.join('\n');
   } catch (error) {
     throw new Error(`Production offline smoke failed while ${stage}: ${error?.message || error}`);
@@ -1439,11 +1661,12 @@ async function main() {
     const phase3Output = await runPhase3Smoke(browser, base, runtimeErrors);
     const phase4Output = await runPhase4Smoke(browser, base, runtimeErrors);
     const phase5Output = await runPhase5Smoke(browser, base, runtimeErrors);
+    const phase6Output = await runPhase6Smoke(browser, base, runtimeErrors);
     await page.close();
     await server.close();
     devServerClosed = true;
     const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${offlineOutput}`;
+    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${phase6Output}\n${offlineOutput}`;
   } catch (err) {
     failed = true;
     output += `${output ? '\n' : ''}Runner error: ${err.message || err}`;

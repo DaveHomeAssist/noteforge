@@ -135,8 +135,7 @@ export class Phase4Controller {
 
   #openTask(task) {
     const occurrence = editorTaskOccurrence(this.db.getNote(task.noteId)?.content, task);
-    this.openNote(task.noteId);
-    queueMicrotask(() => this.editor.focusTask(occurrence));
+    Promise.resolve(this.openNote(task.noteId)).then(() => this.editor.focusTask(occurrence));
   }
 
   async showQuickCapture(options = {}) {

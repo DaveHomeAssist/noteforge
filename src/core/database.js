@@ -386,6 +386,7 @@ export class Database {
     const captures = (notes || []).map((note) => ({
       note: typeof note?.toJSON === 'function' ? note.toJSON() : structuredClone(note),
       reason,
+      force: true,
     }));
     if (captures.length === 0) return true;
     await this.onNotesPersisted(captures);

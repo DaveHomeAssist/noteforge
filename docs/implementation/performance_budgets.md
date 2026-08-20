@@ -86,6 +86,20 @@ worker total 352,784 bytes; full HTML/CSS/JavaScript/service-worker output is
 runtime dependencies; it is imported only by `src/utils/frontmatter.js`, adds no
 CSP origin or directive, and the high-severity audit reports zero vulnerabilities.
 
+Phase 6 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+5,592 bytes + directly referenced CSS 25,335 bytes + directly referenced JavaScript
+225,969 bytes = 256,896-byte initial shell, 284 bytes below the authoritative
+257,180-byte ceiling. JavaScript is 8,782 bytes above its diagnostic ceiling,
+offset by HTML being 2,908 bytes and CSS being 6,158 bytes below their diagnostic
+ceilings; the combined budget remains green without an exception. Workspace,
+clipper, folder planning/reconciliation, and responsive styles remain post-usable
+chunks and are build-time precached for offline first use. Their deferred output
+is 59,159 bytes; all deferred CSS/JavaScript plus the 5,293-byte service worker
+total 412,451 bytes, and full HTML/CSS/JavaScript/service-worker output is 669,347
+bytes. Reconciliation renders at most 50 plan rows per accessible page. No
+dependency was added in this phase, and the high-severity audit reports zero
+vulnerabilities.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

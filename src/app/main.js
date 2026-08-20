@@ -16,37 +16,10 @@ import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 class App {
   constructor() {
     this.db = new Database();
-    this.revisionStore = null;
-    this.recovery = null;
-    this.recoveryReady = null;
     this.currentId = null;
     this.view = 'editor'; // 'editor' | 'graph'
     this.navigation = { back: [], current: null, forward: [] };
     this.recentNoteIds = [];
-    this.navigationController = null;
-    this.navigationReady = null;
-    this.linkTools = null;
-    this.linkToolsReady = null;
-    this.graph = null;
-    this.graphReady = null;
-    this.trash = null;
-    this.trashReady = null;
-    this.palette = null;
-    this.paletteReady = null;
-    this.settings = null;
-    this.settingsReady = null;
-    this.archive = null;
-    this.archiveReady = null;
-    this.findReplace = null;
-    this.findReplaceReady = null;
-    this.savedSearches = null;
-    this.savedSearchesReady = null;
-    this.bulkActions = null;
-    this.bulkActionsReady = null;
-    this.phase4 = null;
-    this.phase4Ready = null;
-    this.phase5 = null;
-    this.phase5Ready = null;
 
     this.el = {
       editor: document.getElementById('editor'),
@@ -72,6 +45,8 @@ class App {
       settingsBtn: document.getElementById('settings-btn'),
       historyBtn: document.getElementById('history-btn'),
       backupBtn: document.getElementById('backup-btn'),
+      clipperBtn: document.getElementById('clipper-btn'),
+      reconcileBtn: document.getElementById('reconcile-btn'),
       linkReportBtn: document.getElementById('link-report-btn'),
       archiveBtn: document.getElementById('archive-btn'),
       findReplaceBtn: document.getElementById('find-replace-btn'),
@@ -107,7 +82,16 @@ class App {
         this.#scheduleRecoveryInitialization();
         this.#scheduleSavedSearchesInitialization();
         this.#schedulePhase5Initialization();
-        if (new URL(window.location.href).searchParams.get('source') === 'share-target') void this.#openShareTarget().catch((error) => {
+        this.#schedulePhase6Initialization();
+        const intakeUrl = new URL(window.location.href);
+        if (['clipper', 'clipboard'].includes(intakeUrl.searchParams.get('capture'))) {
+          window.history.replaceState(window.history.state, '', `${intakeUrl.pathname}${intakeUrl.hash}`);
+          void this.#openClipperIntake(intakeUrl.href).catch((error) => {
+            console.warn('[clipper] intake unavailable:', error);
+            this.#announce(error?.message || 'Clipped content could not be opened.');
+          });
+        }
+        else if (intakeUrl.searchParams.get('source') === 'share-target') void this.#openShareTarget().catch((error) => {
           console.warn('[capture] shared intake unavailable:', error);
           this.#announce(error?.message || 'Shared content could not be opened.');
         });
@@ -184,7 +168,12 @@ class App {
       await this.#seed();
     } else {
       this.noteList.render();
-      const first = this.db.getNotesSorted()[0];
+      const savedWorkspace = this.db.config.workspace;
+      const savedPane = savedWorkspace?.panes?.[savedWorkspace?.activePane];
+      const savedId = savedPane?.activeNoteId
+        || savedWorkspace?.panes?.primary?.activeNoteId
+        || savedWorkspace?.panes?.secondary?.activeNoteId;
+      const first = this.db.getNote(savedId) || this.db.getNotesSorted()[0];
       if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
   }
@@ -192,9 +181,21 @@ class App {
   // --- note selection -----------------------------------------------------
 
   openNote(id, opts = {}) {
+    if (this.phase6?.workspace && !opts.workspaceCommitted) return this.phase6.workspace.requestOpen(id, opts);
+    return this.#openNoteNow(id, opts);
+  }
+
+  #openNoteNow(id, opts = {}) {
     const note = this.db.getNote(id);
-    if (!note) return;
-    if (opts.origin === 'reload') this.navigation.current = id;
+    if (!note) return false;
+    if (opts.origin === 'reload') {
+      if (this.navigationController) {
+        this.navigationController.replaceCurrent(id);
+        this.#syncNavigationFrom(this.navigationController);
+      } else {
+        this.navigation = { ...this.navigation, current: id };
+      }
+    }
     else void this.#ensureNavigation().then((navigation) => {
       navigation.recordOpen(id, { replay: Boolean(opts.replay) });
       this.#syncNavigationFrom(navigation);
@@ -212,6 +213,15 @@ class App {
     this.noteList.setActive(id);
     this.#syncNavigationControls();
     this.#closeSidebar(); // on mobile, reveal the editor after picking a note
+    return true;
+  }
+
+  #clearWorkspaceActive() {
+    this.currentId = null;
+    this.el.historyBtn.disabled = true;
+    this.noteList.setActive(null);
+    this.#syncNavigationControls();
+    this.el.newBtn.focus();
   }
 
   #pruneNavigationState() {
@@ -242,7 +252,7 @@ class App {
     const id = navigation.back((noteId) => Boolean(this.db.getNote(noteId)));
     if (!id) return;
     this.#syncNavigationFrom(navigation);
-    this.openNote(id, { origin: 'back', replay: true });
+    await this.openNote(id, { origin: 'back', replay: true });
   }
 
   async goForward() {
@@ -252,7 +262,7 @@ class App {
     const id = navigation.forward((noteId) => Boolean(this.db.getNote(noteId)));
     if (!id) return;
     this.#syncNavigationFrom(navigation);
-    this.openNote(id, { origin: 'forward', replay: true });
+    await this.openNote(id, { origin: 'forward', replay: true });
   }
 
   newNote() {
@@ -318,7 +328,7 @@ class App {
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open || this.phase5?.properties?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open || this.phase5?.properties?.open || this.phase6?.open);
   }
 
   #toggleSidebar() {
@@ -427,7 +437,7 @@ class App {
         onApplied: ({ mode, result }) => {
           if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
           else if (mode === 'mention' && result.target) this.editor?.refresh();
-          this.linkTools?.modal.setReturnFocus(this.el.editor.querySelector('.editor__title'));
+          this.linkTools?.modal.setReturnFocus(this.editor?.container?.querySelector('.editor__title'));
         },
       });
       return this.linkTools;
@@ -737,6 +747,52 @@ class App {
     else setTimeout(initialize, 0);
   }
 
+  #ensurePhase6() {
+    if (this.phase6Ready) return this.phase6Ready;
+    if (this.phase6) return this.phase6.ready;
+    const primaryEditor = this.editor;
+    this.phase6Ready = import('./phase6.js').then(async ({ Phase6Controller }) => {
+      this.phase6 = new Phase6Controller({
+        db: this.db,
+        primaryEditor,
+        primaryElement: this.el.editor,
+        onWorkspaceCreated: (workspace) => {
+          this.workspace = workspace;
+          this.editor = workspace;
+          workspace.element.hidden = this.view === 'graph';
+          if (this.phase4) this.phase4.editor = workspace;
+          if (this.phase5) this.phase5.editor = workspace;
+          if (this.findReplace) this.findReplace.editor = workspace;
+        },
+        commitOpen: (id, options) => this.#openNoteNow(id, options),
+        clearActive: () => this.#clearWorkspaceActive(),
+        openArchived: (id) => this.#showArchive(id),
+        ensureRecovery: () => this.#ensureRecovery(),
+        showQuickCapture: (options) => this.#showQuickCapture(options),
+        showStorageError: () => this.#showStorageError(),
+        announce: (message) => this.#announce(message),
+      });
+      await this.phase6.ready;
+      return this.phase6;
+    }).catch((error) => {
+      this.phase6?.workspace?.destroy?.();
+      this.phase6Ready = null;
+      this.phase6 = null;
+      this.workspace = null;
+      this.editor = primaryEditor;
+      throw error;
+    });
+    return this.phase6Ready;
+  }
+
+  #schedulePhase6Initialization() {
+    const initialize = () => void this.#ensurePhase6().catch((error) => {
+      console.warn('[workspace] deferred initialization unavailable:', error);
+    });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 3_000 });
+    else setTimeout(initialize, 0);
+  }
+
   async #showProperties(noteId = this.currentId) {
     this.#closeMenu();
     const phase5 = await this.#ensurePhase5();
@@ -766,6 +822,21 @@ class App {
 
   async #openShareTarget() {
     return (await this.#ensurePhase4()).openShareTarget();
+  }
+
+  async #openClipperIntake() {
+    return (await this.#ensurePhase6()).openClipperIntake();
+  }
+
+  async #showClipper() {
+    this.#closeMenu();
+    return (await this.#ensurePhase6()).showClipper();
+  }
+
+  async #showReconciliation() {
+    this.#closeMenu();
+    this.#closeSidebar();
+    return (await this.#ensurePhase6()).showReconciliation();
   }
 
   #selectionChanged(ids) {
@@ -887,6 +958,8 @@ class App {
       { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.#showTrash() },
       { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.#showSettings() },
       { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
+      { id: 'clipper', title: 'Set up web clipper', hint: 'Capture web pages', icon: '✂', run: () => this.#showClipper() },
+      { id: 'reconcile', title: 'Reconcile Markdown folder', hint: 'Preview, backup, then apply', icon: '⇄', run: () => this.#showReconciliation() },
       { id: 'link-report', title: 'Open link integrity report', hint: 'Knowledge graph', icon: '🔗', run: () => this.#showLinkReport() },
       { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
@@ -963,7 +1036,7 @@ class App {
     this.view = view;
     const showGraph = view === 'graph';
     this.el.graph.hidden = !showGraph;
-    this.el.editor.hidden = showGraph;
+    (this.workspace?.element || this.el.editor).hidden = showGraph;
     this.el.graphBtn.classList.toggle('btn--active', showGraph);
     if (showGraph) this.graph?.render(this.currentId);
   }
@@ -971,6 +1044,8 @@ class App {
   async toggleGraph() {
     if (this.view === 'graph') return this.setView('editor');
     await this.#ensureGraph();
+    this.editor?.flushPending();
+    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
     this.setView('graph');
   }
 
@@ -998,6 +1073,8 @@ class App {
     this.el.settingsBtn?.addEventListener('click', () => this.#showSettings());
     this.el.historyBtn?.addEventListener('click', () => this.#showHistory());
     this.el.backupBtn?.addEventListener('click', () => this.#showBackup());
+    this.el.clipperBtn?.addEventListener('click', () => this.#showClipper());
+    this.el.reconcileBtn?.addEventListener('click', () => this.#showReconciliation());
     this.el.linkReportBtn?.addEventListener('click', () => this.#showLinkReport());
     this.el.archiveBtn?.addEventListener('click', () => this.#showArchive());
     this.el.findReplaceBtn?.addEventListener('click', () => this.#showFindReplace('current'));
@@ -1151,7 +1228,13 @@ class App {
       // While a modal is open it owns the keyboard (each has its own Esc handler).
       // Don't let global shortcuts create notes / swap views / move focus behind it.
       if (this.#anyModalOpen()) return;
-      if (mod && e.key.toLowerCase() === 'n') {
+      if (e.ctrlKey && e.key === 'PageUp' && this.workspace) {
+        e.preventDefault();
+        void this.workspace.cycle(-1);
+      } else if (e.ctrlKey && e.key === 'PageDown' && this.workspace) {
+        e.preventDefault();
+        void this.workspace.cycle(1);
+      } else if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         this.newNote();
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {

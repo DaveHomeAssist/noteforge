@@ -32,13 +32,22 @@ export function escapeAttr(text) {
 export function debounce(fn, ms = 300) {
   let t;
   const wrapped = (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    if (t !== undefined) clearTimeout(t);
+    t = setTimeout(() => {
+      t = undefined;
+      fn(...args);
+    }, ms);
   };
-  wrapped.cancel = () => clearTimeout(t);
+  wrapped.cancel = () => {
+    if (t !== undefined) clearTimeout(t);
+    t = undefined;
+  };
   wrapped.flush = (...args) => {
+    if (t === undefined) return false;
     clearTimeout(t);
+    t = undefined;
     fn(...args);
+    return true;
   };
   return wrapped;
 }

@@ -90,6 +90,11 @@ export class NavigationController {
     }
   }
 
+  replaceCurrent(id) {
+    const current = typeof id === 'string' && this.db.getNote(id) ? id : null;
+    this.state = Object.freeze({ ...this.state, current });
+  }
+
   back(valid) {
     const next = goBack(this.state, valid);
     if (next === this.state) return null;

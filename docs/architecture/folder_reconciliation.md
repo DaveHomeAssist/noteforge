@@ -1,6 +1,6 @@
 # Manual folder import and reconciliation
 
-Status: accepted Phase 0 decision
+Status: implemented and verified in Phase 6
 
 ## Context
 

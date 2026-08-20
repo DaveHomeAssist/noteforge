@@ -35,6 +35,9 @@
   import { CalendarView, createCalendarElements } from '/src/components/calendar-view.js';
   import { createBlockEditorPhase5Enhancer } from '/src/components/block-editor-phase5.js';
   import { PropertiesView, createPropertiesElements } from '/src/components/properties-view.js';
+  import { WorkspaceView } from '/src/components/workspace-view.js';
+  import { ClipperView, createClipperElements } from '/src/components/clipper-view.js';
+  import { ReconciliationView, createReconciliationElements } from '/src/components/reconciliation-view.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
   import { parse, serialize } from '/src/utils/blocks.js';
@@ -2143,6 +2146,185 @@
       propertyView.modal.close();
     } catch (e) {
       results.push('FAIL  Phase 5 component flows — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 6 workspace, clipper, and reconciliation ==============
+  await (async () => {
+    try {
+      const storageBackend = {
+        async save() { return true; },
+        async saveMany() { return true; },
+        async load(_key, fallback) { return fallback; },
+        async getStatus() { return { backend: 'indexeddb', available: true }; },
+      };
+      const db = new Database({ storageBackend });
+      const one = db.createNote({ id: 'workspace-one', title: 'Workspace One', content: 'One pending' });
+      const two = db.createNote({ id: 'workspace-two', title: 'Workspace Two', content: 'Two' });
+      db.createNote({ id: 'workspace-three', title: 'Workspace Three', content: 'Three' });
+      const primaryElement = document.createElement('section');
+      primaryElement.className = 'editor';
+      scratch.appendChild(primaryElement);
+      let workspace;
+      let activeId = one.id;
+      let allowHandoff = true;
+      const actions = { openNote: (id, options) => workspace.requestOpen(id, options), openOrCreateByTitle: () => {}, announce: () => {} };
+      const primary = new Editor(primaryElement, db, actions);
+      primary.open(one.id);
+      workspace = new WorkspaceView({
+        primaryElement,
+        primaryEditor: primary,
+        db,
+        actions,
+        beforeHandoff: async () => allowHandoff,
+        onCommitOpen: async (id, options) => { activeId = id; workspace.open(id, options); },
+        onEmpty: () => { activeId = null; },
+        onArchived: () => {},
+        onStorageError: () => {},
+      });
+      await workspace.initialize();
+      await workspace.requestOpen(two.id);
+      check('Phase 6 workspace opens unique manual-activation tabs with one selected tab per list',
+        workspace.element.querySelectorAll('[data-tab="workspace-one"]').length === 1
+        && workspace.element.querySelectorAll('[role="tab"][aria-selected="true"]').length === 1
+        && activeId === two.id);
+      const selectedTab = workspace.element.querySelector('[role="tab"][aria-selected="true"]');
+      check('Phase 6 tabs expose their labelled editor tabpanel relationship',
+        selectedTab?.getAttribute('aria-controls') === workspace.activeEditor.container.id
+        && workspace.activeEditor.container.getAttribute('role') === 'tabpanel'
+        && workspace.activeEditor.container.getAttribute('aria-labelledby') === selectedTab.id);
+      const activeBlock = workspace.activeEditor.container.querySelector('.blk');
+      workspace.activeEditor.blockEditor.applyMarkdown('Two changed before switch');
+      await workspace.activate(one.id);
+      const savedTwo = db.getNote(two.id).content;
+      check('Phase 6 tab handoff flushes pending editor bytes before ownership changes', savedTwo === 'Two changed before switch');
+      allowHandoff = false;
+      await workspace.activate(two.id);
+      check('Phase 6 failed durability blocks the tab handoff', activeId === one.id && workspace.currentId === one.id);
+      allowHandoff = true;
+      await workspace.moveToOtherPane(one.id);
+      check('Phase 6 move-to-pane preserves single-writer ownership and enables split view',
+        workspace.state.split.enabled
+        && workspace.state.panes.secondary.tabs.includes(one.id)
+        && !workspace.state.panes.primary.tabs.includes(one.id)
+        && workspace.element.classList.contains('workspace--split'));
+      allowHandoff = false;
+      await workspace.toggleSplit();
+      check('Phase 6 failed durability also blocks collapsing a pane', workspace.state.split.enabled === true);
+      allowHandoff = true;
+      const splitter = workspace.element.querySelector('[role="separator"]');
+      key(splitter, 'ArrowRight');
+      check('Phase 6 splitter exposes bounded keyboard resizing', splitter.getAttribute('aria-valuenow') === '55');
+      await workspace.requestOpen('workspace-three');
+      let tab = workspace.element.querySelector('[data-tab="workspace-three"]');
+      tab.focus(); key(tab, 'ArrowLeft', { altKey: true, shiftKey: true });
+      check('Phase 6 tabs provide a keyboard reorder equivalent to drag',
+        workspace.state.panes.secondary.tabs[0] === 'workspace-three'
+        && document.activeElement?.dataset.tab === 'workspace-three');
+      tab = workspace.element.querySelector('[data-tab="workspace-three"]');
+      tab.focus(); key(tab, 'ArrowRight');
+      check('Phase 6 tablist Arrow keys move roving focus without activating', document.activeElement?.getAttribute('role') === 'tab' && activeId === 'workspace-three');
+      key(document.activeElement, 'Delete');
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 6 Delete closes a focused tab and retains a reopenable entry', workspace.state.recentlyClosed[0] !== null && workspace.element.querySelector('[data-reopen]').disabled === false);
+      Object.defineProperty(workspace.editors.primary.container, 'scrollTop', { value: 11, writable: true, configurable: true });
+      Object.defineProperty(workspace.editors.secondary.container, 'scrollTop', { value: 22, writable: true, configurable: true });
+      workspace.editors.primary.container.dispatchEvent(new Event('scroll'));
+      workspace.editors.secondary.container.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      check('Phase 6 persists independent primary and secondary scroll positions',
+        workspace.state.panes.primary.scrollTop === 11 && workspace.state.panes.secondary.scrollTop === 22);
+      workspace.element.remove();
+
+      let copied = '';
+      const clipperElements = createClipperElements(scratch);
+      const clipper = new ClipperView(clipperElements, {
+        appUrl: 'https://example.test/noteforge/?discard=1',
+        writeClipboard: async (value) => { copied = value; },
+      });
+      clipper.show();
+      check('Phase 6 clipper generator is labelled, focus-managed, and strips old query state',
+        clipperElements.overlay.contains(document.activeElement)
+        && clipperElements.link.href.startsWith('javascript:')
+        && !clipperElements.link.href.includes('discard=1'));
+      clipperElements.copy.click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 6 clipper generator provides a manual-copyable bookmarklet', copied === clipperElements.source.value && /bookmarklet copied/i.test(clipperElements.status.textContent));
+      clipper.close();
+
+      const reconciliationElements = createReconciliationElements(scratch);
+      let applyCalls = 0;
+      let confirmed = false;
+      const addPlan = {
+        counts: { Add: 1, Update: 0, Conflict: 0, Unchanged: 0 },
+        items: [{ key: 'unsafe', relativePath: 'nested/Unsafe.md', title: 'Unsafe', status: 'Add', source: `<img src=x onerror=alert(1)>${'x'.repeat(21_000)}`, destinationNoteId: null, proposedNoteId: 'unsafe-note', reasons: ['Preview only.'] }],
+      };
+      const unchangedPlan = { counts: { Add: 0, Update: 0, Conflict: 0, Unchanged: 1 }, items: [{ ...addPlan.items[0], status: 'Unchanged', reasons: ['Already applied.'] }] };
+      const reconciliationService = {
+        entries: [],
+        async plan(entries) { this.entries = entries; return applyCalls ? unchangedPlan : addPlan; },
+        async apply() { applyCalls += 1; return { message: 'Completed.', summary: { added: 1, updated: 0, unchanged: 0, skipped: 0, deleted: 0 }, items: [] }; },
+        downloadReport() {},
+      };
+      const reconciliation = new ReconciliationView(reconciliationElements, db, reconciliationService, { confirmApply: () => confirmed });
+      reconciliation.show();
+      const file = new File(['# Safe source'], 'Unsafe.md', { type: 'text/markdown' });
+      Object.defineProperty(reconciliationElements.file, 'files', { value: [file], configurable: true });
+      reconciliationElements.file.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      check('Phase 6 reconciliation renders malicious source as inert text with an explicit decision',
+        !reconciliationElements.items.querySelector('img,script')
+        && reconciliationElements.items.textContent.includes('<img src=x onerror=alert(1)>')
+        && reconciliationElements.items.textContent.includes('Preview abbreviated')
+        && reconciliationElements.items.querySelector('select[data-decision]'));
+      reconciliationElements.items.querySelector('select[data-decision]').value = 'apply';
+      reconciliationElements.items.querySelector('select[data-decision]').dispatchEvent(new Event('change', { bubbles: true }));
+      reconciliationElements.apply.click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('Phase 6 reconciliation fails closed without an injected confirmation approval', applyCalls === 0 && /cancelled/i.test(reconciliationElements.status.textContent));
+      confirmed = true;
+      reconciliationElements.apply.click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      check('Phase 6 reconciliation applies only after approval and exposes a content-free report action', applyCalls === 1 && !reconciliationElements.report.hidden && /deleted 0/i.test(reconciliationElements.status.textContent));
+      reconciliation.close();
+
+      const pagedElements = createReconciliationElements(scratch);
+      const largePlan = {
+        counts: { Add: 2, Update: 0, Conflict: 0, Unchanged: 119 },
+        items: Array.from({ length: 121 }, (_, index) => ({
+          key: `item-${index}`, relativePath: `note-${String(index).padStart(3, '0')}.md`,
+          status: index === 0 || index === 50 ? 'Add' : 'Unchanged', source: '# source', destinationNoteId: null,
+          proposedNoteId: `note-${index}`, reasons: [index === 0 || index === 50 ? 'New note.' : 'Already applied.'],
+        })),
+      };
+      const paged = new ReconciliationView(pagedElements, db, {
+        entries: [], async plan(entries) { this.entries = entries; return largePlan; },
+        async apply() { throw new Error('No mutable items'); }, downloadReport() {},
+      });
+      paged.show();
+      Object.defineProperty(pagedElements.file, 'files', { value: [file], configurable: true });
+      pagedElements.file.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      check('Phase 6 reconciliation bounds large plans to fifty accessible rows per page',
+        pagedElements.items.children.length === 50
+        && /Page 1 of 3/.test(pagedElements.pageStatus.textContent)
+        && !pagedElements.pagination.hidden);
+      const firstDecision = pagedElements.items.querySelector('select[data-decision]');
+      firstDecision.value = 'apply';
+      firstDecision.dispatchEvent(new Event('change', { bubbles: true }));
+      pagedElements.pageNext.click();
+      const secondDecision = pagedElements.items.querySelector('select[data-decision]');
+      secondDecision.value = 'skip';
+      secondDecision.dispatchEvent(new Event('change', { bubbles: true }));
+      pagedElements.pagePrevious.click();
+      check('Phase 6 reconciliation pagination retains decisions without rendering the full vault',
+        pagedElements.items.children.length === 50
+        && pagedElements.items.querySelector('select[data-decision]').value === 'apply'
+        && !pagedElements.apply.disabled
+        && /Page 1 of 3/.test(pagedElements.pageStatus.textContent));
+      paged.close();
+    } catch (e) {
+      results.push('FAIL  Phase 6 component flows — threw: ' + e.message);
     }
   })();
 
