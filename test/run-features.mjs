@@ -1478,9 +1478,19 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     // offline navigation so the browser does not report navigation-aborted
     // requests as runtime failures. The History, Backup, and Link-tools views
     // remain unopened/cold and are still exercised for first use while offline.
-    await page.waitForFunction(() => Boolean(window.app?.recovery), undefined, { timeout: TIMEOUT });
+    await page.waitForFunction(() => Boolean(
+      window.app?.recovery
+      && window.app?.navigationReady
+      && window.app?.savedSearchesReady
+      && window.app?.phase5Ready
+      && window.app?.phase6Ready
+    ), undefined, { timeout: TIMEOUT });
     await page.evaluate(() => Promise.all([
       window.app.recoveryReady,
+      window.app.navigationReady,
+      window.app.savedSearchesReady,
+      window.app.phase5Ready,
+      window.app.phase6Ready,
       window.app.db.initializeKnowledgeIndex(),
       window.app.editor.enableOutline(),
     ]));
