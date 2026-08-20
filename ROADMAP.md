@@ -34,8 +34,10 @@ stronger architecture remain available when the product calls for them. Shipped:
   sidebar with collapse, add-child, and drag-to-nest), a **first-class editable table**
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
-- **Quality** — 257 Node assertions (`npm test`) + 306 browser feature assertions
-  (`npm run test:browser`, headless via Playwright), gated in CI on pull requests
+- **Quality** — 347 Node checks (`npm test`) + 320 browser feature assertions,
+  15 integrated 390 px recovery checks, and three production/offline checks
+  (`npm run test:browser`, headless via
+  Playwright), gated in CI on pull requests
   and every main push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
@@ -61,8 +63,10 @@ is in `docs/implementation/feature_acceptance_matrix.md`.
 1. **Phase 0 — Baseline, contracts, and release controls. ✅** Schema-version-3
    preservation fixtures, architecture decisions, performance/storage budgets,
    and the two-repository release checklist.
-2. **Phase 1 — Revision history and Backup Center.** Durable recovery precedes
-   every later multi-note or migration feature.
+2. **Phase 1 — Revision history and Backup Center. ✅** Durable post-save
+   revisions; content-addressed retention/GC; restore and restore-as-copy safety;
+   rolling local snapshots; storage/quota health; and complete SHA-256-verified,
+   previewed portable backups now precede every later mutation feature.
 3. **Phase 2 — Link integrity and knowledge navigation.** Rename-safe links,
    aliases, outline, contextual backlinks, mentions, and back/forward/recents.
 4. **Phase 3 — Retrieval, lifecycle, and bulk operations.** Saved searches,
@@ -257,7 +261,8 @@ note can be shared as a link/file.
 
 ## Suggested near-term sequence
 
-~~`Rounds 1–4 + depth round`~~ ✅ → **`Phase 0 contracts`** → `Phase 1 recovery`
-→ `Phase 2 link integrity` → `Phase 3 retrieval/lifecycle` → `Phase 4 daily workflow`
+~~`Rounds 1–4 + depth round`~~ ✅ → ~~`Phase 0 contracts`~~ ✅ →
+~~`Phase 1 recovery`~~ ✅ → **`Phase 2 link integrity and navigation`**
+→ `Phase 3 retrieval/lifecycle` → `Phase 4 daily workflow`
 → `Phase 5 properties/references` → `Phase 6 workspace/reconciliation`
 → `Phase 7 hardening` → `Phase 8 canonical release`.

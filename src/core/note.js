@@ -50,7 +50,12 @@ export class Note {
     deletedAt = null,
     pinned = false,
     parentId = null,
+    ...extra
   } = {}) {
+    // Preserve additive/unknown JSON metadata so a portable backup can restore
+    // fields introduced by a compatible producer without silently discarding
+    // them. Known fields below always override colliding input keys.
+    this._extra = { ...extra };
     this.id = id;
     this.title = title;
     this.content = content;
@@ -69,22 +74,12 @@ export class Note {
   static fromJSON(data) {
     // Tolerant of partial/legacy data; ignores any stored links/backlinks
     // since those are recomputed from content.
-    return new Note({
-      id: data.id,
-      title: data.title,
-      content: data.content,
-      tags: data.tags,
-      banner: data.banner,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      deletedAt: data.deletedAt,
-      pinned: data.pinned,
-      parentId: data.parentId,
-    });
+    return new Note(data);
   }
 
   toJSON() {
     return {
+      ...this._extra,
       id: this.id,
       title: this.title,
       content: this.content,

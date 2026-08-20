@@ -21,6 +21,8 @@
   import { NoteList } from '/src/components/note-list.js';
   import { CommandPalette } from '/src/components/command-palette.js';
   import { SettingsView } from '/src/components/settings-view.js';
+  import { HistoryView, buildHistoryDiff } from '/src/components/history-view.js';
+  import { BackupView } from '/src/components/backup-view.js';
   import { GraphView } from '/src/components/graph.js';
   import { TEMPLATES } from '/src/app/templates.js';
   import { fileToBannerDataURL } from '/src/utils/image.js';
@@ -873,6 +875,17 @@
     editor.open(b.id); // switch WITHOUT waiting for the 400ms autosave debounce
     check('outgoing note A was flushed on switch', db.getNote(a.id).content.includes('A EDITED'));
     check('editor now shows note B', editor.currentId === b.id && db.getNote(b.id).content === 'bbb');
+
+    editor.open(a.id);
+    const stale = container.querySelector('.blk'); stale.focus();
+    type(stale, 'STALE EDITOR BYTES');
+    const restored = db.getNote(a.id);
+    restored.update({ content: 'RESTORED EXTERNAL BYTES' });
+    db.saveNote(restored, { captureRevision: false });
+    editor.open(a.id, { discardPending: true });
+    check('external restore reopen discards stale editor bytes instead of overwriting restored Markdown',
+      db.getNote(a.id).content === 'RESTORED EXTERNAL BYTES'
+      && /RESTORED EXTERNAL BYTES/.test(container.textContent));
   });
 
   section('sidebar: substring highlight does not split HTML entities', () => {
@@ -1445,6 +1458,167 @@
         files['Home.md'] === '# Home\n[[Ideas]]' && files['Home 2.md'] === 'dup' && files['A-B.md'] === 'slashed');
     } catch (e) {
       results.push('FAIL  vault write — threw: ' + e.message);
+    }
+  })();
+
+  // ============ Phase 1 recovery views ============
+  await (async () => {
+    try {
+      const diff = buildHistoryDiff('same\ncurrent', 'same\nselected');
+      check('history diff identifies unchanged, current-only, and selected lines',
+        diff.map((line) => line.type).join(',') === 'same,remove,add');
+
+      const overlay = document.createElement('div');
+      overlay.className = 'modal'; overlay.hidden = true;
+      overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" tabindex="-1">
+        <button data-close>Close</button><div class="history-list-host"></div><div class="history-preview-host"></div>
+        <div class="history-diff-host"></div><div class="history-status-host"></div>
+        <button class="history-copy">Restore as copy</button><button class="history-restore">Restore</button></div>`;
+      scratch.appendChild(overlay);
+      const revisions = [
+        { id: 'older', noteId: 'n', createdAt: '2026-08-18T10:00:00Z', reason: 'manual' },
+        { id: 'newer', noteId: 'n', createdAt: '2026-08-19T10:00:00Z', reason: 'autosave' },
+      ];
+      let restored = 0;
+      const view = new HistoryView({
+        overlay,
+        list: overlay.querySelector('.history-list-host'),
+        preview: overlay.querySelector('.history-preview-host'),
+        diff: overlay.querySelector('.history-diff-host'),
+        status: overlay.querySelector('.history-status-host'),
+        restore: overlay.querySelector('.history-restore'),
+        restoreCopy: overlay.querySelector('.history-copy'),
+      }, {
+        async getStatus() { return { available: true }; },
+        async listRevisions() { return revisions; },
+        async previewRevision({ revisionId }) {
+          return {
+            revision: revisions.find((revision) => revision.id === revisionId),
+            snapshot: { id: 'n', title: 'Recovered', content: 'same\nselected' },
+            currentNote: { id: 'n', title: 'Current', content: 'same\ncurrent' },
+          };
+        },
+        async restore() { restored += 1; return { note: { id: 'n' } }; },
+        async restoreAsCopy() { return { note: { id: 'copy' } }; },
+      }, { confirmRestore: () => true });
+      await view.show('n');
+      check('history view moves focus inside the dialog', overlay.contains(document.activeElement));
+      check('history view sorts newest first and renders a readable diff',
+        overlay.querySelector('.history-revision')?.dataset.revisionId === 'newer'
+        && /Current only/.test(overlay.querySelector('.history-diff-host').textContent)
+        && /Selected revision/.test(overlay.querySelector('.history-diff-host').textContent));
+      const firstRevision = overlay.querySelector('.history-revision');
+      firstRevision.focus();
+      key(firstRevision, 'ArrowDown');
+      await new Promise((resolve) => setTimeout(resolve));
+      check('history revision list supports ArrowDown selection', document.activeElement?.dataset.revisionId === 'older');
+      key(document.activeElement, 'Enter');
+      await new Promise((resolve) => setTimeout(resolve));
+      key(document.activeElement, ' ');
+      await new Promise((resolve) => setTimeout(resolve));
+      check('history Enter and Space activation preserve focus on the rebuilt selected revision',
+        document.activeElement?.dataset.revisionId === 'older');
+      overlay.querySelector('.history-restore').focus();
+      key(document.activeElement, 'Tab');
+      check('history modal traps Tab after dynamic revision-list rebuilds', overlay.contains(document.activeElement));
+      overlay.querySelector('.history-restore').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('history restore crosses the explicit confirmation handoff once', restored === 1);
+      view.close();
+    } catch (e) {
+      results.push('FAIL  Phase 1 history view — threw: ' + e.message);
+    }
+  })();
+
+  await (async () => {
+    try {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal'; overlay.hidden = true;
+      overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" tabindex="-1">
+        <button data-close>Close</button><div class="backup-health-host"></div><div class="backup-snapshots-host"></div>
+        <div class="backup-status-host"></div><button class="backup-download">Download</button>
+        <button class="backup-snapshot">Snapshot</button><input class="backup-file" type="file">
+        <button class="backup-verify">Verify</button><div class="backup-preview-host"></div>
+        <button class="backup-preview">Preview</button><button class="backup-restore">Restore</button></div>`;
+      scratch.appendChild(overlay);
+      let restores = 0;
+      const view = new BackupView({
+        overlay,
+        health: overlay.querySelector('.backup-health-host'),
+        snapshots: overlay.querySelector('.backup-snapshots-host'),
+        status: overlay.querySelector('.backup-status-host'),
+        download: overlay.querySelector('.backup-download'),
+        createSnapshot: overlay.querySelector('.backup-snapshot'),
+        file: overlay.querySelector('.backup-file'),
+        verify: overlay.querySelector('.backup-verify'),
+        preview: overlay.querySelector('.backup-preview-host'),
+        previewRestore: overlay.querySelector('.backup-preview'),
+        restore: overlay.querySelector('.backup-restore'),
+      }, {
+        async getStorageHealth() { return { backend: 'indexeddb', historyAvailable: true, usage: 100, quotaBytes: 1000 }; },
+        async listLocalSnapshots() { return [{ id: 'snap', createdAt: '2026-08-19T12:00:00Z', noteCount: 2, kind: 'daily' }]; },
+        async createLocalSnapshot() {},
+        async previewLocalSnapshot() {
+          return {
+            summary: { liveNoteCount: 2, removeCount: 1 },
+            notes: {
+              added: [], updated: [], unchanged: [{ id: 'kept', title: 'Kept' }],
+              removed: [{ id: 'obsolete', title: 'Obsolete note' }],
+            },
+            verified: { valid: true }, restoreState: {},
+          };
+        },
+        async restoreBackup() { restores += 1; return { restored: true }; },
+      }, { confirmRestore: () => true });
+      await view.show();
+      check('backup view distinguishes local recovery from downloaded portable backups',
+        /browser-local recovery aids/i.test(overlay.textContent)
+        && /portable/i.test(overlay.textContent)
+        && /IndexedDB/.test(overlay.textContent));
+      overlay.querySelector('[data-snapshot-id="snap"]').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('local snapshot produces a no-mutation restore preview', /No data has been changed/.test(overlay.textContent));
+      check('restore preview names notes that full-vault replacement will remove',
+        /Removed by restore \(1\)/.test(overlay.textContent)
+        && /Obsolete note/.test(overlay.textContent)
+        && /obsolete/.test(overlay.textContent));
+      overlay.querySelector('.backup-restore').click();
+      await new Promise((resolve) => setTimeout(resolve));
+      check('backup restore crosses the explicit confirmation handoff once', restores === 1);
+      view.close();
+
+      let fallbackSnapshotReads = 0;
+      view.service.getStorageHealth = async () => ({
+        backend: 'localstorage',
+        historyAvailable: false,
+        localSnapshotsAvailable: false,
+        degraded: true,
+      });
+      view.service.listLocalSnapshots = async () => { fallbackSnapshotReads += 1; throw new Error('must not read'); };
+      await view.show();
+      check('backup view retains fallback health while explicitly disabling browser-local snapshots',
+        /localStorage fallback/.test(overlay.textContent)
+        && /Local snapshots unavailable/.test(overlay.textContent)
+        && fallbackSnapshotReads === 0
+        && overlay.querySelector('.backup-snapshot').disabled);
+      view.close();
+
+      view.service.getStorageHealth = async () => ({
+        backend: 'indexeddb',
+        historyAvailable: true,
+        pendingWrites: 2,
+        pendingHistory: 1,
+        degraded: true,
+        error: '2 current-note writes are still pending. Changes are not yet durably saved.',
+      });
+      view.service.listLocalSnapshots = async () => [];
+      await view.show();
+      check('backup view renders queued authoritative writes as degraded storage health',
+        /Pending note writes\s*2/.test(overlay.textContent)
+        && /not yet durably saved/i.test(overlay.textContent));
+      view.close();
+    } catch (e) {
+      results.push('FAIL  Phase 1 backup view — threw: ' + e.message);
     }
   })();
 

@@ -373,6 +373,9 @@ ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.starts
 ok('manifest has a maskable icon', manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')));
 ok('manifest has theme + background colors', /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color));
 const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
+ok('service worker has a build-time emitted-asset precache hook', serviceWorkerSource.includes('__PRECACHE_ASSETS__'));
+ok('service worker matches same-origin static precache entries across host-added Vary headers',
+  serviceWorkerSource.includes('caches.match(req, { ignoreVary: true })'));
 const serviceWorkerHandlers = {};
 const deletedCaches = [];
 runInNewContext(serviceWorkerSource.replaceAll('__BUILD_HASH__', 'phase0test'), {

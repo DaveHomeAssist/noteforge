@@ -24,6 +24,18 @@ The initial shell is the uncompressed `index.html` plus the CSS and JavaScript f
 - Every phase records exact `wc -c` values after `npm run build` and compares the total with this baseline.
 - A dependency addition must also record license, installed version, audit result, CSP impact, and its contribution to production output.
 
+Phase 1 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`
+11,367 bytes + directly referenced CSS 31,795 bytes + directly referenced JavaScript
+199,720 bytes = 242,882-byte initial shell, 14,298 bytes below the 257,180-byte
+ceiling. The accessible recovery dialog/control markup puts HTML 2,867 bytes above
+its diagnostic ceiling, and the responsive recovery styles put CSS 302 bytes above
+its diagnostic ceiling. Direct JavaScript remains 17,467 bytes below its diagnostic
+ceiling, so the authoritative combined budget remains green without an exception.
+Recovery service/store/view/verifier chunks total 69,822 additional bytes;
+they are initialized after `app.ready` during idle time or on first recovery use and
+are build-time precached for offline first use. Full HTML/CSS/JavaScript output is
+312,704 bytes. No dependency was added in this phase.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.

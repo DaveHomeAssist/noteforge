@@ -9,6 +9,31 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 // Reference count so the shared `inert` on the background is only removed when the
 // LAST open modal closes — overlapping modals can't prematurely un-inert the app.
 let openModalCount = 0;
+const openOverlays = new Set();
+const managedInert = new Map();
+
+function syncBackgroundInert() {
+  const desired = new Set();
+  const overlays = [...openOverlays];
+  const visit = (container) => {
+    for (const child of container?.children || []) {
+      if (openOverlays.has(child)) continue;
+      if (overlays.some((overlay) => child.contains(overlay))) visit(child);
+      else desired.add(child);
+    }
+  };
+  if (openModalCount > 0) visit(document.body);
+
+  for (const [element, wasInert] of [...managedInert]) {
+    if (desired.has(element)) continue;
+    if (!wasInert) element.removeAttribute('inert');
+    managedInert.delete(element);
+  }
+  for (const element of desired) {
+    if (!managedInert.has(element)) managedInert.set(element, element.hasAttribute('inert'));
+    element.setAttribute('inert', '');
+  }
+}
 
 export class Modal {
   /**
@@ -47,7 +72,8 @@ export class Modal {
     this._returnFocus = document.activeElement;
     this.overlay.hidden = false;
     openModalCount += 1;
-    if (openModalCount === 1) this.#background()?.setAttribute('inert', ''); // freeze the app behind the modal
+    openOverlays.add(this.overlay);
+    syncBackgroundInert();
     document.addEventListener('keydown', this.__onKey, true);
     this.focusInitial();
   }
@@ -57,7 +83,8 @@ export class Modal {
     this.isOpen = false;
     this.overlay.hidden = true;
     openModalCount = Math.max(0, openModalCount - 1);
-    if (openModalCount === 0) this.#background()?.removeAttribute('inert');
+    openOverlays.delete(this.overlay);
+    syncBackgroundInert();
     document.removeEventListener('keydown', this.__onKey, true);
     this.#restoreFocus();
   }
@@ -69,10 +96,6 @@ export class Modal {
   }
 
   // --- internals ----------------------------------------------------------
-
-  #background() {
-    return document.getElementById('app');
-  }
 
   #focusables() {
     const root = this.panel || this.overlay;

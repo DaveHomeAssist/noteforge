@@ -40,6 +40,15 @@ and dark mode — all stored in your browser, no backend required.
 - **Trash & recovery** — deleting a note moves it to the **Trash** (🗑 in the
   ⋯ menu) instead of destroying it. Restore it, or delete it forever / empty the
   Trash when you're sure. A badge shows how many notes are waiting.
+- **Revision history** — every completed durable edit creates a browser-local,
+  SHA-256-deduplicated recovery point. Compare the current note with an older
+  revision, restore it after a separately confirmed safety capture, or create a
+  restored copy without changing the original. History retains 50 revisions per
+  note for up to 90 days by default.
+- **Backup center** — inspect the active storage backend and quota, create rolling
+  local daily/weekly snapshots, and download a complete, integrity-verified JSON
+  backup containing live notes, Trash, stable IDs, settings, and schema version.
+  Uploaded backups are verified and previewed before an explicit full-vault restore.
 - **Markdown shortcuts** — `# ` → heading, `- ` → bullet, `1. ` → numbered,
   `[] ` → to-do, `> ` → quote, ` ``` ` → code, `---` → divider. Enter splits /
   continues lists; Backspace at the start demotes then merges; Tab indents.
@@ -120,6 +129,15 @@ unavailable (e.g. private mode) the app transparently falls back to
 on-disk format upgradeable. Deleted notes are soft-deleted to the Trash so they
 survive a reload until purged.
 
+Revision history and rolling snapshots use namespaced keys in the same unchanged
+`my-notes-app` IndexedDB database and share content-addressed blobs. They are
+browser-local recovery aids, not independent backups. If IndexedDB is unavailable,
+current-note persistence continues through the existing `localStorage` fallback,
+while history and local snapshots report themselves unavailable instead of risking
+the smaller fallback quota. Use **⋯ → Backup center → Download JSON backup** for a
+portable artifact. See [Recovery and backups](docs/recovery.md) for retention,
+verification, restore, and browser-support details.
+
 ## Tests
 
 ```bash
@@ -128,22 +146,27 @@ npm run test:browser   # Headless (Playwright/Chromium): full interactive featur
 npm run test:all       # both
 ```
 
-`test/roundtrip.test.mjs` (257 assertions) proves the `parse()`/`serialize()`
+`test/roundtrip.test.mjs` (259 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
 and backslash-bearing table cells), exercises the schema-migration runner, the fuzzy
 matcher and scoped-search parser, the note model (soft-delete + pin + `parentId`), the
 nesting tree helpers, the note-export builder, the vault-export filenames, the
 settings normalizer / theme resolver, the PWA manifest, and deterministic
-schema-version-3 preservation fixtures (including a 1,000-note vault).
-`test/features.html` (306 assertions) drives
+schema-version-3 preservation fixtures (including a 1,000-note vault). Dedicated
+database, revision, backup, and integrated-recovery suites add 88 Phase 1 checks
+covering durable capture ordering, SHA-256 deduplication, retention/garbage
+collection, quota/fallback behavior, rolling snapshots, malformed backups, restore
+safety, large embedded images, and atomic full-vault replacement.
+`test/features.html` (320 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
-graph in a real browser; `npm run test:browser`
+graph and recovery views in a real browser; `npm run test:browser`
 runs it headlessly via
 `test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
-`document.title`, and fails on unexpected browser runtime, console, request, or
-HTTP errors). Both suites gate every push through GitHub Actions
+`document.title`, then runs 15 integrated recovery checks at 390 px plus three
+production/offline checks and fails on
+unexpected browser runtime, console, request, or HTTP errors). Both suites gate every push through GitHub Actions
 (`.github/workflows/deploy.yml`), which also publishes the build to GitHub Pages.
 
 ## Architecture
@@ -161,6 +184,8 @@ src/
 │   ├── banner.js       # Per-note cover: strip, picker (gradients/upload/URL), reposition
 │   ├── command-palette.js # Ctrl/⌘+P: fuzzy notes + commands + heading jump (uses modal.js)
 │   ├── settings-view.js   # Settings modal (theme/font/width/autosave/default template)
+│   ├── history-view.js    # Accessible revision compare/restore/restore-copy workflow
+│   ├── backup-view.js     # Storage health, local snapshots, portable verify/restore UI
 │   ├── modal.js        # Reusable accessible modal: inert background, focus trap, restore
 │   ├── trash-view.js   # Trash modal: restore / delete-forever / empty; menu count badge
 │   ├── note-list.js    # Sidebar: nested outline tree, sort, pin, tag filter, scoped + fuzzy-ranked search, virtualized
@@ -169,7 +194,10 @@ src/
 │   ├── note.js         # Note model: content + metadata (tags, banner, deletedAt, pinned, parentId)
 │   ├── database.js     # In-memory store + pub/sub + coalesced async persistence + soft-delete/Trash
 │   ├── migrations.js   # Pure schema-version migration runner (Node-testable)
-│   └── storage.js      # Async IndexedDB backend (+ localStorage migration/fallback), swappable
+│   ├── storage.js      # IndexedDB + fallback, namespaced keys, atomic batch/status APIs
+│   ├── revision-store.js # Content-addressed revisions, retention/GC, rolling snapshots
+│   ├── recovery-service.js # Durable history and verified restore application boundary
+│   └── backup.js       # Deterministic portable envelope, SHA-256 verify, restore preview
 ├── ui/
 │   ├── theme.js        # Resolved data-theme from light/dark/system (matchMedia), persisted
 │   └── settings.js     # Pure settings defaults / normalize / theme resolution
@@ -211,3 +239,9 @@ vite.config.js          # Build + dev server; injects the Content-Security-Polic
   rest of the app. Reads are synchronous off an in-memory `Map` for a snappy UI;
   writes go through a coalescing, serialized queue so keystroke-rate saves never
   race or block the editor.
+- Current-note durability remains higher priority than optional history. Revision
+  capture starts only after the matching note snapshot commits; a history/quota
+  failure reports degraded recovery separately and never relabels a failed note
+  write as saved. Destructive revision restore first commits a `pre_restore`
+  safety record, while portable restore verifies and previews the full replacement
+  before one storage batch updates memory.

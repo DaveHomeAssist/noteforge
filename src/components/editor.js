@@ -30,11 +30,12 @@ export class Editor {
     this.autosave = debounce(() => this.#save(), n);
   }
 
-  open(id, { focus = null } = {}) {
+  open(id, { focus = null, discardPending = false } = {}) {
     // Persist the OUTGOING note's buffered (debounced) edits before we switch —
     // flush runs #save() synchronously while currentId/blockEditor still point at
     // the note being left, so a fast note-switch never drops unsaved typing.
-    this.autosave.flush();
+    if (discardPending) this.autosave.cancel();
+    else this.autosave.flush();
     const note = this.db.getNote(id);
     if (!note) return this.#renderEmpty();
     this.currentId = id;

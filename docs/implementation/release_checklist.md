@@ -55,6 +55,7 @@ test -f dist/index.html
 test -f dist/sw.js
 test -f dist/manifest.webmanifest
 ! rg -n '__BUILD_HASH__' dist/sw.js
+! rg -n '__PRECACHE_ASSETS__' dist/sw.js
 rg -n "const CACHE = 'noteforge-[0-9a-f]{12}'" dist/sw.js
 rg -n 'Content-Security-Policy|https://systembydave.com/noteforge/' dist/index.html
 find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c

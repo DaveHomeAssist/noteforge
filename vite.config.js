@@ -55,7 +55,9 @@ function swVersionPlugin() {
       let assets = [];
       try { assets = readdirSync(resolve(dist, 'assets')).sort(); } catch { /* none */ }
       const hash = createHash('sha256').update(assets.join('|')).digest('hex').slice(0, 12);
-      writeFileSync(swPath, sw.replace(/__BUILD_HASH__/g, hash));
+      writeFileSync(swPath, sw
+        .replace(/__BUILD_HASH__/g, hash)
+        .replace('/* __PRECACHE_ASSETS__ */ []', JSON.stringify(assets)));
     },
   };
 }
@@ -79,12 +81,12 @@ function cspPlugin() {
   };
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, isPreview }) => ({
   root: '.',
   // Production is served from the /noteforge/ sub-path (systembydave.com/noteforge/,
   // and a davehomeassist.github.io/noteforge/ mirror); dev + the test servers stay at
   // root so nothing else has to change.
-  base: command === 'build' ? '/noteforge/' : '/',
+  base: command === 'build' || isPreview ? '/noteforge/' : '/',
   plugins: [cspPlugin(), swVersionPlugin()],
   server: {
     port: 5175,

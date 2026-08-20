@@ -102,7 +102,7 @@ export class TrashView {
     } else if (btn.dataset.act === 'purge') {
       const note = this.db.getTrash().find((n) => n.id === id);
       const label = note ? `"${note.title || 'Untitled'}"` : 'this note';
-      if (confirm(`Permanently delete ${label}? This cannot be undone.`)) {
+      if (confirm(`Permanently delete ${label}? This also removes its browser-local revision history and any local snapshots containing it. This cannot be undone.`)) {
         this.db.purgeNote(id);
       }
     }
@@ -111,7 +111,7 @@ export class TrashView {
   #empty() {
     const n = this.db.getTrash().length;
     if (n === 0) return;
-    if (confirm(`Permanently delete ${n} note${n === 1 ? '' : 's'} in the Trash? This cannot be undone.`)) {
+    if (confirm(`Permanently delete ${n} note${n === 1 ? '' : 's'} in the Trash? This also removes their browser-local revision history and any local snapshots containing them. This cannot be undone.`)) {
       this.db.emptyTrash();
     }
   }

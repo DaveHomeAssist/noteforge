@@ -28,3 +28,10 @@ This matrix owns the 20-feature program scope. A row is complete only when its d
 ## Cross-cutting release rule
 
 No row exits its phase with failing Node/browser/build/audit checks, unexplained console/request/HTTP errors, an unverified schema migration, missing keyboard/mobile behavior, or an uncommitted rollback path. The final program additionally requires exact-SHA CI and live provenance on both deployment surfaces.
+
+## Completion evidence
+
+- Phase 0 is complete on both live surfaces at NoteForge `197b4ae44a33854bc856ac4cf6d99ec55f0abf4e`
+  and System by Dave `ca35ac1cddb6efef09a4ccb5ba54efa5e4e812aa`.
+- Phase 1 rows 1 and 18 are implemented locally. Release evidence is recorded in
+  the Phase 1 commit and CI/deployment run before this section is marked released.

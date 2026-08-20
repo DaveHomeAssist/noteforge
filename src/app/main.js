@@ -3,6 +3,7 @@
 // graph/editor view switch, Trash, and JSON export/import.
 
 import { Database } from '../core/database.js';
+import { storage } from '../core/storage.js';
 import { Editor } from '../components/editor.js';
 import { NoteList } from '../components/note-list.js';
 import { GraphView } from '../components/graph.js';
@@ -23,6 +24,9 @@ import { parseNoteMergeImport, selectImportableNotes } from '../utils/json-impor
 class App {
   constructor() {
     this.db = new Database();
+    this.revisionStore = null;
+    this.recovery = null;
+    this.recoveryReady = null;
     this.currentId = null;
     this.view = 'editor'; // 'editor' | 'graph'
 
@@ -56,6 +60,26 @@ class App {
       settingsBtn: document.getElementById('settings-btn'),
       settingsOverlay: document.getElementById('settings-overlay'),
       settingsForm: document.getElementById('settings-form'),
+      historyBtn: document.getElementById('history-btn'),
+      historyOverlay: document.getElementById('history-overlay'),
+      historyList: document.getElementById('history-list'),
+      historyPreview: document.getElementById('history-preview'),
+      historyDiff: document.getElementById('history-diff'),
+      historyStatus: document.getElementById('history-status'),
+      historyRestore: document.getElementById('history-restore'),
+      historyRestoreCopy: document.getElementById('history-restore-copy'),
+      backupBtn: document.getElementById('backup-btn'),
+      backupOverlay: document.getElementById('backup-overlay'),
+      backupHealth: document.getElementById('backup-health'),
+      backupSnapshots: document.getElementById('backup-snapshots'),
+      backupStatus: document.getElementById('backup-status'),
+      backupDownload: document.getElementById('backup-download'),
+      backupCreateSnapshot: document.getElementById('backup-create-snapshot'),
+      backupFile: document.getElementById('backup-file'),
+      backupVerify: document.getElementById('backup-verify'),
+      backupPreview: document.getElementById('backup-preview'),
+      backupPreviewRestore: document.getElementById('backup-preview-restore'),
+      backupRestore: document.getElementById('backup-restore'),
       app: document.getElementById('app'),
       sidebar: document.querySelector('.sidebar'),
       mainEl: document.querySelector('.main'),
@@ -72,9 +96,15 @@ class App {
 
     registerServiceWorker(); // production-only PWA offline support
 
-    this.ready = this.#init().catch((err) => {
-      console.error('[app] initialization failed:', err);
-    });
+    this.ready = this.#init()
+      .then(() => {
+        this.#scheduleRecoveryInitialization();
+        return this;
+      })
+      .catch((err) => {
+        console.error('[app] initialization failed:', err);
+        throw err;
+      });
   }
 
   async #init() {
@@ -82,6 +112,7 @@ class App {
     // Surface a persistence failure (both storage backends down) so silent
     // data loss becomes a visible, dismissible warning instead of console-only.
     this.db.onPersistError = () => this.#showStorageError();
+    this.db.onHistoryError = () => this.#showHistoryError();
 
     const actions = {
       openNote: (id) => this.openNote(id),
@@ -124,6 +155,8 @@ class App {
       this.db,
       (s) => this.#applySettings(s)
     );
+    this.history = null; // loaded on first open to keep recovery UI out of the initial shell
+    this.backup = null;
     // Apply persisted font/width/autosave on load (Theme already applied the theme).
     this.#applySettings(normalizeSettings(this.db.config));
 
@@ -132,6 +165,7 @@ class App {
       this.noteList.render();
       this.noteList.setActive(this.currentId);
       this.editor.refresh();
+      this.el.historyBtn.disabled = !this.currentId || !this.db.getNote(this.currentId);
       if (this.view === 'graph') this.graph.render(this.currentId);
     });
 
@@ -158,6 +192,7 @@ class App {
     const note = this.db.getNote(id);
     if (!note) return;
     this.currentId = id;
+    this.el.historyBtn.disabled = false;
     this.setView('editor');
     this.editor.open(id, opts);
     this.noteList.reveal(id); // expand collapsed ancestors so the active note is visible in the outline
@@ -216,7 +251,7 @@ class App {
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open);
+    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open);
   }
 
   #toggleSidebar() {
@@ -264,6 +299,150 @@ class App {
     document.body.appendChild(bar);
   }
 
+  /** Current-note persistence succeeded, but optional browser-local recovery did not. */
+  #showHistoryError() {
+    if (this._historyErrorBar && document.body.contains(this._historyErrorBar)) return;
+    const bar = document.createElement('div');
+    bar.className = 'storage-error storage-error--history';
+    bar.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent = 'Your note was saved, but browser-local revision history is unavailable. Download a JSON backup from Backup center.';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'storage-error__close';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.textContent = '×';
+    close.addEventListener('click', () => bar.remove());
+    bar.append(msg, close);
+    this._historyErrorBar = bar;
+    document.body.appendChild(bar);
+  }
+
+  async #captureRollingSnapshots() {
+    await this.#ensureRecovery();
+    await this.db.flushCurrentWrites();
+    const status = await this.revisionStore.getStatus();
+    if (!status.available) return;
+    try {
+      await this.recovery.ensureRollingSnapshots();
+    } catch (error) {
+      console.warn('[recovery] rolling local snapshots unavailable:', error);
+    }
+  }
+
+  async #showHistory() {
+    this.#closeMenu();
+    await this.#ensureHistory();
+    const note = this.currentId ? this.db.getNote(this.currentId) : null;
+    if (!note) return;
+    this.editor?.flushPending();
+    await this.db.flush();
+    await this.history.show(note.id);
+  }
+
+  async #showBackup() {
+    this.#closeMenu();
+    await this.#ensureBackup();
+    this.editor?.flushPending();
+    await this.db.flush();
+    await this.backup.show();
+  }
+
+  async #ensureHistory() {
+    if (this.history) return this.history;
+    const [{ HistoryView }] = await Promise.all([
+      import('../components/history-view.js'),
+      this.#ensureRecovery(),
+    ]);
+    this.history = new HistoryView(
+      {
+        overlay: this.el.historyOverlay,
+        list: this.el.historyList,
+        preview: this.el.historyPreview,
+        diff: this.el.historyDiff,
+        status: this.el.historyStatus,
+        restore: this.el.historyRestore,
+        restoreCopy: this.el.historyRestoreCopy,
+      },
+      this.recovery,
+      {
+        confirmRestore: ({ message }) => confirm(message),
+        onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
+        onRestoreCopy: ({ note }) => this.openNote(note.id),
+      }
+    );
+    return this.history;
+  }
+
+  async #ensureBackup() {
+    if (this.backup) return this.backup;
+    const [{ BackupView }] = await Promise.all([
+      import('../components/backup-view.js'),
+      this.#ensureRecovery(),
+    ]);
+    this.backup = new BackupView(
+      {
+        overlay: this.el.backupOverlay,
+        health: this.el.backupHealth,
+        snapshots: this.el.backupSnapshots,
+        status: this.el.backupStatus,
+        download: this.el.backupDownload,
+        createSnapshot: this.el.backupCreateSnapshot,
+        file: this.el.backupFile,
+        verify: this.el.backupVerify,
+        preview: this.el.backupPreview,
+        previewRestore: this.el.backupPreviewRestore,
+        restore: this.el.backupRestore,
+      },
+      this.recovery,
+      {
+        confirmRestore: ({ message }) => confirm(message),
+        onRestored: () => this.#openFirstRestoredNote(),
+      }
+    );
+    return this.backup;
+  }
+
+  #ensureRecovery() {
+    if (this.recoveryReady) return this.recoveryReady;
+    if (this.recovery) return Promise.resolve(this.recovery);
+    this.recoveryReady = Promise.all([
+      import('../core/revision-store.js'),
+      import('../core/recovery-service.js'),
+    ]).then(async ([{ RevisionStore }, { RecoveryService }]) => {
+      this.revisionStore = new RevisionStore(storage);
+      this.recovery = new RecoveryService({ db: this.db, revisionStore: this.revisionStore, storage });
+      await this.recovery.ready;
+      return this.recovery;
+    }).catch((error) => {
+      this.recoveryReady = null;
+      this.recovery = null;
+      this.revisionStore = null;
+      throw error;
+    });
+    return this.recoveryReady;
+  }
+
+  #scheduleRecoveryInitialization() {
+    const initialize = () => {
+      void this.#ensureRecovery()
+        .then(() => this.#captureRollingSnapshots())
+        .catch((error) => {
+          console.warn('[recovery] deferred initialization unavailable:', error);
+          this.#showHistoryError();
+        });
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 2_000 });
+    else setTimeout(initialize, 0);
+  }
+
+  #openFirstRestoredNote() {
+    this.currentId = null;
+    const first = this.db.getNotesSorted()[0];
+    if (first) this.openNote(first.id, { discardPending: true });
+    else this.editor?.refresh();
+  }
+
   /** Focus the sidebar search — revealing the off-canvas sidebar first on mobile,
    *  where it would otherwise be inert and swallow the focus silently. */
   #focusSearch() {
@@ -297,6 +476,7 @@ class App {
       { id: 'theme', title: 'Toggle dark / light theme', hint: 'Appearance', icon: '🌓', run: () => this.theme.toggle() },
       { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.trash.show() },
       { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.settings.show() },
+      { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
       { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
       { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
@@ -306,6 +486,7 @@ class App {
       cmds.push({ id: 'save-folder', title: 'Save all notes to a folder…', hint: 'Markdown vault', icon: '📁', run: () => this.saveVaultToFolder() });
     }
     if (cur) {
+      cmds.push({ id: 'history', title: 'Open revision history', hint: cur.title, icon: '↶', run: () => this.#showHistory() });
       cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
       if (cur.parentId) cmds.push({ id: 'unnest', title: 'Move current note to top level', hint: cur.title, icon: '↤', run: () => this.reparent(cur.id, null) });
       cmds.push({ id: 'pin', title: cur.pinned ? 'Unpin current note' : 'Pin current note to top', hint: cur.title, icon: '📌', run: () => this.togglePin(cur.id) });
@@ -394,6 +575,8 @@ class App {
       this.#closeMenu();
       this.settings.show();
     });
+    this.el.historyBtn?.addEventListener('click', () => this.#showHistory());
+    this.el.backupBtn?.addEventListener('click', () => this.#showBackup());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
     this.el.sidebarBackdrop?.addEventListener('click', () => this.#closeSidebar());
   }
@@ -506,7 +689,7 @@ class App {
       // Command palette toggles even from within itself.
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        if ((this.trash?.open || this.settings?.open) && !this.palette?.open) return; // don't stack over another modal
+        if ((this.trash?.open || this.settings?.open || this.history?.open || this.backup?.open) && !this.palette?.open) return; // don't stack over another modal
         this.palette.toggle();
         return;
       }

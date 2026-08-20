@@ -10,9 +10,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/roundtrip.test.mjs",
+    "test": "node test/roundtrip.test.mjs && node test/database-durability.test.mjs && node test/revision.test.mjs && node test/backup.test.mjs && node test/recovery.test.mjs",
     "test:browser": "node test/run-features.mjs",
-    "test:all": "node test/roundtrip.test.mjs && node test/run-features.mjs"
+    "test:all": "npm test && node test/run-features.mjs"
   },
   "dependencies": {
     "dompurify": "^3.2.4",

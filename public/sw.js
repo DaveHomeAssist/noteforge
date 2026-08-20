@@ -1,6 +1,6 @@
-// Service worker for offline launch. Runtime-cached (not a build-time precache of
-// hashed assets): navigations are network-first with an app-shell fallback, and
-// same-origin static assets are stale-while-revalidate. Cross-origin requests
+// Service worker for offline launch. The build injects every emitted hashed
+// asset so first-use lazy recovery views work offline; navigations remain
+// network-first and same-origin runtime assets are stale-while-revalidate. Cross-origin requests
 // (e.g. external banner images) are never touched, matching the app's CSP/privacy
 // posture. Registered only in production (see src/app/pwa.js).
 
@@ -13,7 +13,14 @@ const CACHE = 'noteforge-__BUILD_HASH__';
 // root). Derived from the SW's own URL so the same file works under any deploy path.
 const BASE = new URL('./', self.location).pathname;
 const SHELL = BASE; // app-shell / start URL
-const CORE = [BASE, BASE + 'index.html', BASE + 'manifest.webmanifest', BASE + 'icon.svg'];
+const BUILD_ASSETS = /* __PRECACHE_ASSETS__ */ [];
+const CORE = [
+  BASE,
+  BASE + 'index.html',
+  BASE + 'manifest.webmanifest',
+  BASE + 'icon.svg',
+  ...BUILD_ASSETS.map((asset) => BASE + 'assets/' + asset),
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -63,7 +70,11 @@ self.addEventListener('fetch', (event) => {
 
   // Same-origin static assets: stale-while-revalidate.
   event.respondWith(
-    caches.match(req).then((cached) => {
+    // Static hosts/dev previews may add `Vary: Origin`; module requests carry
+    // an Origin header while install-time precache requests may not. These are
+    // already same-origin, immutable hashed assets, so ignore that response
+    // variance or a fully populated cache can still miss while offline.
+    caches.match(req, { ignoreVary: true }).then((cached) => {
       const network = fetch(req)
         .then((res) => {
           if (res && res.ok && res.type === 'basic') {
