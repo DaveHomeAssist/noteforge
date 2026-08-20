@@ -35,7 +35,8 @@ stronger architecture remain available when the product calls for them. Shipped:
   grid and **collapsible toggles** in the editor, and **performance** work (a
   virtualized note list + a node-budgeted graph for large vaults). *(Depth round — shipped.)*
 - **Quality** — 257 Node assertions (`npm test`) + 306 browser feature assertions
-  (`npm run test:browser`, headless via Playwright), gated in CI on every push; an
+  (`npm run test:browser`, headless via Playwright), gated in CI on pull requests
+  and every main push; an
   adversarial-review workflow is part of the dev loop, and a recent audit pass fixed
   14 verified issues (round-trip corruption, keyboard/ARIA gaps, a silent-save-failure
   warning, and navigation dead-ends).

@@ -69,7 +69,7 @@ find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 - Review the complete diff for accidental formatting churn, secrets, fixture realism, migration reversibility, and documentation/count drift.
 - Re-run the smallest affected test after the final edit, then the full local gates.
 - Commit only the intended phase slice and push its focused branch immediately.
-- The current workflow does not run on pull requests. Until that is changed, passing local gates and recorded diff review are the pre-merge proof; do not claim PR CI exists.
+- Pull requests run the full `verify` job (install, audit, Node tests, Playwright Chromium browser tests, and build) without uploading or deploying Pages. Require that check when a PR is used; local gates and diff review still precede every push.
 - Merge only a releasable phase. After merge, fetch and verify local/fetched/remote `main` resolve to the same 40-character SHA.
 
 ## 4. Prove exact-SHA NoteForge CI and mirror deployment
