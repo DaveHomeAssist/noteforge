@@ -13,8 +13,35 @@ import {
   splitFrontmatterSource,
 } from '../utils/frontmatter.js';
 
-const signatureOf = (note) => `${note.content}\u0000${JSON.stringify(note.aliases || [])}`;
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const signatureOf = (note) => ({ content: note.content, aliases: [...(note.aliases || [])] });
+const sameSignature = (left, note) => Boolean(left) && left.content === note.content && same(left.aliases, note.aliases);
+
+/**
+ * Decide which alias store is authoritative for one reconcile pass.
+ *
+ * Leading YAML `aliases` is the Markdown source of truth after the Phase 5
+ * migration; `note.aliases` metadata is the resolution cache that rename and
+ * alias-repair transactions write to. The two must never be unioned blindly,
+ * or an alias removed from either store is resurrected from the other.
+ *
+ * - No prior signature (startup, import, restore, first sight): merge, which is
+ *   the documented legacy-metadata-into-frontmatter migration.
+ * - Only Markdown changed (editor or raw YAML edit): frontmatter wins.
+ * - Only metadata changed (rename, Link tools repair): metadata wins and is
+ *   mirrored into frontmatter.
+ * - Both changed in one commit (properties editor, revision restore): merge.
+ */
+export function canonicalAliasesFor(note, property, previous) {
+  const fromFrontmatter = property.present ? property.aliases : [];
+  if (previous) {
+    const contentChanged = previous.content !== note.content;
+    const metadataChanged = !same(previous.aliases, note.aliases);
+    if (contentChanged && !metadataChanged) return normalizeAliases(fromFrontmatter, note.title);
+    if (metadataChanged && !contentChanged) return normalizeAliases(note.aliases, note.title);
+  }
+  return normalizeAliases([...(property.aliases || []), ...(note.aliases || [])], note.title);
+}
 
 export class Phase5Controller {
   constructor({ db, editor, ensureRecovery, announce = () => {}, refreshSearch = () => {} }) {
@@ -191,7 +218,8 @@ export class Phase5Controller {
     const replacements = [];
     const captures = [];
     for (const note of notes) {
-      if (changedOnly && this.signatures.get(note.id) === signatureOf(note)) continue;
+      const previous = this.signatures.get(note.id) || null;
+      if (changedOnly && sameSignature(previous, note)) continue;
       blockedById.delete(note.id);
       const before = note.toJSON();
       const parsed = await this.#indexNote(note);
@@ -204,10 +232,12 @@ export class Phase5Controller {
         blockedById.set(note.id, { id: note.id, title: note.title, message: 'aliases must be a YAML list of text values.' });
         continue;
       }
-      const canonical = normalizeAliases([...(property.aliases || []), ...(note.aliases || [])], note.title);
+      const canonical = canonicalAliasesFor(note, property, previous);
       let content = note.content;
       if (canonical.length && (!property.present || !same(property.aliases, canonical))) {
         content = await setFrontmatterProperty(note.content, 'aliases', canonical);
+      } else if (!canonical.length && property.present && property.aliases.length) {
+        content = await removeFrontmatterProperty(note.content, 'aliases');
       }
       if (content !== note.content || !same(canonical, note.aliases)) {
         replacements.push({ ...before, content, aliases: canonical });
