@@ -1132,8 +1132,10 @@ class App {
       return; // user dismissed the picker
     }
     try {
-      const { writeVaultToDir } = await import('../utils/vault.js');
-      const written = await writeVaultToDir(dir, this.db.getAllNotes());
+      const { saveVaultToFolder } = await import('../utils/vault.js');
+      this.editor?.flushPending();
+      const written = await saveVaultToFolder(dir, this.db);
+      if (!await this.db.flushCurrentWrites()) this.#showStorageError();
       alert(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`);
     } catch (err) {
       console.warn('[vault] save failed:', err);

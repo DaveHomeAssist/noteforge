@@ -23,6 +23,48 @@ export function normalizeVaultPath(value) {
 
 const fileTitle = (path) => path.split('/').at(-1).replace(/\.md$/i, '').trim() || 'Untitled';
 const validExternalId = (value) => typeof value === 'string' && /^[^\u0000-\u001f\u007f]{1,128}$/u.test(value.trim());
+/** The one persisted `config.folderMappings[noteId]` record shape. */
+export function folderMapping({ noteId, relativePath, title, externalId = null, sourceHash, destinationHash, reconciledAt }) {
+  return { noteId, relativePath, title, externalId: externalId || null, sourceHash, destinationHash, reconciledAt };
+}
+
+/** Assign a mapping without letting a note ID such as `__proto__` reach the prototype chain. */
+export function defineFolderMapping(target, noteId, mapping) {
+  Object.defineProperty(target, noteId, { value: mapping, enumerable: true, configurable: true, writable: true });
+  return target;
+}
+
+/**
+ * Record the files written by "Save all notes to a folder" as prior export
+ * mappings. Without this record a later folder reconciliation has no identity
+ * for a file that lacks `noteforge_id` and must classify it as a Conflict;
+ * with it, the planner can tell Update, Unchanged, and two-sided Conflict apart.
+ * Pure apart from hashing: returns a new mappings object, never mutates input.
+ */
+export async function folderMappingsAfterExport(existing, files, { exportedAt = new Date().toISOString() } = {}) {
+  const next = {};
+  for (const [noteId, mapping] of Object.entries(existing && typeof existing === 'object' ? existing : {})) {
+    defineFolderMapping(next, noteId, structuredClone(mapping));
+  }
+  for (const file of files || []) {
+    if (typeof file?.noteId !== 'string' || !file.noteId) continue;
+    const content = String(file.content ?? '');
+    const parsed = await parseFrontmatter(content);
+    const externalValue = parsed.status === 'valid' ? parsed.properties.get('noteforge_id') : null;
+    const hash = await hashVaultSource(content);
+    defineFolderMapping(next, file.noteId, folderMapping({
+      noteId: file.noteId,
+      relativePath: normalizeVaultPath(file.relativePath),
+      title: file.title,
+      externalId: validExternalId(externalValue) ? externalValue.trim() : null,
+      sourceHash: hash,
+      destinationHash: hash,
+      reconciledAt: exportedAt,
+    }));
+  }
+  return next;
+}
+
 const mappingCandidates = (mappings, path, externalId) => {
   const values = Object.values(mappings && typeof mappings === 'object' ? mappings : {});
   return values.filter((entry) => entry && (externalId

@@ -21,7 +21,7 @@ The initial shell is the uncompressed `index.html` plus the CSS and JavaScript f
 - Baseline: 214,316 bytes.
 - Hard ceiling without an approved exception: 257,180 bytes (+20%, rounded up).
 - Diagnostic per-artifact ceilings: HTML 8,500 bytes, CSS 31,493 bytes, JavaScript 217,187 bytes. The total ceiling is authoritative; a justified shift between CSS and JavaScript is allowed.
-- Every phase records exact `wc -c` values after `npm run build` and compares the total with this baseline.
+- Every phase records exact `wc -c` values after `npm run build` and compares the total with this baseline. `npm run test:budget` (`test/bundle-budget.mjs`) computes the same total from `dist/` and fails above the hard ceiling; CI runs it after every build.
 - A dependency addition must also record license, installed version, audit result, CSP impact, and its contribution to production output.
 
 Phase 1 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`

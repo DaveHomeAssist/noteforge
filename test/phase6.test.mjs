@@ -23,10 +23,12 @@ import {
 } from '../src/utils/clipper.js';
 import {
   VAULT_IMPORT_MAX_FILE_BYTES,
+  folderMappingsAfterExport,
   normalizeVaultPath,
   planVaultImport,
   readVaultFileList,
 } from '../src/utils/vault-import.js';
+import { exportVaultToDir, saveVaultToFolder } from '../src/utils/vault.js';
 import { debounce } from '../src/utils/helpers.js';
 
 const note = (id, title = id, content = `# ${title}`, extra = {}) => ({
@@ -291,6 +293,52 @@ test('reconciliation backs up, captures update revisions, atomically adds/update
   assert.equal(db.config.folderMappings[added.proposedNoteId].relativePath, 'nested/Added.md');
   const rerun = await service.plan(entries);
   assert.deepEqual(rerun.counts, { Add: 0, Update: 0, Conflict: 0, Unchanged: 2 });
+});
+
+test('save-to-folder records export mappings so reconciliation recognises its own files without noteforge_id', async () => {
+  const store = backend({ schemaVersion: 6, config: {}, notes: [note('a', 'Alpha', '# Alpha'), note('b', 'Beta', '# Beta'), note('c', 'Gamma', '---\nnoteforge_id: gamma-id\n---\n# Gamma')] });
+  const db = await new Database({ storageBackend: store }).init();
+  const files = new Map();
+  const directory = {
+    async getFileHandle(name) {
+      return { async createWritable() { return { async write(value) { files.set(name, value); }, async close() {} }; } };
+    },
+  };
+  const exported = await exportVaultToDir(directory, db.getAllNotes());
+  assert.equal(exported.written, 3);
+  assert.deepEqual(exported.files.map((file) => [file.noteId, file.relativePath]), [['a', 'Alpha.md'], ['b', 'Beta.md'], ['c', 'Gamma.md']]);
+  const mappings = await folderMappingsAfterExport({ __proto__: { stale: true }, keep: { noteId: 'keep', relativePath: 'Keep.md' } }, exported.files, { exportedAt: '2026-08-20T12:00:00.000Z' });
+  assert.deepEqual(Object.keys(mappings).sort(), ['a', 'b', 'c', 'keep'], 'existing mappings survive and prototype keys are not inherited');
+  assert.equal(mappings.a.sourceHash, mappings.a.destinationHash);
+  assert.equal(mappings.c.externalId, 'gamma-id');
+  assert.equal(mappings.a.externalId, null);
+  db.setConfig({ folderMappings: mappings });
+  await db.flush();
+  assert.equal(await saveVaultToFolder(directory, db), 3, 'the app entry point writes and records mappings in one step');
+  assert.deepEqual(Object.keys(db.config.folderMappings).sort(), ['a', 'b', 'c', 'keep']);
+
+  // Unedited round trip: every exported file is Unchanged, never a title Conflict.
+  const entries = () => [...files].map(([relativePath, text]) => ({ relativePath, text }));
+  const service = new ReconciliationService({ db, recovery: { async downloadBackup() {} }, now: () => new Date('2026-08-20T13:00:00.000Z') });
+  assert.deepEqual((await service.plan(entries())).counts, { Add: 0, Update: 0, Conflict: 0, Unchanged: 3 });
+
+  // External edit only: Update. Vault edit only: Unchanged. Both: Conflict.
+  files.set('Alpha.md', '# Alpha edited outside');
+  const beta = db.getNote('b');
+  beta.update({ content: '# Beta edited inside' });
+  db.saveNote(beta);
+  await db.flush();
+  files.set('Gamma.md', '---\nnoteforge_id: gamma-id\n---\n# Gamma edited outside');
+  const gamma = db.getNote('c');
+  gamma.update({ content: '---\nnoteforge_id: gamma-id\n---\n# Gamma edited inside' });
+  db.saveNote(gamma);
+  await db.flush();
+  const plan = await service.plan(entries());
+  const byPath = Object.fromEntries(plan.items.map((item) => [item.relativePath, item]));
+  assert.equal(byPath['Alpha.md'].status, 'Update');
+  assert.equal(byPath['Alpha.md'].destinationNoteId, 'a');
+  assert.equal(byPath['Beta.md'].status, 'Unchanged');
+  assert.equal(byPath['Gamma.md'].status, 'Conflict');
 });
 
 test('reconciliation requires an explicit decision for every mutable item and never backs up a no-op', async () => {

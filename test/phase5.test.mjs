@@ -3,7 +3,8 @@ import test from 'node:test';
 import { Database } from '../src/core/database.js';
 import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/core/migrations.js';
 import { REVISION_REASONS } from '../src/core/revision-store.js';
-import { Phase5Controller } from '../src/app/phase5.js';
+import { Phase5Controller, canonicalAliasesFor } from '../src/app/phase5.js';
+import { LinkOperations } from '../src/core/link-operations.js';
 import { createBackup, serializeBackup, verifyBackup } from '../src/core/backup.js';
 import {
   FrontmatterError,
@@ -131,6 +132,67 @@ test('schema v6 marks and Phase5Controller completes revision-protected alias mi
   assert.equal(db.config.frontmatterAliasMigration.status, 'repair_required', 'unchanged blocked notes remain in the repair report');
   assert.ok(captures.some((capture) => capture.reason === 'pre_frontmatter_alias_migration' && capture.note.id === 'valid'));
   controller.unsubscribe();
+});
+
+test('frontmatter aliases stay the single source of truth: removing an alias from either store is not resurrected', async () => {
+  const meta = { tags: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', deletedAt: null, pinned: false, parentId: null, archivedAt: null, banner: null };
+  const migrated = { id: 'n1', title: 'Current', content: '---\naliases: [Old Name]\nkeep: yes\n---\nBody', aliases: ['Old Name'], ...meta };
+  const frontmatterAliases = async (note) => aliasesFromProperties((await parseFrontmatter(note.content)).properties);
+  const boot = async () => {
+    const db = await new Database({ storageBackend: backend({ schemaVersion: 6, notes: [migrated], config: { frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] } } }), onNotesPersisted: async () => {} }).init();
+    const controller = new Phase5Controller({ db, editor: { flushPending() {}, currentId: null }, ensureRecovery: async () => {}, refreshSearch() {} });
+    await controller.ready;
+    const settle = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await controller.reconcileAliases({ changedOnly: true, noteIds: ['n1'] });
+      await db.flush();
+    };
+    return { db, controller, settle };
+  };
+
+  // Link tools alias repair edits metadata only; the removal must reach frontmatter.
+  let { db, controller, settle } = await boot();
+  const links = new LinkOperations(db);
+  await links.applyAliasRemovalPlan(links.planAliasRemoval('n1', 'Old Name'));
+  await settle();
+  assert.deepEqual(db.getNote('n1').aliases, []);
+  assert.equal((await frontmatterAliases(db.getNote('n1'))).present, false, 'the emptied aliases key is removed from YAML');
+  assert.match(db.getNote('n1').content, /keep: yes/, 'other frontmatter keys survive');
+  assert.equal(db.resolveTitle('Old Name'), null);
+  controller.unsubscribe();
+
+  // Editing the YAML itself (Markdown is the source of truth) must update metadata, not be overwritten by it.
+  ({ db, controller, settle } = await boot());
+  let note = db.getNote('n1');
+  note.update({ content: '---\naliases: [Fresh]\nkeep: yes\n---\nBody' });
+  db.saveNote(note);
+  await settle();
+  assert.deepEqual(db.getNote('n1').aliases, ['Fresh']);
+  assert.equal(db.resolveTitle('Old Name'), null);
+  assert.equal(db.resolveTitle('Fresh')?.id, 'n1');
+  note = db.getNote('n1');
+  note.update({ content: 'Body' });
+  db.saveNote(note);
+  await settle();
+  assert.deepEqual(db.getNote('n1').aliases, [], 'deleting the frontmatter block clears alias metadata');
+  assert.equal(db.getNote('n1').content, 'Body', 'no frontmatter is reinserted');
+  controller.unsubscribe();
+
+  // A metadata-only write (rename adds the previous title) is mirrored into frontmatter.
+  ({ db, controller, settle } = await boot());
+  const renamer = new LinkOperations(db);
+  await renamer.applyRenamePlan(renamer.planRename('n1', 'Renamed'));
+  await settle();
+  assert.deepEqual(db.getNote('n1').aliases, ['Old Name', 'Current']);
+  assert.deepEqual((await frontmatterAliases(db.getNote('n1'))).aliases, ['Old Name', 'Current']);
+  controller.unsubscribe();
+
+  // Pure decision table.
+  const property = { valid: true, present: true, aliases: ['A'] };
+  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, null), ['A', 'B'], 'first sight merges legacy metadata');
+  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['B'] }), ['A'], 'Markdown edit wins');
+  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'x', aliases: ['A'] }), ['B'], 'metadata edit wins');
+  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['A'] }), ['A', 'B'], 'a coordinated write merges');
 });
 
 test('derived property filters are normalized, exact, non-authoritative, and searchable', async () => {

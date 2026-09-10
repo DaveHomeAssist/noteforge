@@ -51,6 +51,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Initial shell budget (docs/implementation/performance_budgets.md)
+        run: npm run test:budget
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
