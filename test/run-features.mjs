@@ -1459,20 +1459,24 @@ async function runPhase7Smoke(browser, base, runtimeErrors) {
     await page.evaluate(() => Promise.all([window.app.phase6.ready, window.app.phase5.ready, window.app.recoveryReady]));
 
     stage = 'creating a combined workspace, task, property, and recovery fixture';
-    await page.evaluate(async () => {
+    const phase7Due = await page.evaluate(async () => {
+      const now = new Date();
+      now.setHours(12, 0, 0, 0);
+      const due = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const db = window.app.db;
       db.createNote({ id: 'phase7-a', title: 'Phase7 A', content: 'A before backup' });
       db.createNote({ id: 'phase7-b', title: 'Phase7 B', content: 'B before backup' });
       db.createNote({
         id: 'phase7-task',
         title: 'Phase7 Tasks',
-        content: '---\nstatus: open\n---\n# Work\n\n- [ ] Phase7 original task @due(2026-08-21)',
+        content: `---\nstatus: open\n---\n# Work\n\n- [ ] Phase7 original task @due(${due})`,
       });
       await db.flush();
       await window.app.openNote('phase7-a');
       await window.app.openNote('phase7-b');
       await window.app.openNote('phase7-a');
       await window.app.workspace.moveToOtherPane('phase7-a');
+      return due;
     });
     await page.locator('#workspace [data-pane="primary"] .blk').fill('B pane backup state');
     await page.locator('#workspace [data-pane="secondary"] .blk').fill('A pane backup state');
@@ -1484,12 +1488,12 @@ async function runPhase7Smoke(browser, base, runtimeErrors) {
     const backupText = await page.evaluate(async () => (await window.app.recovery.createBackup()).text);
 
     stage = 'updating one task/property source incrementally';
-    await page.evaluate(async () => {
+    await page.evaluate(async (due) => {
       const note = window.app.db.getNote('phase7-task');
-      note.update({ content: '---\nstatus: reviewed\n---\n# Work\n\n- [ ] Phase7 updated task @due(2026-08-21)' });
+      note.update({ content: `---\nstatus: reviewed\n---\n# Work\n\n- [ ] Phase7 updated task @due(${due})` });
       window.app.db.saveNote(note);
       await window.app.db.flush();
-    });
+    }, phase7Due);
     await page.locator('#menu-btn').click();
     await page.locator('#tasks-btn').click();
     await page.locator('#task-dashboard-overlay').waitFor({ state: 'visible' });
