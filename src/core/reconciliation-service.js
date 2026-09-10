@@ -1,7 +1,7 @@
 import { CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { Note } from './note.js';
 import { downloadText } from '../utils/download.js';
-import { hashVaultSource, planVaultImport } from '../utils/vault-import.js';
+import { defineFolderMapping, folderMapping, hashVaultSource, planVaultImport } from '../utils/vault-import.js';
 
 const MUTABLE_STATUSES = new Set(['Add', 'Update', 'Conflict']);
 const APPLYABLE_STATUSES = new Set(['Add', 'Update']);
@@ -29,15 +29,6 @@ function planSignature(plan) {
     version: plan?.version,
     counts: plan?.counts,
     items: Array.isArray(plan?.items) ? plan.items.map(itemSignature) : null,
-  });
-}
-
-function defineMapping(target, key, value) {
-  Object.defineProperty(target, key, {
-    value,
-    enumerable: true,
-    configurable: true,
-    writable: true,
   });
 }
 
@@ -172,15 +163,15 @@ export class ReconciliationService {
       if (!noteId) continue;
       const destination = replacementById.get(noteId) || this.db.notes.get(noteId)?.toJSON();
       const destinationHash = destination ? await hashVaultSource(destination.content) : item.destinationHash;
-      defineMapping(nextMappings, noteId, {
+      defineFolderMapping(nextMappings, noteId, folderMapping({
         noteId,
         relativePath: item.relativePath,
         title: destination?.title || item.title,
-        externalId: item.externalId || null,
+        externalId: item.externalId,
         sourceHash: item.sourceHash,
         destinationHash,
         reconciledAt: appliedAt,
-      });
+      }));
     }
     const nextConfig = { ...detached(this.db.config), folderMappings: nextMappings };
     const saved = await this.db.replaceVault({ notes: nextNotes, config: nextConfig, schemaVersion: CURRENT_SCHEMA_VERSION });

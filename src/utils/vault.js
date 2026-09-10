@@ -34,19 +34,43 @@ export function vaultFileName(title, used) {
 }
 
 /**
- * Write each note's markdown into `dir` as `<title>.md`. Returns the count written.
+ * Write each note's markdown into `dir` as `<title>.md`. Returns the written
+ * count plus one `{ noteId, title, relativePath, content }` record per file so
+ * the caller can record the export mapping that folder reconciliation later
+ * uses to recognise these files as this vault's notes (see vault-import.js).
  * `dir` needs `getFileHandle(name, {create:true})` -> handle with `createWritable()`.
  */
-export async function writeVaultToDir(dir, notes) {
+export async function exportVaultToDir(dir, notes) {
   const used = new Set();
-  let written = 0;
+  const files = [];
   for (const note of notes) {
     const name = vaultFileName(note.title, used);
+    const content = note.content ?? '';
     const handle = await dir.getFileHandle(name, { create: true });
     const writable = await handle.createWritable();
-    await writable.write(note.content ?? '');
+    await writable.write(content);
     await writable.close();
-    written++;
+    files.push({ noteId: note.id, title: note.title, relativePath: name, content });
   }
+  return { written: files.length, files };
+}
+
+/** Count-only wrapper kept for existing callers and tests. */
+export async function writeVaultToDir(dir, notes) {
+  return (await exportVaultToDir(dir, notes)).written;
+}
+
+/**
+ * App entry point for "Save all notes to a folder": write the live vault, then
+ * record each written file as a prior export mapping so "Reconcile Markdown
+ * folder" can recognise this vault's own files (Update or Unchanged) instead of
+ * classifying every title match as a Conflict. Lives here, not in the app
+ * shell, so the initial bundle stays inside its byte budget.
+ */
+export async function saveVaultToFolder(dir, db) {
+  const { folderMappingsAfterExport } = await import('./vault-import.js');
+  await db.flushCurrentWrites();
+  const { written, files } = await exportVaultToDir(dir, db.getAllNotes());
+  db.setConfig({ folderMappings: await folderMappingsAfterExport(db.config.folderMappings, files) });
   return written;
 }

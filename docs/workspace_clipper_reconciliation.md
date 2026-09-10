@@ -53,7 +53,10 @@ read-only and produces a deterministic, path-sorted plan:
   unsafe or ambiguous. NoteForge does not guess.
 
 Valid leading `noteforge_id` frontmatter is the primary identity. Without it, a
-prior path/title mapping must identify exactly one note. Paths are relative and
+prior path/title mapping must identify exactly one note. NoteForge records that
+mapping whenever **Save all notes to a folder** writes a file or a reconciliation
+applies one, so a vault's own exported files reconcile as Update or Unchanged
+rather than as title Conflicts. Paths are relative and
 reject traversal, absolute paths, empty segments, NULs, and duplicate normalized
 names. The review renders at most 50 items per page and retains explicit Apply or
 Skip decisions while moving between pages. Missing files or notes never imply a
