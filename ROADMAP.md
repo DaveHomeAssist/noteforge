@@ -4,6 +4,23 @@ A phased plan for the next several rounds of features and upgrades. Each round i
 a coherent theme that can ship on its own; ordering reflects dependencies and
 risk, not a fixed schedule. Reprioritize freely — this is a guide, not a contract.
 
+## Next program — NoteForge 2 (proposed 2026-09-25)
+
+The 20-feature daily-driver program below is shipped. The next program is planned in
+two documents:
+
+- [Comprehensive audit, 2026-09-25](docs/audit/2026-09-25_comprehensive_audit.md) —
+  verified state, capabilities, shortcomings (release, architecture, visual/UX,
+  competitive, quality engineering), keep/replace decisions, and risk register.
+- [NoteForge 2 roadmap and phased plan](docs/roadmap/NOTEFORGE_2_ROADMAP.md) — ten
+  phases from release safety and a design system through a schema v7 record model,
+  collections and views, a schema-based editor core, work management, spaces, search
+  and AI, optional sync, and platform work.
+
+Headline: strangler-fig rewrite behind the existing data layer. Phase 0 (release
+safety, tooling, golden corpus, budget policy) starts first; the canonical deploy is
+currently behind the mirror and needs automated sync.
+
 ## Where we are today
 
 Local-first notes app currently using Vite and browser-loaded JS. Frameworks or
