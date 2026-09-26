@@ -265,7 +265,7 @@ export class NoteList {
       : `<span class="note-item__twist note-item__twist--leaf" aria-hidden="true"></span>`;
     return `
         <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''} ${note.isArchived ? 'note-item--archived' : ''} ${this.selection.ids.has(note.id) ? 'note-item--selected' : ''}"
-             data-id="${escapeHtml(note.id)}" draggable="true" style="--depth:${depth}">
+             data-id="${escapeHtml(note.id)}" draggable="true" style="--depth:${depth}"${note.id === this.activeId ? ' aria-current="page"' : ''}>
           <button type="button" class="note-item__select" data-select role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? '✓' : ''}</button>
           ${twist}
           <button class="note-item__main" data-open>
@@ -276,7 +276,7 @@ export class NoteList {
               ${note.tags.length ? `· ${note.tags.map((t) => '#' + escapeHtml(t)).join(' ')}` : ''}
             </span>
           </button>
-          ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-pressed="${note.pinned}">📌</button>`}
+          ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">📌</button>`}
         </div>`;
   }
 
@@ -357,7 +357,10 @@ export class NoteList {
 
   #markActive() {
     this.els.list.querySelectorAll('.note-item').forEach((el) => {
-      el.classList.toggle('note-item--on', el.dataset.id === this.activeId);
+      const on = el.dataset.id === this.activeId;
+      el.classList.toggle('note-item--on', on);
+      if (on) el.setAttribute('aria-current', 'page');
+      else el.removeAttribute('aria-current');
     });
   }
 

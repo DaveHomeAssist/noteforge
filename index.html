@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#editor">Skip to editor</a>
   <!-- Mobile-only top bar with the sidebar toggle -->
   <div class="mobile-bar">
     <button id="sidebar-toggle" class="btn btn--ghost" aria-label="Open notes sidebar" aria-expanded="false" aria-controls="app">☰</button>
@@ -101,7 +102,7 @@
 
     <!-- Main content: editor or graph -->
     <main class="main">
-      <section id="editor" class="editor"></section>
+      <section id="editor" class="editor" tabindex="-1"></section>
       <section id="graph" class="graph" hidden></section>
     </main>
   </div>

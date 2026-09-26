@@ -959,43 +959,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .editor__pin:hover { opacity: 1; }
 .editor__pin--on { filter: none; opacity: 1; background: var(--accent-weak); }
 
-/* --- command palette ------------------------------------------------------ */
-
-.palette { align-items: flex-start; padding-top: 12vh; }
-.palette__panel { width: 100%; max-width: 640px; padding: 0; }
-.palette__input {
-  width: 100%;
-  font: inherit;
-  font-size: 16px;
-  padding: 15px 18px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  outline: none;
-}
-.palette__input::placeholder { color: var(--text-muted); }
-.palette__list { max-height: 52vh; overflow-y: auto; padding: 6px; }
-.palette__empty { padding: 24px; text-align: center; }
-.palette__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.palette__item--active { background: var(--accent-weak); }
-.palette__icon { flex: 0 0 22px; text-align: center; font-size: 13px; }
-.palette__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.palette__sub { flex: 0 0 auto; max-width: 42%; color: var(--text-muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* --- settings ------------------------------------------------------------- */
 
 .settings { padding: 6px 6px 12px; }
@@ -1046,6 +1009,32 @@ html[data-font="l"] .editor { --editor-font: 17px; }
 .editor__blocks:focus, .editor__blocks:focus-visible,
 .editor__title:focus-visible,
 .modal__panel:focus, .modal__panel:focus-visible { outline: none; }
+
+/* Visually hidden, still announced. Out of flow so live-region text never grows
+   the 100vh shell. The skip link borrows the rule until it receives focus. */
+.sr-only,
+.skip-link:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

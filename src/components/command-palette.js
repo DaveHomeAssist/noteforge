@@ -6,6 +6,7 @@ import { fuzzyMatch, fuzzyHighlight } from '../utils/fuzzy.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 import { extractHeadings } from '../utils/headings.js';
+import './command-palette.css';
 
 const RECENT_LIMIT = 6;
 const MAX_RESULTS = 50;

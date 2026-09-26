@@ -174,12 +174,12 @@ export class Editor {
       ${this.#breadcrumbHtml(note)}
       <div class="editor__bar">
         <input type="text" class="editor__title" value="${escapeHtml(note.title)}"
-               placeholder="Untitled" />
+               placeholder="Untitled" aria-label="Note title" />
         <div class="editor__tools">
           <button class="btn btn--ghost editor__properties" title="Edit note properties" aria-label="Edit note properties">Properties</button>
           <button class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
-                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-pressed="${note.pinned}">📌</button>
-          <button class="btn btn--danger-ghost editor__delete" title="Delete note">🗑</button>
+                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">📌</button>
+          <button class="btn btn--danger-ghost editor__delete" title="Delete note" aria-label="Delete note">🗑</button>
         </div>
       </div>
 

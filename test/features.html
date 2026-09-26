@@ -1415,6 +1415,81 @@
     check('chip becomes aria-pressed=true when active', els.tags.querySelector('.tag-chip[data-tag="work"]').getAttribute('aria-pressed') === 'true');
   });
 
+  section('sr-only utility is defined: visually hidden, still in the tree, out of flow', () => {
+    const probe = document.createElement('span');
+    probe.className = 'sr-only';
+    probe.textContent = 'Saved 3 notes. Saved 3 notes. Saved 3 notes.';
+    const heightBefore = document.documentElement.scrollHeight;
+    document.body.appendChild(probe);
+    const cs = getComputedStyle(probe);
+    const box = probe.getBoundingClientRect();
+    check('.sr-only collapses to a 1px clipped box', cs.position === 'absolute' && box.width <= 1 && box.height <= 1 && cs.overflow === 'hidden' && /inset/.test(cs.clipPath));
+    check('.sr-only keeps the text exposed to assistive tech', cs.display !== 'none' && cs.visibility !== 'hidden');
+    check('.sr-only text does not grow the document', document.documentElement.scrollHeight === heightBefore);
+    probe.remove();
+  });
+
+  section('component live regions + hidden labels use sr-only and stay out of flow', () => {
+    const host = document.createElement('div'); scratch.appendChild(host);
+    const anchor = document.createElement('div'); host.appendChild(anchor);
+    const bulk = createBulkActionElements({ anchor });
+    createSavedSearchElements({ sidebarAnchor: anchor, root: host });
+    const hiddenPos = (el) => !!el && el.classList.contains('sr-only') && getComputedStyle(el).position === 'absolute';
+    check('bulk-actions announcer is an sr-only status region', hiddenPos(bulk.announcer) && bulk.announcer.getAttribute('role') === 'status');
+    const hiddenLabels = [...bulk.bar.querySelectorAll('label > .sr-only')];
+    check('bulk-actions field labels ("Tag to add", "New parent") are sr-only', hiddenLabels.length === 2 && hiddenLabels.every(hiddenPos));
+    check('saved-views status is an sr-only status region', hiddenPos(host.querySelector('.saved-searches__status')));
+    host.remove();
+  });
+
+  section('skip link is visually hidden until focused, then visible at the top-left', () => {
+    const link = document.createElement('a');
+    link.className = 'skip-link'; link.href = '#out'; link.textContent = 'Skip to editor';
+    document.body.prepend(link);
+    const idle = link.getBoundingClientRect();
+    check('unfocused skip link is clipped to 1px', idle.width <= 1 && idle.height <= 1);
+    link.focus();
+    const focused = link.getBoundingClientRect();
+    check('focused skip link is rendered on screen', document.activeElement === link
+      && focused.width > 40 && focused.height > 20 && focused.top >= 0 && focused.left >= 0 && focused.top < 60);
+    link.blur(); link.remove();
+  });
+
+  section('active note row exposes aria-current="page"', () => {
+    const els = mkListEls();
+    const db = new Database();
+    const a = db.createNote({ title: 'Current A', content: '' });
+    const b = db.createNote({ title: 'Current B', content: '' });
+    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} });
+    nl.render();
+    const row = (id) => els.list.querySelector(`.note-item[data-id="${id}"]`);
+    check('no row is current before a note is opened', !els.list.querySelector('[aria-current]'));
+    nl.setActive(a.id);
+    check('setActive stamps class + aria-current on exactly one row',
+      row(a.id).classList.contains('note-item--on') && row(a.id).getAttribute('aria-current') === 'page'
+      && els.list.querySelectorAll('[aria-current="page"]').length === 1);
+    nl.setActive(b.id);
+    check('moving the active note moves aria-current', !row(a.id).hasAttribute('aria-current') && row(b.id).getAttribute('aria-current') === 'page');
+    nl.render(); // full repaint goes through #rowHtml, which must stamp it too
+    check('a full re-render keeps aria-current on the active row', els.list.querySelector('[aria-current="page"]')?.dataset.id === b.id
+      && els.list.querySelectorAll('[aria-current="page"]').length === 1);
+    check('note-list pin toggle has an accessible name', row(a.id).querySelector('.note-item__pin').getAttribute('aria-label') === 'Pin note');
+  });
+
+  section('editor title, pin, and delete controls have accessible names', () => {
+    const db = new Database();
+    const note = db.createNote({ title: 'Labelled', content: 'x' });
+    const container = document.createElement('div'); scratch.appendChild(container);
+    const editor = new Editor(container, db, { openNote() {}, openOrCreateByTitle() {}, deleteNote() {}, togglePin() {} });
+    editor.open(note.id);
+    const title = container.querySelector('.editor__title');
+    const pin = container.querySelector('.editor__pin');
+    const del = container.querySelector('.editor__delete');
+    check('title input has an accessible name', title?.getAttribute('aria-label') === 'Note title');
+    check('pin button is named + keeps state in aria-pressed', pin?.getAttribute('aria-label') === 'Pin note' && pin.getAttribute('aria-pressed') === 'false');
+    check('delete button is named (no longer announced as "wastebasket")', del?.getAttribute('aria-label') === 'Delete note');
+  });
+
   section('block editor preserves undo history across a same-note rebuild', () => {
     const be = mkBE('one');
     const blk = be.host.querySelector('.blk'); blk.focus();
@@ -2325,6 +2400,19 @@
       paged.close();
     } catch (e) {
       results.push('FAIL  Phase 6 component flows — threw: ' + e.message);
+    }
+  })();
+
+  await (async () => {
+    try {
+      // Ask Vite for the raw stylesheet (Accept: text/css) rather than its JS-wrapped form.
+      const css = await (await fetch('/src/components/accessibility-hardening.css', { headers: { Accept: 'text/css' } })).text();
+      const mediaBlock = (query) => (css.match(new RegExp(`@media \\(${query}\\)\\s*\\{([\\s\\S]*?)\\n\\}`)) || [])[1] || '';
+      check('hardening CSS outlines the real active row (.note-item--on) under prefers-contrast', /\.note-item--on\b/.test(mediaBlock('prefers-contrast: more')));
+      check('hardening CSS outlines the real active row (.note-item--on) under forced-colors', /\.note-item--on\b/.test(mediaBlock('forced-colors: active')));
+      check('hardening CSS no longer targets the nonexistent .note-item--active', !/note-item--active/.test(css));
+    } catch (e) {
+      results.push('FAIL  accessibility-hardening selectors — threw: ' + e.message);
     }
   })();
 

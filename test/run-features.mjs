@@ -157,6 +157,25 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
     check('390px app shell has no horizontal document overflow',
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 
+    stage = 'checking the skip link and live-region shell';
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Tab');
+    check('first Tab stop is the skip link',
+      await page.evaluate(() => document.activeElement?.matches('a.skip-link[href="#editor"]')));
+    await page.keyboard.press('Enter');
+    check('activating the skip link moves focus into the editor region',
+      await page.evaluate(() => document.activeElement?.id === 'editor'));
+    await page.evaluate(() => history.replaceState(history.state, '', location.pathname));
+    check('app-status announcements stay out of flow (no growth below the 100vh shell)',
+      await page.evaluate(() => {
+        const status = document.getElementById('app-status');
+        const before = document.documentElement.scrollHeight;
+        status.textContent = 'Saved. Saved. Saved. Saved.';
+        const grew = document.documentElement.scrollHeight > before;
+        status.textContent = '';
+        return getComputedStyle(status).position === 'absolute' && !grew;
+      }));
+
     stage = 'persisting an edit';
     await page.locator('.blk[contenteditable="true"]').first().fill('Durable browser edit');
     const debouncedEdit = await page.evaluate(() => ({
