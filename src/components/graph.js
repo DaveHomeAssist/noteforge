@@ -190,7 +190,7 @@ export class GraphView {
           const b = pos.get(idList[j]);
           let dx = a.x - b.x;
           let dy = a.y - b.y;
-          let dist = Math.hypot(dx, dy) || 0.01;
+          const dist = Math.hypot(dx, dy) || 0.01;
           const force = (k * k) / dist;
           dx /= dist;
           dy /= dist;
@@ -207,7 +207,7 @@ export class GraphView {
         const b = pos.get(e.target);
         let dx = a.x - b.x;
         let dy = a.y - b.y;
-        let dist = Math.hypot(dx, dy) || 0.01;
+        const dist = Math.hypot(dx, dy) || 0.01;
         const force = (dist * dist) / k;
         dx /= dist;
         dy /= dist;

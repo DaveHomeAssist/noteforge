@@ -1,0 +1,99 @@
+{
+  "slug": "seed-01-welcome",
+  "title": "Welcome",
+  "source": "# Welcome to NoteForge 👋\n\nThis is a local-first, markdown notes app inspired by Obsidian & Notion.\n\n## Try these\n- Write **markdown** — *italics*, `code`, lists, and:\n  - [ ] task checkboxes\n  - [x] that persist as text\n- Link notes with double brackets: [[Markdown Cheatsheet]]\n- Add #tags in the editor (see the chips above the text)\n- Open the 🕸️ graph to see how notes connect\n\n> Everything is saved to your browser automatically (IndexedDB) — no account, no server.\n\nType `/` anywhere for the block menu — try a **Divider** or a **Date**:\n\n---\n\n@date(2026-07-01)\n\nSee also: [[Wikilinks & Backlinks]] and [[Project Ideas]].",
+  "roundTrip": false,
+  "serialized": "# Welcome to NoteForge 👋\n\nThis is a local-first, markdown notes app inspired by Obsidian & Notion.\n\n## Try these\n\n- Write **markdown** — *italics*, `code`, lists, and:\n  - [ ] task checkboxes\n  - [x] that persist as text\n- Link notes with double brackets: [[Markdown Cheatsheet]]\n- Add #tags in the editor (see the chips above the text)\n- Open the 🕸️ graph to see how notes connect\n\n> Everything is saved to your browser automatically (IndexedDB) — no account, no server.\n\nType `/` anywhere for the block menu — try a **Divider** or a **Date**:\n\n---\n\n@date(2026-07-01)\n\nSee also: [[Wikilinks & Backlinks]] and [[Project Ideas]].",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Welcome to NoteForge 👋",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "This is a local-first, markdown notes app inspired by Obsidian & Notion.",
+      "meta": {}
+    },
+    {
+      "type": "heading",
+      "text": "Try these",
+      "meta": {
+        "level": 2
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Write **markdown** — *italics*, `code`, lists, and:",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "todo",
+      "text": "task checkboxes",
+      "meta": {
+        "indent": 1,
+        "checked": false
+      }
+    },
+    {
+      "type": "todo",
+      "text": "that persist as text",
+      "meta": {
+        "indent": 1,
+        "checked": true
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Link notes with double brackets: [[Markdown Cheatsheet]]",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Add #tags in the editor (see the chips above the text)",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Open the 🕸️ graph to see how notes connect",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "quote",
+      "text": "Everything is saved to your browser automatically (IndexedDB) — no account, no server.",
+      "meta": {}
+    },
+    {
+      "type": "paragraph",
+      "text": "Type `/` anywhere for the block menu — try a **Divider** or a **Date**:",
+      "meta": {}
+    },
+    {
+      "type": "divider",
+      "text": "",
+      "meta": {}
+    },
+    {
+      "type": "date",
+      "text": "",
+      "meta": {
+        "date": "2026-07-01"
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "See also: [[Wikilinks & Backlinks]] and [[Project Ideas]].",
+      "meta": {}
+    }
+  ]
+}

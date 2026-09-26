@@ -180,7 +180,7 @@ export class Phase5Controller {
   #scheduleDerivedRefresh(noteIds) {
     if (Array.isArray(noteIds)) {
       if (noteIds.length === 0) return;
-      noteIds.forEach((id) => this.pendingNoteIds.add(id));
+      for (const id of noteIds) this.pendingNoteIds.add(id);
     } else {
       this.pendingReset = true;
       this.pendingNoteIds.clear();

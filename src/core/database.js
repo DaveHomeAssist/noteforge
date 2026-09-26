@@ -234,7 +234,7 @@ export class Database {
 
   #removePurgedHistory(noteIds) {
     if (typeof this.onNotesPurged !== 'function') {
-      noteIds.forEach((id) => this._pendingHistoryPurges.add(id));
+      for (const id of noteIds) this._pendingHistoryPurges.add(id);
       this._pendingHistoryCaptures = this._pendingHistoryCaptures.filter((capture) => !this._pendingHistoryPurges.has(capture.note?.id));
       return;
     }
@@ -352,7 +352,7 @@ export class Database {
         saved = results.every(Boolean);
       }
       if (saved) {
-        [NOTES_KEY, CONFIG_KEY, SCHEMA_KEY, PERSISTENCE_KEY].forEach((key) => this._writeQueue.delete(key));
+        for (const key of [NOTES_KEY, CONFIG_KEY, SCHEMA_KEY, PERSISTENCE_KEY]) this._writeQueue.delete(key);
       }
     } catch (error) {
       console.error('[database] vault replacement transaction failed:', error);
@@ -367,7 +367,7 @@ export class Database {
     }
 
     this.notes.clear();
-    hydrated.forEach((note) => this.notes.set(note.id, note));
+    for (const note of hydrated) this.notes.set(note.id, note);
     this.config = { showGraph: false, ...rawConfig };
     this.lastPersistedAt = persistenceAt;
     this.#rebuildLinkState();
@@ -579,7 +579,7 @@ export class Database {
   /** Restore a note from the Trash. Returns true if it was trashed. */
   restoreNote(id) {
     const note = this.notes.get(id);
-    if (!note || !note.isTrashed) return false;
+    if (!note?.isTrashed) return false;
     note.restore();
     this.#rebuildLinkState();
     this.#persist();
@@ -795,7 +795,7 @@ export class Database {
     if (!saved) throw new Error('The planned source rewrite could not be saved; no in-memory notes were changed.');
 
     this.notes.clear();
-    nextNotes.forEach((note) => this.notes.set(note.id, note));
+    for (const note of nextNotes) this.notes.set(note.id, note);
     this.lastPersistedAt = persistenceAt;
     this.#rebuildLinkState();
     this.#emit();

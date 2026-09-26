@@ -54,7 +54,7 @@ export function debounce(fn, ms = 300) {
 
 /** Truncate to `n` chars on a word-ish boundary, adding an ellipsis. */
 export function truncate(text, n = 120) {
-  const clean = String(text ?? '').replace(/[#*`>\-\[\]]/g, '').trim();
+  const clean = String(text ?? '').replace(/[#*`>\-[\]]/g, '').trim();
   if (clean.length <= n) return clean;
   return clean.slice(0, n).replace(/\s+\S*$/, '') + '…';
 }

@@ -365,8 +365,7 @@ function renderBlockToMd(block, numbers) {
     }
     case 'raw':
       return block.text;
-    case 'paragraph':
-    default:
+    default: // paragraph and any unknown type
       return text;
   }
 }

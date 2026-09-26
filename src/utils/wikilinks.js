@@ -69,9 +69,7 @@ export function markdownExclusionRanges(markdown) {
       continue;
     }
     {
-      URL_RE.lastIndex = 0;
-      let match;
-      while ((match = URL_RE.exec(line)) !== null) {
+      for (const match of line.matchAll(URL_RE)) {
         ranges.push({ start: offset + match.index, end: offset + match.index + match[0].length, kind: 'url' });
       }
     }

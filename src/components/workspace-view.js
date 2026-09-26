@@ -223,13 +223,13 @@ export class WorkspaceView {
     return true;
   }
 
-  setAutosaveInterval(ms) { Object.values(this.editors).forEach((editor) => editor.setAutosaveInterval(ms)); }
-  flushPending() { Object.values(this.editors).forEach((editor) => editor.flushPending()); }
+  setAutosaveInterval(ms) { for (const editor of Object.values(this.editors)) editor.setAutosaveInterval(ms); }
+  flushPending() { for (const editor of Object.values(this.editors)) editor.flushPending(); }
   refresh() {
     const normalized = normalizeWorkspaceState(this.state, [...this.db.notes.values()]);
     const changed = JSON.stringify(normalized) !== JSON.stringify(this.state);
     this.state = normalized;
-    Object.values(this.editors).forEach((editor) => editor.refresh());
+    for (const editor of Object.values(this.editors)) editor.refresh();
     if (changed) {
       for (const pane of WORKSPACE_PANES) this.#syncPaneEditor(pane);
       this.#persist();
@@ -243,14 +243,14 @@ export class WorkspaceView {
       if (id && ids.has(id)) this.editors[pane].open(id, { discardPending: true });
     }
   }
-  reflectPin(id) { Object.values(this.editors).forEach((editor) => editor.reflectPin(id)); }
-  reflectTitle(id) { Object.values(this.editors).forEach((editor) => editor.reflectTitle(id)); this.#renderTabs(); }
+  reflectPin(id) { for (const editor of Object.values(this.editors)) editor.reflectPin(id); }
+  reflectTitle(id) { for (const editor of Object.values(this.editors)) editor.reflectTitle(id); this.#renderTabs(); }
   focusTask(occurrence) { return this.activeEditor.focusTask(occurrence); }
   findEntries() { return this.activeEditor.findEntries(); }
   getSourceMarkdown() { return this.activeEditor.getSourceMarkdown(); }
   selectFindRange(...args) { return this.activeEditor.selectFindRange(...args); }
   applyFindReplacement(...args) { return this.activeEditor.applyFindReplacement(...args); }
-  enablePhase5(enhancer) { Object.values(this.editors).forEach((editor) => editor.enablePhase5(enhancer)); }
+  enablePhase5(enhancer) { for (const editor of Object.values(this.editors)) editor.enablePhase5(enhancer); }
   async enableOutline() { return Promise.all(Object.values(this.editors).map((editor) => editor.enableOutline())); }
 
   destroy() {

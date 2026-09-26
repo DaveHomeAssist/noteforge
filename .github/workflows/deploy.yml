@@ -13,15 +13,21 @@ on:
 permissions:
   contents: read
 
-# A PR must never cancel an in-flight main deployment. Newer runs for the same
-# ref supersede older work on that ref.
+# Pull-request runs for the same ref supersede each other. A newer push to main
+# queues behind the in-flight main run instead of cancelling it, so a
+# deployment is never abandoned half-way and every main commit is verified.
 concurrency:
   group: noteforge-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
+    name: verify (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
     steps:
       # Actions pinned by SHA per GitHub's security-hardening guide.
       - name: Checkout
@@ -30,17 +36,31 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: ${{ matrix.node }}
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint (Biome, zero errors)
+        run: npm run lint
+
+      - name: Typecheck (tsc --checkJs per-file ratchet)
+        run: npm run typecheck
+
       - name: Dependency audit
         run: npm audit --audit-level=high
 
-      - name: Unit tests (markdown round-trip, migrations, model)
+      - name: Unit tests (node --test with JUnit report and case floor)
         run: npm test
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-node${{ matrix.node }}
+          path: test-results/junit.xml
+          if-no-files-found: warn
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -55,7 +75,7 @@ jobs:
         run: npm run test:budget
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: matrix.node == 22 && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist

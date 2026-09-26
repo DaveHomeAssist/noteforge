@@ -22,6 +22,7 @@ export function normalizeVaultPath(value) {
 }
 
 const fileTitle = (path) => path.split('/').at(-1).replace(/\.md$/i, '').trim() || 'Untitled';
+// biome-ignore lint/suspicious/noControlCharactersInRegex: rejects C0/DEL control characters in imported ids
 const validExternalId = (value) => typeof value === 'string' && /^[^\u0000-\u001f\u007f]{1,128}$/u.test(value.trim());
 /** The one persisted `config.folderMappings[noteId]` record shape. */
 export function folderMapping({ noteId, relativePath, title, externalId = null, sourceHash, destinationHash, reconciledAt }) {

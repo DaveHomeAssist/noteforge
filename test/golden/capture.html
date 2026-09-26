@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>golden capture</title></head>
+<body>
+<!-- Loaded by test/golden/update.mjs --render under the Vite dev server. Renders every
+     golden source with renderMarkdown() in a real browser (DOMPurify needs a DOM) and
+     publishes the HTML on window.__golden for the updater to write to render/. -->
+<script type="module">
+  import { goldenSources } from '/test/golden/sources.mjs';
+  import { renderMarkdown, setKnownTitles } from '/src/utils/markdown.js';
+  const sources = await goldenSources();
+  setKnownTitles(sources.map((s) => s.title));
+  window.__golden = Object.fromEntries(sources.map((s) => [s.slug, renderMarkdown(s.source)]));
+  document.title = 'golden ready';
+</script>
+</body>
+</html>

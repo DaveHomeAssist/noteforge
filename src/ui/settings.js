@@ -32,8 +32,8 @@ export function normalizeSettings(cfg = {}) {
   const s = { ...DEFAULT_SETTINGS };
   if (THEME_MODES.includes(cfg.themeMode)) s.themeMode = cfg.themeMode;
   else if (THEME_MODES.includes(cfg.theme)) s.themeMode = cfg.theme; // legacy
-  if (Object.prototype.hasOwnProperty.call(FONT_SCALES, cfg.fontScale)) s.fontScale = cfg.fontScale;
-  if (Object.prototype.hasOwnProperty.call(EDITOR_WIDTHS, cfg.editorWidth)) s.editorWidth = cfg.editorWidth;
+  if (Object.hasOwn(FONT_SCALES, cfg.fontScale)) s.fontScale = cfg.fontScale;
+  if (Object.hasOwn(EDITOR_WIDTHS, cfg.editorWidth)) s.editorWidth = cfg.editorWidth;
   if (AUTOSAVE_OPTIONS.includes(Number(cfg.autosaveMs))) s.autosaveMs = Number(cfg.autosaveMs);
   if (TEMPLATE_IDS.includes(cfg.defaultTemplate)) s.defaultTemplate = cfg.defaultTemplate;
   return s;

@@ -713,7 +713,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
   padding: 10px 14px;
   line-height: 1.5;
 }
-.blk-row[data-type="raw"] .blk { }
 
 /* --- editable table grid ------------------------------------------------- */
 .blk-table-wrap { position: relative; overflow-x: auto; }
@@ -934,30 +933,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .editor__pin { filter: grayscale(1); opacity: 0.6; }
 .editor__pin:hover { opacity: 1; }
 .editor__pin--on { filter: none; opacity: 1; background: var(--accent-weak); }
-
-/* --- settings ------------------------------------------------------------- */
-
-.settings { padding: 6px 6px 12px; }
-.settings__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 14px;
-}
-.settings__row + .settings__row { border-top: 1px solid var(--border); }
-.settings__label { font-size: 14px; }
-.settings__select {
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
-  cursor: pointer;
-  min-width: 150px;
-}
 
 /* --- editor font size + measure (Settings-controlled) --------------------- */
 

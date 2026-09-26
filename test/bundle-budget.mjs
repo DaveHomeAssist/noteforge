@@ -17,8 +17,7 @@ const DIST = resolve(fileURLToPath(new URL('..', import.meta.url)), 'dist');
 export function directAssetPaths(html) {
   const paths = new Set();
   const attribute = /(?:src|href)=["']?([^"'\s>]+)/g;
-  let match;
-  while ((match = attribute.exec(html)) !== null) {
+  for (const match of html.matchAll(attribute)) {
     const value = match[1];
     if (/^(?:https?:)?\/\//i.test(value) || value.startsWith('data:')) continue;
     if (!/\.(?:css|js)$/i.test(value)) continue;

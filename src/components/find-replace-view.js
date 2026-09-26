@@ -70,7 +70,7 @@ export class FindReplaceView {
 
   #setScope(scope) {
     this.scope = scope === 'vault' ? 'vault' : 'current';
-    this.els.panel.querySelectorAll('[data-scope]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.scope === this.scope)));
+    this.els.panel.querySelectorAll('[data-scope]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.scope === this.scope)); });
     this.els.panel.querySelectorAll('.find-replace__vault-option').forEach((label) => { label.hidden = this.scope !== 'vault'; });
     this.els.panel.querySelectorAll('[data-find-prev],[data-find-next]').forEach((button) => { button.hidden = this.scope !== 'current'; });
     this.#invalidate();

@@ -36,7 +36,7 @@ export class BannerControl {
     this.repositioning = false;
     this.__onDocClick = (e) => {
       const t = e.target;
-      const onTrigger = t && t.closest && t.closest('.banner__btn, .banner-add');
+      const onTrigger = t?.closest?.('.banner__btn, .banner-add');
       if (this.picker && !this.picker.contains(t) && !onTrigger) {
         this.#closePicker();
       }
@@ -174,11 +174,11 @@ export class BannerControl {
     this.picker = p;
 
     // Gradient swatches
-    p.querySelectorAll('.banner-swatch').forEach((sw) =>
+    for (const sw of p.querySelectorAll('.banner-swatch')) {
       sw.addEventListener('click', () =>
         this.#apply({ type: 'gradient', value: sw.dataset.grad, position: 50 })
-      )
-    );
+      );
+    }
 
     // Upload
     const status = p.querySelector('.banner-picker__status');
@@ -216,7 +216,8 @@ export class BannerControl {
 
     this.#positionPicker(anchor);
     document.addEventListener('mousedown', this.__onDocClick, true);
-    document.addEventListener('keydown', this.__onEsc = (e) => { if (e.key === 'Escape') this.#closePicker(); });
+    this.__onEsc = (e) => { if (e.key === 'Escape') this.#closePicker(); };
+    document.addEventListener('keydown', this.__onEsc);
   }
 
   #positionPicker(anchor) {

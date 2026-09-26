@@ -1,7 +1,7 @@
 import './task-dashboard-view.css';
 import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
-import { calendarDateLabel, localDateKey } from '../utils/local-date.js';
+import { localDateKey } from '../utils/local-date.js';
 import { groupTasks } from '../utils/tasks.js';
 
 const GROUPS = [

@@ -92,17 +92,17 @@ export class Editor {
       return;
     }
     const active = document.activeElement;
-    if (active && active.classList.contains('editor__title')) return;
-    if (this.blockEditor && this.blockEditor.isEditing()) return;
-    if (this.banner && this.banner.isBusy()) return; // banner picker/reposition in progress
+    if (active?.classList.contains('editor__title')) return;
+    if (this.blockEditor?.isEditing()) return;
+    if (this.banner?.isBusy()) return; // banner picker/reposition in progress
     // Defense-in-depth: never rebuild the editor over block edits that haven't
     // been persisted yet (e.g. a foreign emit lands during the autosave debounce
     // window). The pending autosave will persist them and a later refresh will
     // rebuild cleanly.
     if (this.blockEditor && this.blockEditor.serialize() !== note.content) return;
 
-    const wasTagInput = active && active.classList.contains('editor__tag-input');
-    const wasPin = active && active.classList.contains('editor__pin');
+    const wasTagInput = active?.classList.contains('editor__tag-input');
+    const wasPin = active?.classList.contains('editor__pin');
     this.#render(note);
     if (wasTagInput) {
       const ti = this.container.querySelector('.editor__tag-input');
@@ -282,9 +282,9 @@ export class Editor {
   // --- events -------------------------------------------------------------
 
   #wire(note) {
-    this.container.querySelectorAll('.editor__breadcrumb .crumb[data-id]').forEach((a) =>
-      a.addEventListener('click', (e) => { e.preventDefault(); this.actions.openNote(a.dataset.id); })
-    );
+    for (const a of this.container.querySelectorAll('.editor__breadcrumb .crumb[data-id]')) {
+      a.addEventListener('click', (e) => { e.preventDefault(); this.actions.openNote(a.dataset.id); });
+    }
 
     const titleInput = this.container.querySelector('.editor__title');
     titleInput.addEventListener('change', () => {
@@ -327,21 +327,21 @@ export class Editor {
       }
     });
 
-    this.container.querySelectorAll('.chip__x').forEach((btn) =>
+    for (const btn of this.container.querySelectorAll('.chip__x')) {
       btn.addEventListener('click', () => {
         this.autosave.flush(); // persist buffered block edits before the emit rebuilds us
         const fresh = this.db.getNote(note.id);
         fresh.removeTag(btn.dataset.tag);
         this.db.saveNote(fresh);
-      })
-    );
+      });
+    }
 
-    this.container.querySelectorAll('.backlinks__item').forEach((a) =>
+    for (const a of this.container.querySelectorAll('.backlinks__item')) {
       a.addEventListener('click', (e) => {
         e.preventDefault();
         this.actions.openNote(a.dataset.id, { headingAnchor: a.dataset.contextAnchor || null });
-      })
-    );
+      });
+    }
 
     this.container.querySelectorAll('.mention-convert').forEach((button) => {
       button.addEventListener('click', () => {

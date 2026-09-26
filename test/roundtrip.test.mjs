@@ -15,12 +15,13 @@ import { parseNoteMergeImport, selectImportableNotes } from '../src/utils/json-i
 import { makeSchemaV3LargeFixture } from './fixtures/generate-schema-v3-large.mjs';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { test } from 'node:test';
+import nodeAssert from 'node:assert/strict';
 
-let pass = 0, fail = 0;
-const ok = (name, cond, extra = '') => {
-  if (cond) { pass++; }
-  else { fail++; console.log('FAIL  ' + name + (extra ? '\n      ' + extra : '')); }
-};
+// Every check registers as its own node:test case so the JUnit report and the
+// case floor in test/run-node-tests.mjs count each one. The condition is
+// evaluated where ok() is called, so the sequential flow below is unchanged.
+const ok = (name, cond, extra = '') => test(name, () => { nodeAssert.ok(cond, extra ? `${name}\n      ${extra}` : name); });
 
 const strip = (blocks) => blocks.map((b) => ({ type: b.type, text: b.text, meta: b.meta || {} }));
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -634,5 +635,3 @@ const unsafeImport = selectImportableNotes(parseNoteMergeImport(
 ))[0];
 ok('merge import model normalization removes an unsafe banner', Note.fromJSON(unsafeImport).banner === null);
 
-console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'}: ${pass} passed, ${fail} failed`);
-process.exit(fail === 0 ? 0 : 1);

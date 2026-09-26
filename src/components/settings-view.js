@@ -4,6 +4,7 @@
 
 import { Modal } from './modal.js';
 import { normalizeSettings } from '../ui/settings.js';
+import './settings-view.css';
 
 const field = (id, label, options, value) => `
   <label class="settings__row">

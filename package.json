@@ -1,6 +1,6 @@
 {
   "name": "noteforge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "NoteForge — local-first note-taking app inspired by Obsidian/Notion: markdown, wikilinks, backlinks, tags, graph view",
   "type": "module",
   "engines": {
@@ -10,21 +10,32 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/roundtrip.test.mjs && node test/database-durability.test.mjs && node test/revision.test.mjs && node test/backup.test.mjs && node test/recovery.test.mjs && node test/link-integrity.test.mjs && node test/phase3.test.mjs && node test/phase4.test.mjs && node test/phase5.test.mjs && node test/phase6.test.mjs && node test/phase7.test.mjs",
+    "test": "node test/run-node-tests.mjs",
     "test:browser": "node test/run-features.mjs",
     "test:budget": "node test/bundle-budget.mjs",
-    "test:all": "npm test && node test/run-features.mjs && npm run build && npm run test:budget"
+    "test:all": "npm run lint && npm run typecheck && npm test && node test/run-features.mjs && npm run build && npm run test:budget",
+    "lint": "biome lint",
+    "typecheck": "node test/typecheck-ratchet.mjs"
   },
   "dependencies": {
-    "dompurify": "^3.2.4",
+    "dompurify": "^3.4.16",
     "marked": "^15.0.6",
     "yaml": "2.9.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "playwright": "^1.50.0",
+    "typescript": "^7.0.2",
     "vite": "^6.0.7"
   },
-  "keywords": ["notes", "notion", "obsidian", "knowledge-base", "markdown", "wikilinks"],
+  "keywords": [
+    "notes",
+    "notion",
+    "obsidian",
+    "knowledge-base",
+    "markdown",
+    "wikilinks"
+  ],
   "author": "Dave",
   "license": "MIT"
 }

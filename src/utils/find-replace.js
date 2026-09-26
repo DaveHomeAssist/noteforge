@@ -12,14 +12,12 @@ export function findLiteralMatches(source, query, { caseSensitive = false, whole
   if (!needle) return [];
   const expression = new RegExp(escapedLiteral(needle), caseSensitive ? 'gu' : 'giu');
   const matches = [];
-  let match;
-  while ((match = expression.exec(text)) !== null) {
+  for (const match of text.matchAll(expression)) {
     const start = match.index;
     const end = start + match[0].length;
     if (!wholeWord || (!WORD_BEFORE.test(text.slice(0, start)) && !WORD_AFTER.test(text.slice(end)))) {
       matches.push(Object.freeze({ start, end, text: match[0] }));
     }
-    if (expression.lastIndex === match.index) expression.lastIndex += 1;
   }
   return matches;
 }

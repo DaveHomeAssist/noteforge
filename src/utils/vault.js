@@ -9,6 +9,7 @@
 
 // Only truly filesystem-illegal characters (+ control chars) are replaced; spaces
 // and hyphens are kept so `[[My Note]]` still resolves to `My Note.md` in Obsidian.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: C0 control characters are illegal in file names and must be stripped
 const UNSAFE = /[/\\:*?"<>|\x00-\x1f]+/g;
 
 /**

@@ -1,0 +1,19 @@
+{
+  "slug": "v3-06-recoverable-draft",
+  "title": "Recoverable Draft",
+  "source": "This content must remain recoverable from Trash.\n\n[[Project Atlas|Return to Atlas]]",
+  "roundTrip": true,
+  "serialized": "This content must remain recoverable from Trash.\n\n[[Project Atlas|Return to Atlas]]",
+  "blocks": [
+    {
+      "type": "paragraph",
+      "text": "This content must remain recoverable from Trash.",
+      "meta": {}
+    },
+    {
+      "type": "paragraph",
+      "text": "[[Project Atlas|Return to Atlas]]",
+      "meta": {}
+    }
+  ]
+}

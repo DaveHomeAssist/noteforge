@@ -1,0 +1,21 @@
+{
+  "slug": "v3-02-nested-child",
+  "title": "Nested Child",
+  "source": "## Child heading\n\nA nested note with an aliased backlink to [[Project Atlas|Atlas]].",
+  "roundTrip": true,
+  "serialized": "## Child heading\n\nA nested note with an aliased backlink to [[Project Atlas|Atlas]].",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Child heading",
+      "meta": {
+        "level": 2
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "A nested note with an aliased backlink to [[Project Atlas|Atlas]].",
+      "meta": {}
+    }
+  ]
+}

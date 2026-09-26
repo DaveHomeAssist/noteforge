@@ -120,7 +120,7 @@ export class Modal {
   #restoreFocus() {
     const prev = this._returnFocus;
     this._returnFocus = null;
-    const usable = prev && prev.isConnected && prev.offsetParent !== null && typeof prev.focus === 'function';
+    const usable = prev?.isConnected && prev.offsetParent !== null && typeof prev.focus === 'function';
     if (usable) prev.focus();
     else document.getElementById('menu-btn')?.focus?.(); // trigger may live in a now-closed menu
   }

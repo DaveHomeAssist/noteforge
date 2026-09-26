@@ -2480,6 +2480,31 @@
     }
   })();
 
+  // ============ golden corpus: renderMarkdown() HTML (test/golden/render) ============
+  await (async () => {
+    try {
+      const { goldenSources } = await import('/test/golden/sources.mjs');
+      const sources = await goldenSources();
+      // `?raw` returns the file bytes; a plain fetch of an .html path would come
+      // back with Vite's dev client script injected.
+      const loaders = import.meta.glob('/test/golden/render/*.html', { query: '?raw', import: 'default' });
+      // Same render context as test/golden/capture.html: every corpus title is
+      // known, no transclusion renderer registered.
+      setTransclusionRenderer(null);
+      setKnownTitles(sources.map((s) => s.title));
+      let compared = 0;
+      for (const s of sources) {
+        const load = loaders[`/test/golden/render/${s.slug}.html`];
+        const expected = load ? await load() : null;
+        check(`golden render: ${s.slug}`, expected !== null && renderMarkdown(s.source) === expected);
+        compared += 1;
+      }
+      check('golden render corpus compared every source', compared === sources.length && sources.length >= 11);
+    } catch (e) {
+      results.push('FAIL  golden render corpus — threw: ' + e.message);
+    }
+  })();
+
   const failures = results.filter((r) => r.startsWith('FAIL')).length;
   const summary = failures === 0 ? `ALL PASS (${results.length})` : `FAILURES: ${failures} of ${results.length}`;
   document.getElementById('out').textContent = summary + '\n' + results.join('\n');

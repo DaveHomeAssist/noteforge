@@ -591,9 +591,9 @@ export class BlockEditor {
     const rows = (Array.isArray(block.meta?.rows) && block.meta.rows.length ? block.meta.rows : [['', '']]).map((r) => [...r]);
     const cols = rows[0]?.length || 1;
     if (act === 'addrow') rows.push(Array(cols).fill(''));
-    else if (act === 'addcol') rows.forEach((r) => r.push(''));
+    else if (act === 'addcol') for (const r of rows) r.push('');
     else if (act === 'delrow') { if (rows.length <= 1) return; rows.pop(); }
-    else if (act === 'delcol') { if (cols <= 1) return; rows.forEach((r) => r.pop()); }
+    else if (act === 'delcol') { if (cols <= 1) return; for (const r of rows) r.pop(); }
     else return;
     const align = (block.meta?.align || []).slice(0, rows[0].length);
     block.meta = { ...block.meta, rows, align };
@@ -714,7 +714,7 @@ export class BlockEditor {
 
   #caretOffset(content) {
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return 0;
+    if (!sel?.rangeCount) return 0;
     const range = sel.getRangeAt(0);
     if (!content.contains(range.endContainer)) return 0;
     const pre = range.cloneRange();
@@ -765,7 +765,7 @@ export class BlockEditor {
     // Close menus when the window shifts under them — but NOT when the scroll
     // happens inside the menu itself (that would break scrolling a long menu).
     this.__onWinChange = (e) => {
-      if (e && e.type === 'scroll' && this.menu && this.menu.el.contains(e.target)) return;
+      if (e && e.type === 'scroll' && this.menu?.el.contains(e.target)) return;
       this.#closeMenu();
     };
     window.addEventListener('resize', this.__onWinChange, true);
@@ -807,7 +807,7 @@ export class BlockEditor {
     const block = this.#byId(row.dataset.id);
     if (!block) return;
     // If focus is moving into our menu, keep raw mode (menu interaction).
-    if (this.menu && this.menu.el.contains(e.relatedTarget)) return;
+    if (this.menu?.el.contains(e.relatedTarget)) return;
     this.#commit(block, content);
     if (this.focusedId === block.id) this.focusedId = null;
     this.#fillContent(content, block, /*raw*/ false);
@@ -867,8 +867,8 @@ export class BlockEditor {
     };
 
     // These only fire when the trigger is the entire pre-caret text (start of block).
-    let m;
-    if ((m = /^(#{1,3})\s$/.exec(before))) return set({ type: 'heading', meta: { level: m[1].length } }, m[0].length);
+    const heading = /^(#{1,3})\s$/.exec(before);
+    if (heading) return set({ type: 'heading', meta: { level: heading[1].length } }, heading[0].length);
     if (/^[-*]\s$/.test(before)) return set({ type: 'bullet', meta: { indent: block.meta?.indent || 0 } }, 2);
     if (/^\d+\.\s$/.test(before)) return set({ type: 'numbered', meta: { indent: block.meta?.indent || 0 } }, before.length);
     if (/^\[[ ]?\]\s$/.test(before)) return set({ type: 'todo', meta: { checked: false, indent: block.meta?.indent || 0 } }, before.length);
@@ -1352,7 +1352,7 @@ export class BlockEditor {
       .map((t) => ({ key: t, label: t }));
   }
 
-  #renderMenu(content) {
+  #renderMenu(_content) {
     const m = this.menu;
     m.el.innerHTML = m.items
       .map(
@@ -1376,7 +1376,7 @@ export class BlockEditor {
 
   #positionMenu() {
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
+    if (!sel?.rangeCount) return;
     const rect = sel.getRangeAt(0).getClientRects()[0] || sel.getRangeAt(0).getBoundingClientRect();
     const box = this.menu.el;
     const top = rect.bottom + 6;
@@ -1533,7 +1533,7 @@ export class BlockEditor {
     input.addEventListener('cancel', () => done());
     this.__imgOnFocus = () => {
       if (this.__imgOnFocus) { window.removeEventListener('focus', this.__imgOnFocus); }
-      setTimeout(() => { if (this.imageBusy && (!input.files || !input.files.length)) done(); }, 400);
+      setTimeout(() => { if (this.imageBusy && (!input.files?.length)) done(); }, 400);
     };
     window.addEventListener('focus', this.__imgOnFocus);
     input.click();
@@ -1691,8 +1691,9 @@ export class BlockEditor {
   }
 
   #clearDrop() {
-    this.host.querySelectorAll('.blk-row--drop-before, .blk-row--drop-after, .blk-row--dragging')
-      .forEach((r) => r.classList.remove('blk-row--drop-before', 'blk-row--drop-after', 'blk-row--dragging'));
+    for (const r of this.host.querySelectorAll('.blk-row--drop-before, .blk-row--drop-after, .blk-row--dragging')) {
+      r.classList.remove('blk-row--drop-before', 'blk-row--drop-after', 'blk-row--dragging');
+    }
   }
 
   // === multi-block selection ==============================================

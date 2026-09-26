@@ -14,23 +14,10 @@ import {
   verifyBackup,
 } from '../src/core/backup.js';
 import { CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
+import { test } from 'node:test';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/schema-v3-comprehensive.json', import.meta.url), 'utf8'));
 const CREATED_AT = '2026-08-19T20:00:00.000Z';
-let passed = 0;
-let failed = 0;
-
-async function test(name, run) {
-  try {
-    await run();
-    passed += 1;
-    console.log(`PASS  ${name}`);
-  } catch (error) {
-    failed += 1;
-    console.error(`FAIL  ${name}`);
-    console.error(error?.stack || error);
-  }
-}
 
 function assert(condition, message = 'assertion failed') {
   if (!condition) throw new Error(message);
@@ -269,5 +256,3 @@ await test('prototype-shaped config keys remain data and do not pollute prototyp
   equal(verified.config.constructor, { kept: 'yes' });
 });
 
-console.log(`\nBackup tests: ${passed} passed, ${failed} failed`);
-if (failed) process.exit(1);

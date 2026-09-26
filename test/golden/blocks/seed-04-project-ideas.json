@@ -1,0 +1,42 @@
+{
+  "slug": "seed-04-project-ideas",
+  "title": "Project Ideas",
+  "source": "# Project Ideas\n\n- A habit tracker that syncs with [[Welcome|this app]]\n- Weekly review template\n- Reading list with ratings\n\nRelated reference: [[Markdown Cheatsheet]].",
+  "roundTrip": true,
+  "serialized": "# Project Ideas\n\n- A habit tracker that syncs with [[Welcome|this app]]\n- Weekly review template\n- Reading list with ratings\n\nRelated reference: [[Markdown Cheatsheet]].",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Project Ideas",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "A habit tracker that syncs with [[Welcome|this app]]",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Weekly review template",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "bullet",
+      "text": "Reading list with ratings",
+      "meta": {
+        "indent": 0
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "Related reference: [[Markdown Cheatsheet]].",
+      "meta": {}
+    }
+  ]
+}

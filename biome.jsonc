@@ -1,0 +1,27 @@
+// Biome lint configuration (Phase 0 · Sprint 2). The formatter is deliberately
+// off: a whole-tree format sweep must land in a window when no other session
+// holds the checkout. `npm run lint` must report zero errors.
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**", "vite.config.js", "test/run-node-tests.mjs", "test/typecheck-ratchet.mjs", "test/bundle-budget.mjs"]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "style": {
+        // Concatenation is used deliberately in HTML-building code; not a defect.
+        "useTemplate": "off",
+        // The cascade in styles.css orders rules by component, not specificity.
+        "noDescendingSpecificity": "off"
+      },
+      "complexity": {
+        // `[hidden] { display: none !important }` and the reduced-motion reset are intentional.
+        "noImportantStyles": "off"
+      }
+    }
+  }
+}

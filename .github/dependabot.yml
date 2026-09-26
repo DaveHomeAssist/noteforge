@@ -1,0 +1,27 @@
+# Dependabot version updates. Alerts (security advisories) are a repository
+# setting and must be switched on in GitHub → Settings → Code security.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    # Majors (marked, vite, playwright) land one at a time behind the golden
+    # corpus and the browser suite, never in the grouped PR.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      actions:
+        patterns: ["*"]

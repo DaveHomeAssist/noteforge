@@ -403,13 +403,13 @@ export class NoteList {
 
   #clearDropMarks() {
     this.els.list.classList.remove('note-list--drop-root');
-    this.els.list.querySelectorAll('.note-item--drop-into').forEach((el) => el.classList.remove('note-item--drop-into'));
+    this.els.list.querySelectorAll('.note-item--drop-into').forEach((el) => { el.classList.remove('note-item--drop-into'); });
   }
 
   #clearDrag() {
     this.dragId = null;
     this.#clearDropMarks();
-    this.els.list.querySelectorAll('.note-item--dragging').forEach((el) => el.classList.remove('note-item--dragging'));
+    this.els.list.querySelectorAll('.note-item--dragging').forEach((el) => { el.classList.remove('note-item--dragging'); });
     if (this._pendingRender) { this._pendingRender = false; this.#renderList(); } // flush a render deferred during the drag
   }
 
@@ -422,11 +422,9 @@ export class NoteList {
     const re = new RegExp(escaped, 'gi');
     let out = '';
     let last = 0;
-    let m;
-    while ((m = re.exec(raw)) !== null) {
+    for (const m of raw.matchAll(re)) {
       out += escapeHtml(raw.slice(last, m.index)) + '<mark>' + escapeHtml(m[0]) + '</mark>';
       last = m.index + m[0].length;
-      if (m.index === re.lastIndex) re.lastIndex++;
     }
     return out + escapeHtml(raw.slice(last));
   }

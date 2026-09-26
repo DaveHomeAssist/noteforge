@@ -217,9 +217,11 @@ for migration, scale, accessibility, security, and cross-feature recovery eviden
 ## Tests
 
 ```bash
-npm test          # Node: markdown<->blocks round-trip, migrations, note model
-npm run test:browser   # Headless (Playwright/Chromium): full interactive feature suite
-npm run test:all       # both
+npm run lint           # Biome lint over src/ (zero errors required)
+npm run typecheck      # tsc --checkJs over src/core + src/utils with a per-file error ratchet
+npm test               # Node (node --test): round-trip, migrations, model, golden corpus, NFM conformance; JUnit + case floor
+npm run test:browser   # Headless (Playwright/Chromium): full interactive feature suite + render goldens
+npm run test:all       # lint, typecheck, unit, browser, build, budget
 ```
 
 `test/roundtrip.test.mjs` (262 assertions) proves the `parse()`/`serialize()`

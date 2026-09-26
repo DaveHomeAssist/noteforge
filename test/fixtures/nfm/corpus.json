@@ -1,0 +1,3992 @@
+{
+  "version": 1,
+  "generatedBy": "test/fixtures/nfm/build-corpus.mjs (expect values are executed against src/utils, never hand-edited)",
+  "cases": [
+    {
+      "id": "wikilink-forms",
+      "feature": "wikilinks",
+      "note": "Bare, alias, heading fragment, block fragment, fragment+alias, Unicode. display/fragment are null when absent; a block fragment keeps its caret; offsets are UTF-16 code units.",
+      "source": "See [[Note]] [[Note|Shown]] [[Note#Heading]] [[Note#^abc]] [[Note#Heading|Shown]] [[Résumé#Ünïcode|Ålias]] here.",
+      "checks": {
+        "wikilinks": true,
+        "wikilinkTargets": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 4,
+            "end": 12,
+            "targetStart": 6,
+            "targetEnd": 10,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Note]]"
+          },
+          {
+            "start": 13,
+            "end": 27,
+            "targetStart": 15,
+            "targetEnd": 19,
+            "target": "Note",
+            "display": "Shown",
+            "displayRaw": "Shown",
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Note|Shown]]"
+          },
+          {
+            "start": 28,
+            "end": 44,
+            "targetStart": 30,
+            "targetEnd": 34,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": "Heading",
+            "fragmentRaw": "Heading",
+            "embedded": false,
+            "raw": "[[Note#Heading]]"
+          },
+          {
+            "start": 45,
+            "end": 58,
+            "targetStart": 47,
+            "targetEnd": 51,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": "^abc",
+            "fragmentRaw": "^abc",
+            "embedded": false,
+            "raw": "[[Note#^abc]]"
+          },
+          {
+            "start": 59,
+            "end": 81,
+            "targetStart": 61,
+            "targetEnd": 65,
+            "target": "Note",
+            "display": "Shown",
+            "displayRaw": "Shown",
+            "fragment": "Heading",
+            "fragmentRaw": "Heading",
+            "embedded": false,
+            "raw": "[[Note#Heading|Shown]]"
+          },
+          {
+            "start": 82,
+            "end": 106,
+            "targetStart": 84,
+            "targetEnd": 90,
+            "target": "Résumé",
+            "display": "Ålias",
+            "displayRaw": "Ålias",
+            "fragment": "Ünïcode",
+            "fragmentRaw": "Ünïcode",
+            "embedded": false,
+            "raw": "[[Résumé#Ünïcode|Ålias]]"
+          }
+        ],
+        "wikilinkTargets": [
+          "Note",
+          "Résumé"
+        ]
+      }
+    },
+    {
+      "id": "wikilink-whitespace-trim",
+      "feature": "wikilinks",
+      "note": "target/fragment/display are trimmed; raw forms keep bytes; targetStart/targetEnd skip padding.",
+      "source": "[[  A  # H  |  D  ]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 0,
+            "end": 20,
+            "targetStart": 4,
+            "targetEnd": 5,
+            "target": "A",
+            "display": "D",
+            "displayRaw": "  D  ",
+            "fragment": "H",
+            "fragmentRaw": " H  ",
+            "embedded": false,
+            "raw": "[[  A  # H  |  D  ]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-empty-forms",
+      "feature": "wikilinks",
+      "note": "Empty target is not a link; empty fragment/display after # or | are empty strings, not null.",
+      "source": "[[]] [[|x]] [[#frag]] [[Note#]] [[Note|   ]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 22,
+            "end": 31,
+            "targetStart": 24,
+            "targetEnd": 28,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": "",
+            "fragmentRaw": "",
+            "embedded": false,
+            "raw": "[[Note#]]"
+          },
+          {
+            "start": 32,
+            "end": 44,
+            "targetStart": 34,
+            "targetEnd": 38,
+            "target": "Note",
+            "display": "",
+            "displayRaw": "   ",
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Note|   ]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-multiple-pipes-and-hashes",
+      "feature": "wikilinks",
+      "note": "Only the first pipe and first hash split; the rest stays in display/fragment.",
+      "source": "[[Note|a|b]] [[A#B#C]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 0,
+            "end": 12,
+            "targetStart": 2,
+            "targetEnd": 6,
+            "target": "Note",
+            "display": "a|b",
+            "displayRaw": "a|b",
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Note|a|b]]"
+          },
+          {
+            "start": 13,
+            "end": 22,
+            "targetStart": 15,
+            "targetEnd": 16,
+            "target": "A",
+            "display": null,
+            "displayRaw": null,
+            "fragment": "B#C",
+            "fragmentRaw": "B#C",
+            "embedded": false,
+            "raw": "[[A#B#C]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-escapes",
+      "feature": "wikilinks",
+      "note": "Odd backslash run escapes [[; \\\\ is a literal backslash; \\! escapes only the embed bang.",
+      "source": "\\[[Escaped]] [[Real]] \\\\[[Double]] \\![[Not embed]]",
+      "checks": {
+        "wikilinks": true,
+        "blocks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 13,
+            "end": 21,
+            "targetStart": 15,
+            "targetEnd": 19,
+            "target": "Real",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Real]]"
+          },
+          {
+            "start": 24,
+            "end": 34,
+            "targetStart": 26,
+            "targetEnd": 32,
+            "target": "Double",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Double]]"
+          },
+          {
+            "start": 37,
+            "end": 50,
+            "targetStart": 39,
+            "targetEnd": 48,
+            "target": "Not embed",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Not embed]]"
+          }
+        ],
+        "blocks": {
+          "types": [
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "\\[[Escaped]] [[Real]] \\\\[[Double]] \\![[Not embed]]",
+              "meta": {}
+            }
+          ],
+          "serialized": "\\[[Escaped]] [[Real]] \\\\[[Double]] \\![[Not embed]]",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "wikilink-inline-code-excluded",
+      "feature": "wikilinks",
+      "note": "Inline code (including spans crossing a newline) is excluded.",
+      "source": "`[[Code]]` and `multi\n[[Line]]` then [[Real]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 37,
+            "end": 45,
+            "targetStart": 39,
+            "targetEnd": 43,
+            "target": "Real",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Real]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-fences-excluded",
+      "feature": "wikilinks",
+      "note": "Both ``` and ~~~ fences exclude links in wikilinks.js; blocks.js only knows ``` (tilde fence becomes a paragraph).",
+      "source": "```\n[[Fence]]\n```\n~~~md\n[[Tilde]]\n~~~\n[[Real]]",
+      "checks": {
+        "wikilinks": true,
+        "blocks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 38,
+            "end": 46,
+            "targetStart": 40,
+            "targetEnd": 44,
+            "target": "Real",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Real]]"
+          }
+        ],
+        "blocks": {
+          "types": [
+            "code",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "code",
+              "text": "[[Fence]]",
+              "meta": {
+                "lang": ""
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "~~~md\n[[Tilde]]\n~~~\n[[Real]]",
+              "meta": {}
+            }
+          ],
+          "serialized": "```\n[[Fence]]\n```\n\n~~~md\n[[Tilde]]\n~~~\n[[Real]]",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "wikilink-url-excluded",
+      "feature": "wikilinks",
+      "note": "http(s):// and www. URL runs are excluded.",
+      "source": "https://example.test/[[URL]] www.example.test/[[W]] [[Real]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 52,
+            "end": 60,
+            "targetStart": 54,
+            "targetEnd": 58,
+            "target": "Real",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Real]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-malformed",
+      "feature": "wikilinks",
+      "note": "Targets containing [ or ] are rejected; a newline inside [[...]] rejects that candidate; an unclosed [[ ends scanning.",
+      "source": "[[Broken [[Nested]] [[A]B]] [[Broken across\nlines]] [[Real]] [[Unclosed",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 52,
+            "end": 60,
+            "targetStart": 54,
+            "targetEnd": 58,
+            "target": "Real",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Real]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-frontmatter-excluded",
+      "feature": "wikilinks",
+      "note": "The leading YAML document is an exclusion range.",
+      "source": "---\nlink: \"[[In YAML]]\"\n---\n[[Body]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 28,
+            "end": 36,
+            "targetStart": 30,
+            "targetEnd": 34,
+            "target": "Body",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Body]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wikilink-dedup-normalized",
+      "feature": "wikilinks",
+      "note": "extractWikilinks dedups by NFKC + case fold + whitespace collapse; first spelling wins.",
+      "source": "[[Note]] [[note]] [[NOTE|x]] [[Other#h]] [[ＣＶ]] [[cv]] [[Résumé]] [[Résumé]]",
+      "checks": {
+        "wikilinkTargets": true
+      },
+      "expect": {
+        "wikilinkTargets": [
+          "Note",
+          "Other",
+          "ＣＶ",
+          "Résumé"
+        ]
+      }
+    },
+    {
+      "id": "wikilink-inside-html-and-table",
+      "feature": "wikilinks",
+      "note": "Raw HTML and table cells are NOT exclusion ranges.",
+      "source": "<details>\n<summary>S</summary>\n[[Inside]]\n</details>\n\n| a |\n| - |\n| [[Cell]] |",
+      "checks": {
+        "wikilinks": true,
+        "blocks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 31,
+            "end": 41,
+            "targetStart": 33,
+            "targetEnd": 39,
+            "target": "Inside",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Inside]]"
+          },
+          {
+            "start": 68,
+            "end": 76,
+            "targetStart": 70,
+            "targetEnd": 74,
+            "target": "Cell",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Cell]]"
+          }
+        ],
+        "blocks": {
+          "types": [
+            "raw",
+            "table"
+          ],
+          "blocks": [
+            {
+              "type": "raw",
+              "text": "<details>\n<summary>S</summary>\n[[Inside]]\n</details>",
+              "meta": {}
+            },
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "[[Cell]]"
+                  ]
+                ],
+                "align": [
+                  ""
+                ]
+              }
+            }
+          ],
+          "serialized": "<details>\n<summary>S</summary>\n[[Inside]]\n</details>\n\n| a |\n| --- |\n| [[Cell]] |",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "embed-block",
+      "feature": "embeds",
+      "note": "Only ![[Note#^id]] transcludes; in the block model it is an ordinary paragraph.",
+      "source": "![[Note#^abc]]",
+      "checks": {
+        "wikilinks": true,
+        "blocks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 0,
+            "end": 14,
+            "targetStart": 3,
+            "targetEnd": 7,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": "^abc",
+            "fragmentRaw": "^abc",
+            "embedded": true,
+            "raw": "![[Note#^abc]]"
+          }
+        ],
+        "blocks": {
+          "types": [
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "![[Note#^abc]]",
+              "meta": {}
+            }
+          ],
+          "serialized": "![[Note#^abc]]",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "embed-whole-note-and-heading",
+      "feature": "embeds",
+      "note": "embedded=true but fragment is not ^id, so markdown.js renders these as plain links, not transclusions.",
+      "source": "![[Note]] ![[Note#Sec|Shown]]",
+      "checks": {
+        "wikilinks": true
+      },
+      "expect": {
+        "wikilinks": [
+          {
+            "start": 0,
+            "end": 9,
+            "targetStart": 3,
+            "targetEnd": 7,
+            "target": "Note",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": true,
+            "raw": "![[Note]]"
+          },
+          {
+            "start": 10,
+            "end": 29,
+            "targetStart": 13,
+            "targetEnd": 17,
+            "target": "Note",
+            "display": "Shown",
+            "displayRaw": "Shown",
+            "fragment": "Sec",
+            "fragmentRaw": "Sec",
+            "embedded": true,
+            "raw": "![[Note#Sec|Shown]]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "blockid-supported-types",
+      "feature": "block-ids",
+      "note": "paragraph, heading(1-3), bullet, numbered, todo, quote carry meta.blockId; leading ^ is optional when resolving.",
+      "source": "Para ^id1\n\n# Head ^h-1\n\n- item ^b_2\n\n1. one ^n1\n\n- [ ] Task ^t1\n\n> quote ^q3",
+      "checks": {
+        "blocks": true,
+        "blockIds": true,
+        "resolveBlockIds": [
+          "id1",
+          "^h-1",
+          "b_2",
+          "n1",
+          "t1",
+          "q3"
+        ]
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "heading",
+            "bullet",
+            "numbered",
+            "todo",
+            "quote"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Para",
+              "meta": {
+                "blockId": "id1"
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Head",
+              "meta": {
+                "level": 1,
+                "blockId": "h-1"
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "item",
+              "meta": {
+                "indent": 0,
+                "blockId": "b_2"
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "one",
+              "meta": {
+                "indent": 0,
+                "blockId": "n1",
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Task",
+              "meta": {
+                "indent": 0,
+                "checked": false,
+                "blockId": "t1",
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "quote",
+              "text": "quote",
+              "meta": {
+                "blockId": "q3"
+              }
+            }
+          ],
+          "serialized": "Para ^id1\n\n# Head ^h-1\n\n- item ^b_2\n\n1. one ^n1\n\n- [ ] Task ^t1\n\n> quote ^q3",
+          "roundTrip": true,
+          "fixedPoint": true
+        },
+        "blockIds": {
+          "occurrences": [
+            {
+              "id": "id1",
+              "index": 0,
+              "type": "paragraph",
+              "text": "Para"
+            },
+            {
+              "id": "h-1",
+              "index": 1,
+              "type": "heading",
+              "text": "Head"
+            },
+            {
+              "id": "b_2",
+              "index": 2,
+              "type": "bullet",
+              "text": "item"
+            },
+            {
+              "id": "n1",
+              "index": 3,
+              "type": "numbered",
+              "text": "one"
+            },
+            {
+              "id": "t1",
+              "index": 4,
+              "type": "todo",
+              "text": "Task"
+            },
+            {
+              "id": "q3",
+              "index": 5,
+              "type": "quote",
+              "text": "quote"
+            }
+          ],
+          "duplicates": []
+        },
+        "resolveBlockIds": [
+          {
+            "id": "id1",
+            "status": "resolved",
+            "block": {
+              "type": "paragraph",
+              "text": "Para"
+            }
+          },
+          {
+            "id": "^h-1",
+            "status": "resolved",
+            "block": {
+              "type": "heading",
+              "text": "Head"
+            }
+          },
+          {
+            "id": "b_2",
+            "status": "resolved",
+            "block": {
+              "type": "bullet",
+              "text": "item"
+            }
+          },
+          {
+            "id": "n1",
+            "status": "resolved",
+            "block": {
+              "type": "numbered",
+              "text": "one"
+            }
+          },
+          {
+            "id": "t1",
+            "status": "resolved",
+            "block": {
+              "type": "todo",
+              "text": "Task"
+            }
+          },
+          {
+            "id": "q3",
+            "status": "resolved",
+            "block": {
+              "type": "quote",
+              "text": "quote"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "blockid-unsupported-types",
+      "feature": "block-ids",
+      "note": "code, table, raw (h4-h6) never carry ids; a @date line with a suffix is not a date block but a paragraph WITH an id.",
+      "source": "```\ncode ^c4\n```\n\n| a |\n| - |\n| b ^t5 |\n\n#### Deep ^d4\n\n@date(2026-07-01) ^dt",
+      "checks": {
+        "blocks": true,
+        "blockIds": true,
+        "resolveBlockIds": [
+          "c4",
+          "t5",
+          "d4",
+          "dt"
+        ]
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "code",
+            "table",
+            "raw",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "code",
+              "text": "code ^c4",
+              "meta": {
+                "lang": ""
+              }
+            },
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "b ^t5"
+                  ]
+                ],
+                "align": [
+                  ""
+                ]
+              }
+            },
+            {
+              "type": "raw",
+              "text": "#### Deep ^d4",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "@date(2026-07-01)",
+              "meta": {
+                "blockId": "dt"
+              }
+            }
+          ],
+          "serialized": "```\ncode ^c4\n```\n\n| a |\n| --- |\n| b ^t5 |\n\n#### Deep ^d4\n\n@date(2026-07-01) ^dt",
+          "roundTrip": false,
+          "fixedPoint": true
+        },
+        "blockIds": {
+          "occurrences": [
+            {
+              "id": "dt",
+              "index": 3,
+              "type": "paragraph",
+              "text": "@date(2026-07-01)"
+            }
+          ],
+          "duplicates": []
+        },
+        "resolveBlockIds": [
+          {
+            "id": "c4",
+            "status": "missing",
+            "block": null
+          },
+          {
+            "id": "t5",
+            "status": "missing",
+            "block": null
+          },
+          {
+            "id": "d4",
+            "status": "missing",
+            "block": null
+          },
+          {
+            "id": "dt",
+            "status": "resolved",
+            "block": {
+              "type": "paragraph",
+              "text": "@date(2026-07-01)"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "blockid-grammar",
+      "feature": "block-ids",
+      "note": "Id = [A-Za-z0-9][A-Za-z0-9_-]{0,63}, preceded by space/tab (or at line start); anything else stays literal text. Trailing whitespace is dropped and a tab separator becomes one space on serialize.",
+      "source": "A ^bad.id\n\nB ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\nC ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\nD ^ABC\n\nE^glued\n\n^alone\n\nF ^-lead\n\nG ^id  \n\nH\t^tab",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A ^bad.id",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "B ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "C",
+              "meta": {
+                "blockId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "D",
+              "meta": {
+                "blockId": "ABC"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "E^glued",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "",
+              "meta": {
+                "blockId": "alone"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "F ^-lead",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "G",
+              "meta": {
+                "blockId": "id"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "H",
+              "meta": {
+                "blockId": "tab"
+              }
+            }
+          ],
+          "serialized": "A ^bad.id\n\nB ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\nC ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\nD ^ABC\n\nE^glued\n\n^alone\n\nF ^-lead\n\nG ^id\n\nH ^tab",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "blockid-duplicates",
+      "feature": "block-ids",
+      "note": "Duplicates are diagnosed (status duplicate), not guessed; invalid ids report invalid.",
+      "source": "Para ^a1\n\n# H ^h\n\nAgain ^a1",
+      "checks": {
+        "blockIds": true,
+        "resolveBlockIds": [
+          "a1",
+          "h",
+          "zz",
+          "bad.id"
+        ]
+      },
+      "expect": {
+        "blockIds": {
+          "occurrences": [
+            {
+              "id": "a1",
+              "index": 0,
+              "type": "paragraph",
+              "text": "Para"
+            },
+            {
+              "id": "h",
+              "index": 1,
+              "type": "heading",
+              "text": "H"
+            },
+            {
+              "id": "a1",
+              "index": 2,
+              "type": "paragraph",
+              "text": "Again"
+            }
+          ],
+          "duplicates": [
+            {
+              "id": "a1",
+              "entries": [
+                {
+                  "id": "a1",
+                  "index": 0,
+                  "type": "paragraph",
+                  "text": "Para"
+                },
+                {
+                  "id": "a1",
+                  "index": 2,
+                  "type": "paragraph",
+                  "text": "Again"
+                }
+              ]
+            }
+          ]
+        },
+        "resolveBlockIds": [
+          {
+            "id": "a1",
+            "status": "duplicate",
+            "block": null
+          },
+          {
+            "id": "h",
+            "status": "resolved",
+            "block": {
+              "type": "heading",
+              "text": "H"
+            }
+          },
+          {
+            "id": "zz",
+            "status": "missing",
+            "block": null
+          },
+          {
+            "id": "bad.id",
+            "status": "invalid",
+            "block": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "blockid-quote-last-line-only",
+      "feature": "block-ids",
+      "note": "For a multi-line quote the id must end the LAST line; an id on an earlier line is literal text.",
+      "source": "> a\n> b ^qid\n\n> c ^first\n> d",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "quote",
+            "quote"
+          ],
+          "blocks": [
+            {
+              "type": "quote",
+              "text": "a\nb",
+              "meta": {
+                "blockId": "qid"
+              }
+            },
+            {
+              "type": "quote",
+              "text": "c ^first\nd",
+              "meta": {}
+            }
+          ],
+          "serialized": "> a\n> b ^qid\n\n> c ^first\n> d",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "date-block",
+      "feature": "date-tokens",
+      "note": "@date(YYYY-MM-DD) alone on a line is a date block.",
+      "source": "Before\n\n@date(2026-12-25)\n\nAfter",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "date",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Before",
+              "meta": {}
+            },
+            {
+              "type": "date",
+              "text": "",
+              "meta": {
+                "date": "2026-12-25"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "After",
+              "meta": {}
+            }
+          ],
+          "serialized": "Before\n\n@date(2026-12-25)\n\nAfter",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "date-forms",
+      "feature": "date-tokens",
+      "note": "Inline, malformed, or indented forms stay paragraphs; trailing whitespace is dropped on serialize. blocks.js accepts any \\d{4}-\\d{2}-\\d{2} (2026-02-30 becomes a date block); calendar.js extractDateBlocks additionally requires a real calendar date.",
+      "source": "see @date(2026-07-01) here\n\n@date(nope)\n\n  @date(2026-07-01)\n\n@date(2026-07-01)   \n\n@date(2026-02-30)",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "paragraph",
+            "paragraph",
+            "date",
+            "date"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "see @date(2026-07-01) here",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "@date(nope)",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "  @date(2026-07-01)",
+              "meta": {}
+            },
+            {
+              "type": "date",
+              "text": "",
+              "meta": {
+                "date": "2026-07-01"
+              }
+            },
+            {
+              "type": "date",
+              "text": "",
+              "meta": {
+                "date": "2026-02-30"
+              }
+            }
+          ],
+          "serialized": "see @date(2026-07-01) here\n\n@date(nope)\n\n  @date(2026-07-01)\n\n@date(2026-07-01)\n\n@date(2026-02-30)",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "due-basic",
+      "feature": "due-tokens",
+      "note": "Trailing @due(YYYY-MM-DD) preceded by whitespace; the exact separator and trailing whitespace are captured so rewrites are byte-exact.",
+      "source": "Ship release  @due(2026-08-21)  ",
+      "checks": {
+        "dueText": true
+      },
+      "expect": {
+        "dueText": {
+          "text": "Ship release",
+          "dueDate": "2026-08-21",
+          "separator": "  ",
+          "trailing": "  "
+        }
+      }
+    },
+    {
+      "id": "due-rejections",
+      "feature": "due-tokens",
+      "note": "Impossible dates, backslash-escaped, inside inline code, non-terminal, no leading whitespace, or bare token: no due. Only the last token counts. Paragraphs are never tasks.",
+      "source": "- [ ] Invalid @due(2026-02-30)\n- [ ] Escaped \\@due(2026-08-21)\n- [ ] `code @due(2026-08-23)`\n- [ ] Mid @due(2026-08-21) first\n- [ ] Glued@due(2026-08-21)\n- [ ] @due(2026-08-21)\n- [ ] Two @due(2026-01-01) @due(2026-08-21)\n\nPara @due(2026-08-21)",
+      "checks": {
+        "tasks": true,
+        "blocks": true
+      },
+      "expect": {
+        "tasks": [
+          {
+            "occurrence": 0,
+            "sourceStart": 0,
+            "sourceEnd": 30,
+            "sourceLine": "- [ ] Invalid @due(2026-02-30)",
+            "checked": false,
+            "text": "Invalid @due(2026-02-30)",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 1,
+            "sourceStart": 31,
+            "sourceEnd": 62,
+            "sourceLine": "- [ ] Escaped \\@due(2026-08-21)",
+            "checked": false,
+            "text": "Escaped \\@due(2026-08-21)",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 2,
+            "sourceStart": 63,
+            "sourceEnd": 92,
+            "sourceLine": "- [ ] `code @due(2026-08-23)`",
+            "checked": false,
+            "text": "`code @due(2026-08-23)`",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 3,
+            "sourceStart": 93,
+            "sourceEnd": 125,
+            "sourceLine": "- [ ] Mid @due(2026-08-21) first",
+            "checked": false,
+            "text": "Mid @due(2026-08-21) first",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 4,
+            "sourceStart": 126,
+            "sourceEnd": 153,
+            "sourceLine": "- [ ] Glued@due(2026-08-21)",
+            "checked": false,
+            "text": "Glued@due(2026-08-21)",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 5,
+            "sourceStart": 154,
+            "sourceEnd": 176,
+            "sourceLine": "- [ ] @due(2026-08-21)",
+            "checked": false,
+            "text": "@due(2026-08-21)",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 6,
+            "sourceStart": 177,
+            "sourceEnd": 220,
+            "sourceLine": "- [ ] Two @due(2026-01-01) @due(2026-08-21)",
+            "checked": false,
+            "text": "Two @due(2026-01-01)",
+            "dueDate": "2026-08-21",
+            "dueSeparator": " ",
+            "trailingWhitespace": "",
+            "heading": ""
+          }
+        ],
+        "blocks": {
+          "types": [
+            "todo",
+            "todo",
+            "todo",
+            "todo",
+            "todo",
+            "todo",
+            "todo",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "todo",
+              "text": "Invalid @due(2026-02-30)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Escaped \\@due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "`code @due(2026-08-23)`",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Mid @due(2026-08-21) first",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Glued@due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "@due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Two @due(2026-01-01) @due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "Para @due(2026-08-21)",
+              "meta": {}
+            }
+          ],
+          "serialized": "- [ ] Invalid @due(2026-02-30)\n- [ ] Escaped \\@due(2026-08-21)\n- [ ] `code @due(2026-08-23)`\n- [ ] Mid @due(2026-08-21) first\n- [ ] Glued@due(2026-08-21)\n- [ ] @due(2026-08-21)\n- [ ] Two @due(2026-01-01) @due(2026-08-21)\n\nPara @due(2026-08-21)",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "tasks-recognition",
+      "feature": "task-lists",
+      "note": "Task = optional indent, - or *, [ ]/[x]/[X], then whitespace. Heading context is tracked. * and [X] normalize to - and [x] on serialize.",
+      "source": "# H\n- [ ] a @due(2026-08-21)\n* [X] b\n  - [x] Done  @due(2026-08-22)  \n1. [ ] not a task\n- [] no\n-  [x]  spaced\n\n## Next\n- [ ] under next",
+      "checks": {
+        "tasks": true,
+        "blocks": true
+      },
+      "expect": {
+        "tasks": [
+          {
+            "occurrence": 0,
+            "sourceStart": 4,
+            "sourceEnd": 28,
+            "sourceLine": "- [ ] a @due(2026-08-21)",
+            "checked": false,
+            "text": "a",
+            "dueDate": "2026-08-21",
+            "dueSeparator": " ",
+            "trailingWhitespace": "",
+            "heading": "H"
+          },
+          {
+            "occurrence": 1,
+            "sourceStart": 29,
+            "sourceEnd": 36,
+            "sourceLine": "* [X] b",
+            "checked": true,
+            "text": "b",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": "H"
+          },
+          {
+            "occurrence": 2,
+            "sourceStart": 37,
+            "sourceEnd": 69,
+            "sourceLine": "  - [x] Done  @due(2026-08-22)  ",
+            "checked": true,
+            "text": "Done",
+            "dueDate": "2026-08-22",
+            "dueSeparator": "  ",
+            "trailingWhitespace": "  ",
+            "heading": "H"
+          },
+          {
+            "occurrence": 3,
+            "sourceStart": 96,
+            "sourceEnd": 110,
+            "sourceLine": "-  [x]  spaced",
+            "checked": true,
+            "text": "spaced",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": "H"
+          },
+          {
+            "occurrence": 4,
+            "sourceStart": 120,
+            "sourceEnd": 136,
+            "sourceLine": "- [ ] under next",
+            "checked": false,
+            "text": "under next",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": "Next"
+          }
+        ],
+        "blocks": {
+          "types": [
+            "heading",
+            "todo",
+            "todo",
+            "todo",
+            "numbered",
+            "bullet",
+            "todo",
+            "heading",
+            "todo"
+          ],
+          "blocks": [
+            {
+              "type": "heading",
+              "text": "H",
+              "meta": {
+                "level": 1
+              }
+            },
+            {
+              "type": "todo",
+              "text": "a @due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "b",
+              "meta": {
+                "indent": 0,
+                "checked": true
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Done  @due(2026-08-22)  ",
+              "meta": {
+                "indent": 1,
+                "checked": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "[ ] not a task",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "[] no",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "todo",
+              "text": "spaced",
+              "meta": {
+                "indent": 0,
+                "checked": true
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Next",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "todo",
+              "text": "under next",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            }
+          ],
+          "serialized": "# H\n\n- [ ] a @due(2026-08-21)\n- [x] b\n  - [x] Done  @due(2026-08-22)  \n1. [ ] not a task\n- [] no\n- [x] spaced\n\n## Next\n\n- [ ] under next",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "tasks-fence-excluded",
+      "feature": "task-lists",
+      "note": "extractTasks skips both fence kinds; blocks.js turns the tilde fence into a paragraph and a bullet-less line.",
+      "source": "~~~md\n- [ ] Hidden @due(2026-08-24)\n~~~\n```\n- [ ] Hidden too\n```\n- [ ] Visible",
+      "checks": {
+        "tasks": true,
+        "blocks": true
+      },
+      "expect": {
+        "tasks": [
+          {
+            "occurrence": 0,
+            "sourceStart": 65,
+            "sourceEnd": 78,
+            "sourceLine": "- [ ] Visible",
+            "checked": false,
+            "text": "Visible",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          }
+        ],
+        "blocks": {
+          "types": [
+            "paragraph",
+            "todo",
+            "paragraph",
+            "code",
+            "todo"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "~~~md",
+              "meta": {}
+            },
+            {
+              "type": "todo",
+              "text": "Hidden @due(2026-08-24)",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "~~~",
+              "meta": {}
+            },
+            {
+              "type": "code",
+              "text": "- [ ] Hidden too",
+              "meta": {
+                "lang": ""
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Visible",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            }
+          ],
+          "serialized": "~~~md\n\n- [ ] Hidden @due(2026-08-24)\n\n~~~\n\n```\n- [ ] Hidden too\n```\n\n- [ ] Visible",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "tasks-crlf",
+      "feature": "task-lists",
+      "note": "extractTasks keeps CRLF byte offsets; blocks.js normalizes CRLF to LF and drops the trailing newline.",
+      "source": "- [ ] One\r\n- [x] Two @due(2026-08-21)\r\n",
+      "checks": {
+        "tasks": true,
+        "blocks": true
+      },
+      "expect": {
+        "tasks": [
+          {
+            "occurrence": 0,
+            "sourceStart": 0,
+            "sourceEnd": 9,
+            "sourceLine": "- [ ] One",
+            "checked": false,
+            "text": "One",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": ""
+          },
+          {
+            "occurrence": 1,
+            "sourceStart": 11,
+            "sourceEnd": 37,
+            "sourceLine": "- [x] Two @due(2026-08-21)",
+            "checked": true,
+            "text": "Two",
+            "dueDate": "2026-08-21",
+            "dueSeparator": " ",
+            "trailingWhitespace": "",
+            "heading": ""
+          }
+        ],
+        "blocks": {
+          "types": [
+            "todo",
+            "todo"
+          ],
+          "blocks": [
+            {
+              "type": "todo",
+              "text": "One",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            },
+            {
+              "type": "todo",
+              "text": "Two @due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": true
+              }
+            }
+          ],
+          "serialized": "- [ ] One\n- [x] Two @due(2026-08-21)",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "callout-quote",
+      "feature": "callouts",
+      "note": "A callout is a quote block whose text starts with [!kind]; only block-editor.js renders it specially (kinds: note, tip, info, important, warning, caution).",
+      "source": "> [!note] Title\n> body line",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "quote"
+          ],
+          "blocks": [
+            {
+              "type": "quote",
+              "text": "[!note] Title\nbody line",
+              "meta": {}
+            }
+          ],
+          "serialized": "> [!note] Title\n> body line",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "callout-unknown-kind",
+      "feature": "callouts",
+      "note": "Unknown kinds are plain quotes in the editor; the kind is lower-cased before lookup.",
+      "source": "> [!custom] x\n\n> [!WARNING] upper",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "quote",
+            "quote"
+          ],
+          "blocks": [
+            {
+              "type": "quote",
+              "text": "[!custom] x",
+              "meta": {}
+            },
+            {
+              "type": "quote",
+              "text": "[!WARNING] upper",
+              "meta": {}
+            }
+          ],
+          "serialized": "> [!custom] x\n\n> [!WARNING] upper",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "quote-normalization",
+      "feature": "quotes",
+      "note": "\"> \" is re-emitted for every line (so \">\" gains a trailing space); lazy continuation lines are NOT part of the quote.",
+      "source": ">quote\n>\n> more\n\n> a\nb\n\n>",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "quote",
+            "quote",
+            "paragraph",
+            "quote"
+          ],
+          "blocks": [
+            {
+              "type": "quote",
+              "text": "quote\n\nmore",
+              "meta": {}
+            },
+            {
+              "type": "quote",
+              "text": "a",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "b",
+              "meta": {}
+            },
+            {
+              "type": "quote",
+              "text": "",
+              "meta": {}
+            }
+          ],
+          "serialized": "> quote\n> \n> more\n\n> a\n\nb\n\n> ",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "toggle-basic",
+      "feature": "toggles",
+      "note": "A line that is exactly <details ...> starts one raw block that ends at the matching </details>.",
+      "source": "before\n\n<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>\n\nafter",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "raw",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "before",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "after",
+              "meta": {}
+            }
+          ],
+          "serialized": "before\n\n<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>\n\nafter",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "toggle-nested-and-fence",
+      "feature": "toggles",
+      "note": "Nesting depth is tracked (the outer block closes on its own </details>) and a literal </details> inside a ``` fence does not close the toggle.",
+      "source": "<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\n```html\n</details>\n```\n\nOuter body\n\n</details>",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "raw"
+          ],
+          "blocks": [
+            {
+              "type": "raw",
+              "text": "<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\n```html\n</details>\n```\n\nOuter body\n\n</details>",
+              "meta": {}
+            }
+          ],
+          "serialized": "<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\n```html\n</details>\n```\n\nOuter body\n\n</details>",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "toggle-attributes-and-case",
+      "feature": "toggles",
+      "note": "Attributes, upper case, and surrounding whitespace are accepted on both tags.",
+      "source": "<details class=\"x\" open>\n<summary>S</summary>\n</details>\n\n<DETAILS>\n<summary>T</summary>\n</DETAILS>\n\n  <details>\n<summary>U</summary>\n  </details>  \nafter",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "raw",
+            "raw",
+            "raw",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "raw",
+              "text": "<details class=\"x\" open>\n<summary>S</summary>\n</details>",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "<DETAILS>\n<summary>T</summary>\n</DETAILS>",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "  <details>\n<summary>U</summary>\n  </details>  ",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "after",
+              "meta": {}
+            }
+          ],
+          "serialized": "<details class=\"x\" open>\n<summary>S</summary>\n</details>\n\n<DETAILS>\n<summary>T</summary>\n</DETAILS>\n\n  <details>\n<summary>U</summary>\n  </details>  \n\nafter",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "toggle-not-recognized",
+      "feature": "toggles",
+      "note": "An opener with content on the same line is a plain HTML line and the body fragments (not lossless); an unclosed toggle swallows to EOF.",
+      "source": "<details><summary>x</summary>\nbody\n</details>\n\n<details>\n<summary>S</summary>\nunclosed",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "raw",
+            "paragraph",
+            "raw",
+            "raw"
+          ],
+          "blocks": [
+            {
+              "type": "raw",
+              "text": "<details><summary>x</summary>",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "body",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "</details>",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "<details>\n<summary>S</summary>\nunclosed",
+              "meta": {}
+            }
+          ],
+          "serialized": "<details><summary>x</summary>\n\nbody\n\n</details>\n\n<details>\n<summary>S</summary>\nunclosed",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-basic",
+      "feature": "frontmatter",
+      "note": "Byte-zero --- line, closing --- line. blocks.parse is NOT frontmatter-aware: callers must split first (the editor does).",
+      "source": "---\ntitle: x\n---\nBody",
+      "checks": {
+        "frontmatterSplit": true,
+        "frontmatter": true,
+        "blocks": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": true,
+          "raw": "---\ntitle: x\n---",
+          "yaml": "title: x\n",
+          "body": "Body",
+          "bodyStart": 17,
+          "separator": "\n",
+          "newline": "\n",
+          "closing": "---"
+        },
+        "frontmatter": {
+          "status": "valid",
+          "properties": {
+            "title": "x"
+          },
+          "propertyTypes": {
+            "title": "text"
+          },
+          "diagnostics": []
+        },
+        "blocks": {
+          "types": [
+            "divider",
+            "paragraph",
+            "divider",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "title: x",
+              "meta": {}
+            },
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "Body",
+              "meta": {}
+            }
+          ],
+          "serialized": "---\n\ntitle: x\n\n---\n\nBody",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-variants",
+      "feature": "frontmatter",
+      "note": "... is an accepted closing line; CRLF newline is detected and preserved; raw + separator + body reassemble the source.",
+      "source": "---\r\n# keep\r\ntitle: \"Quoted\"\r\n...\r\nBody  \r\n\r\n",
+      "checks": {
+        "frontmatterSplit": true,
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": true,
+          "raw": "---\r\n# keep\r\ntitle: \"Quoted\"\r\n...",
+          "yaml": "# keep\r\ntitle: \"Quoted\"\r\n",
+          "body": "Body  \r\n\r\n",
+          "bodyStart": 35,
+          "separator": "\r\n",
+          "newline": "\r\n",
+          "closing": "..."
+        },
+        "frontmatter": {
+          "status": "valid",
+          "properties": {
+            "title": "Quoted"
+          },
+          "propertyTypes": {
+            "title": "text"
+          },
+          "diagnostics": []
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-eof-dots",
+      "feature": "frontmatter",
+      "note": "A ... closing line at EOF yields an empty separator and body; an edit preserves ... and inserts one newline where the separator was missing.",
+      "source": "---\na: 1\n...",
+      "checks": {
+        "frontmatterSplit": true,
+        "frontmatter": true,
+        "setProperty": [
+          {
+            "key": "b",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": true,
+          "raw": "---\na: 1\n...",
+          "yaml": "a: 1\n",
+          "body": "",
+          "bodyStart": 12,
+          "separator": "",
+          "newline": "\n",
+          "closing": "..."
+        },
+        "frontmatter": {
+          "status": "valid",
+          "properties": {
+            "a": 1
+          },
+          "propertyTypes": {
+            "a": "number"
+          },
+          "diagnostics": []
+        },
+        "setProperty": [
+          {
+            "key": "b",
+            "result": "---\na: 1\nb: x\n...\n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frontmatter-split-rejected",
+      "feature": "frontmatter",
+      "note": "Leading space: not frontmatter.",
+      "source": " ---\na: 1\n---\nBody",
+      "checks": {
+        "frontmatterSplit": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": false,
+          "raw": "",
+          "yaml": "",
+          "body": " ---\na: 1\n---\nBody",
+          "bodyStart": 0,
+          "separator": "",
+          "newline": "\n",
+          "closing": null
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-rejected-bom",
+      "feature": "frontmatter",
+      "note": "A BOM before --- defeats recognition.",
+      "source": "﻿---\na: 1\n---\nBody",
+      "checks": {
+        "frontmatterSplit": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": false,
+          "raw": "",
+          "yaml": "",
+          "body": "﻿---\na: 1\n---\nBody",
+          "bodyStart": 0,
+          "separator": "",
+          "newline": "\n",
+          "closing": null
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-rejected-trailing-space",
+      "feature": "frontmatter",
+      "note": "Delimiter lines must be exactly --- or ... (a trailing space breaks the closing line).",
+      "source": "---\na: 1\n--- \nBody",
+      "checks": {
+        "frontmatterSplit": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": false,
+          "raw": "",
+          "yaml": "",
+          "body": "---\na: 1\n--- \nBody",
+          "bodyStart": 0,
+          "separator": "",
+          "newline": "\n",
+          "closing": null
+        }
+      }
+    },
+    {
+      "id": "frontmatter-split-unclosed",
+      "feature": "frontmatter",
+      "note": "No closing line: the --- is an ordinary divider.",
+      "source": "---\nA leading Markdown divider\n\ntext",
+      "checks": {
+        "frontmatterSplit": true,
+        "blocks": true
+      },
+      "expect": {
+        "frontmatterSplit": {
+          "hasFrontmatter": false,
+          "raw": "",
+          "yaml": "",
+          "body": "---\nA leading Markdown divider\n\ntext",
+          "bodyStart": 0,
+          "separator": "",
+          "newline": "\n",
+          "closing": null
+        },
+        "blocks": {
+          "types": [
+            "divider",
+            "paragraph",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "A leading Markdown divider",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "text",
+              "meta": {}
+            }
+          ],
+          "serialized": "---\n\nA leading Markdown divider\n\ntext",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "frontmatter-types",
+      "feature": "frontmatter",
+      "note": "YAML 1.2 core schema: yes is a string, ~ and empty are null, timestamps stay strings, hex is a number. inferPropertyType maps values to UI types (status/type keys become select).",
+      "source": "---\nstatus: active\ntype: doc\ntitle: Plain\npriority: 2\nratio: 1.5\nreviewed: false\ndue: 2026-08-20\nsource: https://example.com/reference\ntopics:\n  - research\n  - design\naliases:\n  - Earlier title\nempty:\nnul: null\ntilde: ~\nyes_str: yes\nquoted_date: \"2026-08-20\"\nts: 2026-08-20T10:00:00Z\nnested:\n  a: 1\nmixed: [1, a]\nhex: 0x1F\n---\nBody",
+      "checks": {
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "valid",
+          "properties": {
+            "status": "active",
+            "type": "doc",
+            "title": "Plain",
+            "priority": 2,
+            "ratio": 1.5,
+            "reviewed": false,
+            "due": "2026-08-20",
+            "source": "https://example.com/reference",
+            "topics": [
+              "research",
+              "design"
+            ],
+            "aliases": [
+              "Earlier title"
+            ],
+            "empty": null,
+            "nul": null,
+            "tilde": null,
+            "yes_str": "yes",
+            "quoted_date": "2026-08-20",
+            "ts": "2026-08-20T10:00:00Z",
+            "nested": {
+              "a": 1
+            },
+            "mixed": [
+              1,
+              "a"
+            ],
+            "hex": 31
+          },
+          "propertyTypes": {
+            "status": "select",
+            "type": "select",
+            "title": "text",
+            "priority": "number",
+            "ratio": "number",
+            "reviewed": "boolean",
+            "due": "date",
+            "source": "url",
+            "topics": "multi-select",
+            "aliases": "multi-select",
+            "empty": "unsupported",
+            "nul": "unsupported",
+            "tilde": "unsupported",
+            "yes_str": "text",
+            "quoted_date": "date",
+            "ts": "text",
+            "nested": "unsupported",
+            "mixed": "unsupported",
+            "hex": "number"
+          },
+          "diagnostics": []
+        }
+      }
+    },
+    {
+      "id": "frontmatter-invalid-yaml",
+      "feature": "frontmatter",
+      "note": "Malformed YAML: status invalid with a line/column diagnostic; property edits refuse with invalid_yaml.",
+      "source": "---\na: [\n---\nbody",
+      "checks": {
+        "frontmatter": true,
+        "setProperty": [
+          {
+            "key": "b",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "invalid",
+          "properties": {},
+          "propertyTypes": {},
+          "diagnostics": [
+            {
+              "code": "BAD_INDENT",
+              "line": 2,
+              "column": 1
+            }
+          ]
+        },
+        "setProperty": [
+          {
+            "key": "b",
+            "error": "invalid_yaml"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frontmatter-duplicate-key",
+      "feature": "frontmatter",
+      "note": "Duplicate keys are rejected (uniqueKeys).",
+      "source": "---\na: 1\na: 2\n---\nbody",
+      "checks": {
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "invalid",
+          "properties": {},
+          "propertyTypes": {},
+          "diagnostics": [
+            {
+              "code": "DUPLICATE_KEY",
+              "line": 2,
+              "column": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "frontmatter-unknown-tag",
+      "feature": "frontmatter",
+      "note": "Custom tags are rejected (TAG_RESOLVE_FAILED becomes invalid).",
+      "source": "---\nv: !unknown value\n---\nbody",
+      "checks": {
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "invalid",
+          "properties": {},
+          "propertyTypes": {},
+          "diagnostics": [
+            {
+              "code": "TAG_RESOLVE_FAILED",
+              "line": 1,
+              "column": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "frontmatter-not-a-mapping",
+      "feature": "frontmatter",
+      "note": "A sequence or scalar document is invalid (mapping_required).",
+      "source": "---\n- not\n- a mapping\n---\nbody",
+      "checks": {
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "invalid",
+          "properties": {},
+          "propertyTypes": {},
+          "diagnostics": [
+            {
+              "code": "mapping_required",
+              "line": 1,
+              "column": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "frontmatter-empty-and-braces",
+      "feature": "frontmatter",
+      "note": "An empty document is valid with no properties.",
+      "source": "---\n---\nbody",
+      "checks": {
+        "frontmatter": true,
+        "setProperty": [
+          {
+            "key": "a",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "valid",
+          "properties": {},
+          "propertyTypes": {},
+          "diagnostics": []
+        },
+        "setProperty": [
+          {
+            "key": "a",
+            "result": "---\na: x\n---\nbody"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frontmatter-yaml-safety",
+      "feature": "frontmatter",
+      "note": "Anchors/aliases expand (alias cap 20); merge keys are NOT applied (<< is a literal key); properties are a Map so prototype-shaped keys are inert.",
+      "source": "---\na: &x 1\nb: *x\nbase: &b {x: 1}\nd:\n  <<: *b\n__proto__: safe\n---\nbody",
+      "checks": {
+        "frontmatter": true
+      },
+      "expect": {
+        "frontmatter": {
+          "status": "valid",
+          "properties": {
+            "a": 1,
+            "b": 1,
+            "base": {
+              "x": 1
+            },
+            "d": {
+              "<<": {
+                "x": 1
+              }
+            },
+            "__proto__": "safe"
+          },
+          "propertyTypes": {
+            "a": "number",
+            "b": "number",
+            "base": "unsupported",
+            "d": "unsupported"
+          },
+          "diagnostics": []
+        }
+      }
+    },
+    {
+      "id": "frontmatter-set-property",
+      "feature": "frontmatter",
+      "note": "Edits rewrite only the YAML node: comments, key order, unknown nesting, the CRLF body separator and body bytes survive. noteforge_id is immutable.",
+      "source": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\n---\r\nBody bytes  \r\n",
+      "checks": {
+        "setProperty": [
+          {
+            "key": "count",
+            "value": "3.5",
+            "type": "number"
+          },
+          {
+            "key": "ready",
+            "value": "true",
+            "type": "boolean"
+          },
+          {
+            "key": "due",
+            "value": "2026-08-20",
+            "type": "date"
+          },
+          {
+            "key": "due",
+            "value": "2026-02-30",
+            "type": "date"
+          },
+          {
+            "key": "site",
+            "value": "https://example.com/a",
+            "type": "url"
+          },
+          {
+            "key": "site",
+            "value": "javascript:alert(1)",
+            "type": "url"
+          },
+          {
+            "key": "labels",
+            "value": "one, two, one",
+            "type": "multi-select"
+          },
+          {
+            "key": "alpha",
+            "value": "changed"
+          },
+          {
+            "key": "noteforge_id",
+            "value": "changed",
+            "type": "text"
+          },
+          {
+            "key": "",
+            "value": "x"
+          }
+        ],
+        "removeProperty": [
+          "alpha",
+          "noteforge_id",
+          "missing"
+        ]
+      },
+      "expect": {
+        "setProperty": [
+          {
+            "key": "count",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\ncount: 3.5\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "ready",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\nready: true\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "due",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\ndue: 2026-08-20\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "due",
+            "error": "invalid_date"
+          },
+          {
+            "key": "site",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\nsite: https://example.com/a\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "site",
+            "error": "unsafe_url"
+          },
+          {
+            "key": "labels",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\nlabels:\n  - one\n  - two\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "alpha",
+            "result": "---\n# retained\nalpha: changed\nnoteforge_id: stable-1\nunknown:\n  keep: true\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "noteforge_id",
+            "error": "immutable_property"
+          },
+          {
+            "key": "",
+            "error": "invalid_key"
+          }
+        ],
+        "removeProperty": [
+          {
+            "key": "alpha",
+            "result": "---\nnoteforge_id: stable-1\nunknown:\n  keep: true\n---\r\nBody bytes  \r\n"
+          },
+          {
+            "key": "noteforge_id",
+            "error": "immutable_property"
+          },
+          {
+            "key": "missing",
+            "result": "---\n# retained\nalpha: one\nnoteforge_id: stable-1\nunknown:\n  keep: true\n---\r\nBody bytes  \r\n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frontmatter-set-on-plain-note",
+      "feature": "frontmatter",
+      "note": "Setting a property on a note without frontmatter inserts a document using the body newline style.",
+      "source": "Body\r\nmore",
+      "checks": {
+        "setProperty": [
+          {
+            "key": "b",
+            "value": "two"
+          }
+        ]
+      },
+      "expect": {
+        "setProperty": [
+          {
+            "key": "b",
+            "result": "---\r\nb: two\r\n---\r\nBody\r\nmore"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frontmatter-remove-last-property",
+      "feature": "frontmatter",
+      "note": "Removing the only property leaves a literal {} YAML body (which re-parses as valid and empty).",
+      "source": "---\na: 1\n---\nBody",
+      "checks": {
+        "removeProperty": [
+          "a"
+        ],
+        "setProperty": [
+          {
+            "key": "b",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "removeProperty": [
+          {
+            "key": "a",
+            "result": "---\n{}\n---\nBody"
+          }
+        ],
+        "setProperty": [
+          {
+            "key": "b",
+            "result": "---\na: 1\nb: x\n---\nBody"
+          }
+        ]
+      }
+    },
+    {
+      "id": "headings-levels",
+      "feature": "headings",
+      "note": "extractHeadings sees levels 1-6; blocks.js models 1-3 as heading blocks and keeps 4-6 as raw lines.",
+      "source": "# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six",
+      "checks": {
+        "headings": true,
+        "blocks": true
+      },
+      "expect": {
+        "headings": [
+          {
+            "level": 1,
+            "text": "One",
+            "rawText": "One",
+            "anchor": "heading-one",
+            "start": 0,
+            "end": 5,
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Two",
+            "rawText": "Two",
+            "anchor": "heading-two",
+            "start": 6,
+            "end": 12,
+            "line": 2
+          },
+          {
+            "level": 3,
+            "text": "Three",
+            "rawText": "Three",
+            "anchor": "heading-three",
+            "start": 13,
+            "end": 22,
+            "line": 3
+          },
+          {
+            "level": 4,
+            "text": "Four",
+            "rawText": "Four",
+            "anchor": "heading-four",
+            "start": 23,
+            "end": 32,
+            "line": 4
+          },
+          {
+            "level": 5,
+            "text": "Five",
+            "rawText": "Five",
+            "anchor": "heading-five",
+            "start": 33,
+            "end": 43,
+            "line": 5
+          },
+          {
+            "level": 6,
+            "text": "Six",
+            "rawText": "Six",
+            "anchor": "heading-six",
+            "start": 44,
+            "end": 54,
+            "line": 6
+          }
+        ],
+        "blocks": {
+          "types": [
+            "heading",
+            "heading",
+            "heading",
+            "raw",
+            "raw",
+            "raw"
+          ],
+          "blocks": [
+            {
+              "type": "heading",
+              "text": "One",
+              "meta": {
+                "level": 1
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Two",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Three",
+              "meta": {
+                "level": 3
+              }
+            },
+            {
+              "type": "raw",
+              "text": "#### Four",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "##### Five",
+              "meta": {}
+            },
+            {
+              "type": "raw",
+              "text": "###### Six",
+              "meta": {}
+            }
+          ],
+          "serialized": "# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "headings-duplicate-anchors",
+      "feature": "headings",
+      "note": "Slugs are NFKC + lower + non-alphanumeric runs to -; duplicates get -2, -3; empty slugs become section. resolveHeadingAnchor matches visible text or slug and never ^block fragments.",
+      "source": "# Repeat\n## Repeat\n# repeat\n## !!!\n## ???",
+      "checks": {
+        "headings": true,
+        "resolveAnchors": [
+          "Repeat",
+          "#Repeat",
+          "REPEAT",
+          "repeat-2",
+          "repeat-3",
+          "section",
+          "section-2",
+          "Nope",
+          "^abc",
+          ""
+        ]
+      },
+      "expect": {
+        "headings": [
+          {
+            "level": 1,
+            "text": "Repeat",
+            "rawText": "Repeat",
+            "anchor": "heading-repeat",
+            "start": 0,
+            "end": 8,
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Repeat",
+            "rawText": "Repeat",
+            "anchor": "heading-repeat-2",
+            "start": 9,
+            "end": 18,
+            "line": 2
+          },
+          {
+            "level": 1,
+            "text": "repeat",
+            "rawText": "repeat",
+            "anchor": "heading-repeat-3",
+            "start": 19,
+            "end": 27,
+            "line": 3
+          },
+          {
+            "level": 2,
+            "text": "!!!",
+            "rawText": "!!!",
+            "anchor": "heading-section",
+            "start": 28,
+            "end": 34,
+            "line": 4
+          },
+          {
+            "level": 2,
+            "text": "???",
+            "rawText": "???",
+            "anchor": "heading-section-2",
+            "start": 35,
+            "end": 41,
+            "line": 5
+          }
+        ],
+        "resolveAnchors": [
+          {
+            "fragment": "Repeat",
+            "anchor": "heading-repeat"
+          },
+          {
+            "fragment": "#Repeat",
+            "anchor": "heading-repeat"
+          },
+          {
+            "fragment": "REPEAT",
+            "anchor": "heading-repeat"
+          },
+          {
+            "fragment": "repeat-2",
+            "anchor": "heading-repeat-2"
+          },
+          {
+            "fragment": "repeat-3",
+            "anchor": "heading-repeat-3"
+          },
+          {
+            "fragment": "section",
+            "anchor": "heading-section"
+          },
+          {
+            "fragment": "section-2",
+            "anchor": "heading-section-2"
+          },
+          {
+            "fragment": "Nope",
+            "anchor": null
+          },
+          {
+            "fragment": "^abc",
+            "anchor": null
+          },
+          {
+            "fragment": "",
+            "anchor": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "headings-visible-text",
+      "feature": "headings",
+      "note": "Visible text drops wikilink syntax (alias or target), emphasis marks, a trailing ^id, and trailing #s; blocks.js keeps \"Title ##\" verbatim.",
+      "source": "## See [[Target|Shown]] and [[Other#frag]]\n## **Bold** _it_ `code` ~~s~~\n## Section ^sec-1\n## Title ##\n## Café & Résumé!",
+      "checks": {
+        "headings": true,
+        "blocks": true
+      },
+      "expect": {
+        "headings": [
+          {
+            "level": 2,
+            "text": "See Shown and Other",
+            "rawText": "See [[Target|Shown]] and [[Other#frag]]",
+            "anchor": "heading-see-shown-and-other",
+            "start": 0,
+            "end": 42,
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Bold it code s",
+            "rawText": "**Bold** _it_ `code` ~~s~~",
+            "anchor": "heading-bold-it-code-s",
+            "start": 43,
+            "end": 72,
+            "line": 2
+          },
+          {
+            "level": 2,
+            "text": "Section",
+            "rawText": "Section ^sec-1",
+            "anchor": "heading-section",
+            "start": 73,
+            "end": 90,
+            "line": 3
+          },
+          {
+            "level": 2,
+            "text": "Title",
+            "rawText": "Title ##",
+            "anchor": "heading-title",
+            "start": 91,
+            "end": 102,
+            "line": 4
+          },
+          {
+            "level": 2,
+            "text": "Café & Résumé!",
+            "rawText": "Café & Résumé!",
+            "anchor": "heading-café-résumé",
+            "start": 103,
+            "end": 120,
+            "line": 5
+          }
+        ],
+        "blocks": {
+          "types": [
+            "heading",
+            "heading",
+            "heading",
+            "heading",
+            "heading"
+          ],
+          "blocks": [
+            {
+              "type": "heading",
+              "text": "See [[Target|Shown]] and [[Other#frag]]",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "heading",
+              "text": "**Bold** _it_ `code` ~~s~~",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Section",
+              "meta": {
+                "level": 2,
+                "blockId": "sec-1"
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Title ##",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "heading",
+              "text": "Café & Résumé!",
+              "meta": {
+                "level": 2
+              }
+            }
+          ],
+          "serialized": "## See [[Target|Shown]] and [[Other#frag]]\n\n## **Bold** _it_ `code` ~~s~~\n\n## Section ^sec-1\n\n## Title ##\n\n## Café & Résumé!",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "headings-exclusions",
+      "feature": "headings",
+      "note": "Frontmatter and both fence kinds are skipped; indented, space-less, or empty headings are not headings.",
+      "source": "---\na: 1\n---\n```\n# hidden\n```\n~~~md\n## also hidden\n~~~\n# shown\n  ## indented\n#nospace\n# ",
+      "checks": {
+        "headings": true,
+        "blocks": true
+      },
+      "expect": {
+        "headings": [
+          {
+            "level": 1,
+            "text": "shown",
+            "rawText": "shown",
+            "anchor": "heading-shown",
+            "start": 55,
+            "end": 62,
+            "line": 7
+          }
+        ],
+        "blocks": {
+          "types": [
+            "divider",
+            "paragraph",
+            "divider",
+            "code",
+            "paragraph",
+            "heading",
+            "paragraph",
+            "heading",
+            "paragraph",
+            "heading"
+          ],
+          "blocks": [
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "a: 1",
+              "meta": {}
+            },
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "code",
+              "text": "# hidden",
+              "meta": {
+                "lang": ""
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "~~~md",
+              "meta": {}
+            },
+            {
+              "type": "heading",
+              "text": "also hidden",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "~~~",
+              "meta": {}
+            },
+            {
+              "type": "heading",
+              "text": "shown",
+              "meta": {
+                "level": 1
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "  ## indented\n#nospace",
+              "meta": {}
+            },
+            {
+              "type": "heading",
+              "text": "",
+              "meta": {
+                "level": 1
+              }
+            }
+          ],
+          "serialized": "---\n\na: 1\n\n---\n\n```\n# hidden\n```\n\n~~~md\n\n## also hidden\n\n~~~\n\n# shown\n\n  ## indented\n#nospace\n\n# ",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "headings-crlf-offsets",
+      "feature": "headings",
+      "note": "Offsets count the \\r; the trailing \\r is trimmed from the text.",
+      "source": "# One\r\n## Two\r\n",
+      "checks": {
+        "headings": true
+      },
+      "expect": {
+        "headings": [
+          {
+            "level": 1,
+            "text": "One",
+            "rawText": "One",
+            "anchor": "heading-one",
+            "start": 0,
+            "end": 6,
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Two",
+            "rawText": "Two",
+            "anchor": "heading-two",
+            "start": 7,
+            "end": 14,
+            "line": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "table-alignment",
+      "feature": "tables",
+      "note": "Alignment is captured and re-emitted as :---, ---:, :---:.",
+      "source": "| A | B | C |\n| :-- | --: | :-: |\n| 1 | 2 | 3 |",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "table"
+          ],
+          "blocks": [
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "A",
+                    "B",
+                    "C"
+                  ],
+                  [
+                    "1",
+                    "2",
+                    "3"
+                  ]
+                ],
+                "align": [
+                  "left",
+                  "right",
+                  "center"
+                ]
+              }
+            }
+          ],
+          "serialized": "| A | B | C |\n| :--- | ---: | :---: |\n| 1 | 2 | 3 |",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "table-escapes",
+      "feature": "tables",
+      "note": "\\| and \\\\ decode symmetrically; a cell ending in a literal backslash keeps its column.",
+      "source": "| a | b |\n| --- | --- |\n| x\\|y | C:\\\\path |\n| x\\\\ | y |",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "table"
+          ],
+          "blocks": [
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "a",
+                    "b"
+                  ],
+                  [
+                    "x|y",
+                    "C:\\path"
+                  ],
+                  [
+                    "x\\",
+                    "y"
+                  ]
+                ],
+                "align": [
+                  "",
+                  ""
+                ]
+              }
+            }
+          ],
+          "serialized": "| a | b |\n| --- | --- |\n| x\\|y | C:\\\\path |\n| x\\\\ | y |",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "table-borderless-and-ragged",
+      "feature": "tables",
+      "note": "Border pipes are optional; ragged rows are padded to the widest row; output always has border pipes.",
+      "source": "A | B | C\n--- | ---\n1",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "table",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "A",
+                    "B",
+                    "C"
+                  ]
+                ],
+                "align": [
+                  "",
+                  "",
+                  ""
+                ]
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "1",
+              "meta": {}
+            }
+          ],
+          "serialized": "| A | B | C |\n| --- | --- | --- |\n\n1",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "table-ends-at-non-pipe-line",
+      "feature": "tables",
+      "note": "A table needs a separator on the next line; the body stops at the first line without a pipe (or a blank).",
+      "source": "intro\n| a |\n| - |\n| 1 |\nno pipe\n| 2 |",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "table",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "intro",
+              "meta": {}
+            },
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "1"
+                  ]
+                ],
+                "align": [
+                  ""
+                ]
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "no pipe\n| 2 |",
+              "meta": {}
+            }
+          ],
+          "serialized": "intro\n\n| a |\n| --- |\n| 1 |\n\nno pipe\n| 2 |",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "fence-basic",
+      "feature": "code-fences",
+      "note": "Body is verbatim; lang is the trimmed info string.",
+      "source": "```js\nconst x = `${name}`;\n[[Not a link]]\n```",
+      "checks": {
+        "blocks": true,
+        "wikilinks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "code"
+          ],
+          "blocks": [
+            {
+              "type": "code",
+              "text": "const x = `${name}`;\n[[Not a link]]",
+              "meta": {
+                "lang": "js"
+              }
+            }
+          ],
+          "serialized": "```js\nconst x = `${name}`;\n[[Not a link]]\n```",
+          "roundTrip": true,
+          "fixedPoint": true
+        },
+        "wikilinks": []
+      }
+    },
+    {
+      "id": "fence-unclosed",
+      "feature": "code-fences",
+      "note": "An unclosed fence runs to EOF and gains a closing fence on serialize.",
+      "source": "```js\nlet x\n",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "code"
+          ],
+          "blocks": [
+            {
+              "type": "code",
+              "text": "let x\n",
+              "meta": {
+                "lang": "js"
+              }
+            }
+          ],
+          "serialized": "```js\nlet x\n\n```",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "fence-quirks",
+      "feature": "code-fences",
+      "note": "blocks.js closes on ANY line starting with ```; a 4-backtick fence is read as lang \"`\"; indented fences are paragraphs.",
+      "source": "```js\nx\n```js\ny\n\n````\n```\n````\n\n  ```\nz\n  ```",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "code",
+            "paragraph",
+            "code",
+            "code"
+          ],
+          "blocks": [
+            {
+              "type": "code",
+              "text": "x",
+              "meta": {
+                "lang": "js"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "y",
+              "meta": {}
+            },
+            {
+              "type": "code",
+              "text": "",
+              "meta": {
+                "lang": "`"
+              }
+            },
+            {
+              "type": "code",
+              "text": "\n  ```\nz\n  ```",
+              "meta": {
+                "lang": "`"
+              }
+            }
+          ],
+          "serialized": "```js\nx\n```\n\ny\n\n````\n\n```\n\n````\n\n  ```\nz\n  ```\n```",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "list-markers-and-indent",
+      "feature": "lists",
+      "note": "- and * are bullets (+ is not); indent = floor(spaces/2) with tab = 2 spaces; serialize emits - and 2-space indents.",
+      "source": "* a\n+ b\n- c\n\t- tab\n    - four\n   - three",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "bullet",
+            "paragraph",
+            "bullet",
+            "bullet",
+            "bullet",
+            "bullet"
+          ],
+          "blocks": [
+            {
+              "type": "bullet",
+              "text": "a",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "+ b",
+              "meta": {}
+            },
+            {
+              "type": "bullet",
+              "text": "c",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "tab",
+              "meta": {
+                "indent": 1
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "four",
+              "meta": {
+                "indent": 2
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "three",
+              "meta": {
+                "indent": 1
+              }
+            }
+          ],
+          "serialized": "- a\n\n+ b\n\n- c\n  - tab\n    - four\n  - three",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "list-blank-separation",
+      "feature": "lists",
+      "note": "A blank between same-family items is kept as meta.blankBefore (one blank line) and restarts numbering.",
+      "source": "- a\n\n\n- b\n\n1. mix\n2. bake\n\n1. cool\n2. eat",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "bullet",
+            "bullet",
+            "numbered",
+            "numbered",
+            "numbered",
+            "numbered"
+          ],
+          "blocks": [
+            {
+              "type": "bullet",
+              "text": "a",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "b",
+              "meta": {
+                "indent": 0,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "mix",
+              "meta": {
+                "indent": 0,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "bake",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "cool",
+              "meta": {
+                "indent": 0,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "eat",
+              "meta": {
+                "indent": 0
+              }
+            }
+          ],
+          "serialized": "- a\n\n- b\n\n1. mix\n2. bake\n\n1. cool\n2. eat",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "list-numbered-renumber",
+      "feature": "lists",
+      "note": "Numbers are regenerated sequentially; mixed list families stay tight.",
+      "source": "3. a\n7. b\n\n- x\n1. y\n- [ ] z",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "numbered",
+            "numbered",
+            "bullet",
+            "numbered",
+            "todo"
+          ],
+          "blocks": [
+            {
+              "type": "numbered",
+              "text": "a",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "b",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "x",
+              "meta": {
+                "indent": 0,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "y",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "todo",
+              "text": "z",
+              "meta": {
+                "indent": 0,
+                "checked": false
+              }
+            }
+          ],
+          "serialized": "1. a\n2. b\n\n- x\n1. y\n- [ ] z",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "list-divider-lookalike",
+      "feature": "lists",
+      "note": "*** and ___ are dividers normalized to ---; \"- - -\" is a bullet whose text is \"- -\".",
+      "source": "***\n\n___\n\n- - -",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "divider",
+            "divider",
+            "bullet"
+          ],
+          "blocks": [
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "bullet",
+              "text": "- -",
+              "meta": {
+                "indent": 0
+              }
+            }
+          ],
+          "serialized": "---\n\n---\n\n- - -",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "paragraph-soft-breaks",
+      "feature": "paragraphs",
+      "note": "Consecutive plain lines are one paragraph; multiple blank lines collapse to one.",
+      "source": "line a\nline b\n\npara two\n\n\n\npara three",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "paragraph",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "line a\nline b",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "para two",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "para three",
+              "meta": {}
+            }
+          ],
+          "serialized": "line a\nline b\n\npara two\n\npara three",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "image-block",
+      "feature": "images",
+      "note": "Only a line that is exactly ![alt](src) with no ) or whitespace in src is an image block.",
+      "source": "![a cat](https://example.com/cat.jpg)\n\n![](x.png)\n\nsee ![x](y.png) here\n\n![a](http://x/(1).png)",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "image",
+            "image",
+            "paragraph",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "image",
+              "text": "",
+              "meta": {
+                "alt": "a cat",
+                "src": "https://example.com/cat.jpg"
+              }
+            },
+            {
+              "type": "image",
+              "text": "",
+              "meta": {
+                "alt": "",
+                "src": "x.png"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "see ![x](y.png) here",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "![a](http://x/(1).png)",
+              "meta": {}
+            }
+          ],
+          "serialized": "![a cat](https://example.com/cat.jpg)\n\n![](x.png)\n\nsee ![x](y.png) here\n\n![a](http://x/(1).png)",
+          "roundTrip": true,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "crlf-and-trailing-newline",
+      "feature": "misc",
+      "note": "CRLF is normalized to LF and the trailing newline is dropped by serialize (not byte-preserving).",
+      "source": "a\r\nb\r\n\r\nc\n",
+      "checks": {
+        "blocks": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "a\nb",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "c",
+              "meta": {}
+            }
+          ],
+          "serialized": "a\nb\n\nc",
+          "roundTrip": false,
+          "fixedPoint": true
+        }
+      }
+    },
+    {
+      "id": "empty-document",
+      "feature": "misc",
+      "note": "An empty note parses to one empty paragraph.",
+      "source": "",
+      "checks": {
+        "blocks": true,
+        "wikilinks": true,
+        "headings": true,
+        "frontmatterSplit": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "",
+              "meta": {}
+            }
+          ],
+          "serialized": "",
+          "roundTrip": true,
+          "fixedPoint": true
+        },
+        "wikilinks": [],
+        "headings": [],
+        "frontmatterSplit": {
+          "hasFrontmatter": false,
+          "raw": "",
+          "yaml": "",
+          "body": "",
+          "bodyStart": 0,
+          "separator": "",
+          "newline": "\n",
+          "closing": null
+        }
+      }
+    },
+    {
+      "id": "everything-document",
+      "feature": "misc",
+      "note": "Every block type in one document is a byte-exact fixed point.",
+      "source": "# H1\n## H2\n### H3\n\nA paragraph with **bold** and a [[Link]].\n\n- bullet one\n- bullet two\n\n1. first\n2. second\n\n- [ ] open task @due(2026-08-21)\n- [x] done task\n\n> a quote line\n> second quote line\n\n```js\nconst x = 1;\n```\n\n@date(2026-07-01)\n\n---\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n<details>\n<summary>More</summary>\n\nHidden\n\n</details>\n\nClosing paragraph. ^end",
+      "checks": {
+        "blocks": true,
+        "wikilinks": true,
+        "headings": true,
+        "tasks": true,
+        "blockIds": true
+      },
+      "expect": {
+        "blocks": {
+          "types": [
+            "heading",
+            "heading",
+            "heading",
+            "paragraph",
+            "bullet",
+            "bullet",
+            "numbered",
+            "numbered",
+            "todo",
+            "todo",
+            "quote",
+            "code",
+            "date",
+            "divider",
+            "table",
+            "raw",
+            "paragraph"
+          ],
+          "blocks": [
+            {
+              "type": "heading",
+              "text": "H1",
+              "meta": {
+                "level": 1
+              }
+            },
+            {
+              "type": "heading",
+              "text": "H2",
+              "meta": {
+                "level": 2
+              }
+            },
+            {
+              "type": "heading",
+              "text": "H3",
+              "meta": {
+                "level": 3
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": "A paragraph with **bold** and a [[Link]].",
+              "meta": {}
+            },
+            {
+              "type": "bullet",
+              "text": "bullet one",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "bullet",
+              "text": "bullet two",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "first",
+              "meta": {
+                "indent": 0,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "numbered",
+              "text": "second",
+              "meta": {
+                "indent": 0
+              }
+            },
+            {
+              "type": "todo",
+              "text": "open task @due(2026-08-21)",
+              "meta": {
+                "indent": 0,
+                "checked": false,
+                "blankBefore": true
+              }
+            },
+            {
+              "type": "todo",
+              "text": "done task",
+              "meta": {
+                "indent": 0,
+                "checked": true
+              }
+            },
+            {
+              "type": "quote",
+              "text": "a quote line\nsecond quote line",
+              "meta": {}
+            },
+            {
+              "type": "code",
+              "text": "const x = 1;",
+              "meta": {
+                "lang": "js"
+              }
+            },
+            {
+              "type": "date",
+              "text": "",
+              "meta": {
+                "date": "2026-07-01"
+              }
+            },
+            {
+              "type": "divider",
+              "text": "",
+              "meta": {}
+            },
+            {
+              "type": "table",
+              "text": "",
+              "meta": {
+                "rows": [
+                  [
+                    "A",
+                    "B"
+                  ],
+                  [
+                    "1",
+                    "2"
+                  ]
+                ],
+                "align": [
+                  "",
+                  ""
+                ]
+              }
+            },
+            {
+              "type": "raw",
+              "text": "<details>\n<summary>More</summary>\n\nHidden\n\n</details>",
+              "meta": {}
+            },
+            {
+              "type": "paragraph",
+              "text": "Closing paragraph.",
+              "meta": {
+                "blockId": "end"
+              }
+            }
+          ],
+          "serialized": "# H1\n\n## H2\n\n### H3\n\nA paragraph with **bold** and a [[Link]].\n\n- bullet one\n- bullet two\n\n1. first\n2. second\n\n- [ ] open task @due(2026-08-21)\n- [x] done task\n\n> a quote line\n> second quote line\n\n```js\nconst x = 1;\n```\n\n@date(2026-07-01)\n\n---\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n<details>\n<summary>More</summary>\n\nHidden\n\n</details>\n\nClosing paragraph. ^end",
+          "roundTrip": false,
+          "fixedPoint": true
+        },
+        "wikilinks": [
+          {
+            "start": 51,
+            "end": 59,
+            "targetStart": 53,
+            "targetEnd": 57,
+            "target": "Link",
+            "display": null,
+            "displayRaw": null,
+            "fragment": null,
+            "fragmentRaw": null,
+            "embedded": false,
+            "raw": "[[Link]]"
+          }
+        ],
+        "headings": [
+          {
+            "level": 1,
+            "text": "H1",
+            "rawText": "H1",
+            "anchor": "heading-h1",
+            "start": 0,
+            "end": 4,
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "H2",
+            "rawText": "H2",
+            "anchor": "heading-h2",
+            "start": 5,
+            "end": 10,
+            "line": 2
+          },
+          {
+            "level": 3,
+            "text": "H3",
+            "rawText": "H3",
+            "anchor": "heading-h3",
+            "start": 11,
+            "end": 17,
+            "line": 3
+          }
+        ],
+        "tasks": [
+          {
+            "occurrence": 0,
+            "sourceStart": 109,
+            "sourceEnd": 141,
+            "sourceLine": "- [ ] open task @due(2026-08-21)",
+            "checked": false,
+            "text": "open task",
+            "dueDate": "2026-08-21",
+            "dueSeparator": " ",
+            "trailingWhitespace": "",
+            "heading": "H3"
+          },
+          {
+            "occurrence": 1,
+            "sourceStart": 142,
+            "sourceEnd": 157,
+            "sourceLine": "- [x] done task",
+            "checked": true,
+            "text": "done task",
+            "dueDate": null,
+            "dueSeparator": "",
+            "trailingWhitespace": "",
+            "heading": "H3"
+          }
+        ],
+        "blockIds": {
+          "occurrences": [
+            {
+              "id": "end",
+              "index": 16,
+              "type": "paragraph",
+              "text": "Closing paragraph."
+            }
+          ],
+          "duplicates": []
+        }
+      }
+    }
+  ]
+}

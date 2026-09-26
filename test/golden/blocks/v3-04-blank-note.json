@@ -1,0 +1,14 @@
+{
+  "slug": "v3-04-blank-note",
+  "title": "Blank Note",
+  "source": "",
+  "roundTrip": true,
+  "serialized": "",
+  "blocks": [
+    {
+      "type": "paragraph",
+      "text": "",
+      "meta": {}
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "slug": "seed-03-wikilinks-backlinks",
+  "title": "Wikilinks & Backlinks",
+  "source": "# Wikilinks & Backlinks\n\nType `[[Note title]]` to link to another note. Use `[[Title|display text]]`\nto show different text, e.g. [[Project Ideas|my ideas]].\n\nIf a linked note doesn't exist yet, the link shows dimmed — click it to\ncreate that note instantly.\n\nThe **Backlinks** panel under each note lists every note that links *to* it.\nThis note is referenced by [[Welcome]].",
+  "roundTrip": true,
+  "serialized": "# Wikilinks & Backlinks\n\nType `[[Note title]]` to link to another note. Use `[[Title|display text]]`\nto show different text, e.g. [[Project Ideas|my ideas]].\n\nIf a linked note doesn't exist yet, the link shows dimmed — click it to\ncreate that note instantly.\n\nThe **Backlinks** panel under each note lists every note that links *to* it.\nThis note is referenced by [[Welcome]].",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Wikilinks & Backlinks",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "Type `[[Note title]]` to link to another note. Use `[[Title|display text]]`\nto show different text, e.g. [[Project Ideas|my ideas]].",
+      "meta": {}
+    },
+    {
+      "type": "paragraph",
+      "text": "If a linked note doesn't exist yet, the link shows dimmed — click it to\ncreate that note instantly.",
+      "meta": {}
+    },
+    {
+      "type": "paragraph",
+      "text": "The **Backlinks** panel under each note lists every note that links *to* it.\nThis note is referenced by [[Welcome]].",
+      "meta": {}
+    }
+  ]
+}

@@ -71,7 +71,7 @@ export class CalendarView {
     this.els.label.textContent = this.mode === 'week'
       ? `${calendarDateLabel(this.days[0], { month: 'short', day: 'numeric' })} – ${calendarDateLabel(this.days.at(-1), { month: 'short', day: 'numeric', year: 'numeric' })}`
       : calendarDateLabel(`${String(anchor.year).padStart(4, '0')}-${String(anchor.month).padStart(2, '0')}-01`, { month: 'long', year: 'numeric' });
-    this.els.overlay.querySelectorAll('[data-calendar-mode]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.calendarMode === this.mode)));
+    this.els.overlay.querySelectorAll('[data-calendar-mode]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.calendarMode === this.mode)); });
     this.#renderGrid();
     this.#renderAgenda();
     this.els.status.textContent = `${this.items.filter((item) => this.days.includes(item.date)).length} calendar item${this.items.filter((item) => this.days.includes(item.date)).length === 1 ? '' : 's'} in this ${this.mode}.`;

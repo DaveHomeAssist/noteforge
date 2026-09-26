@@ -36,7 +36,7 @@ export function consumeShareTarget(input) {
 }
 
 function escapeLinkLabel(value) {
-  return String(value).replace(/\\/g, '\\\\').replace(/([\[\]])/g, '\\$1');
+  return String(value).replace(/\\/g, '\\\\').replace(/([[\]])/g, '\\$1');
 }
 
 export function buildCaptureMarkdown({ title = '', text = '', url = '', imageDataUrl = '', imageAlt = '' } = {}) {
@@ -51,7 +51,7 @@ export function buildCaptureMarkdown({ title = '', text = '', url = '', imageDat
   }
   if (imageDataUrl) {
     if (!/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);/i.test(imageDataUrl)) throw new TypeError('Captured image data is not a supported image.');
-    const alt = String(imageAlt || 'Captured image').replace(/[\[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const alt = String(imageAlt || 'Captured image').replace(/[[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
     parts.push(`![${alt}](${imageDataUrl})`);
   }
   return parts.join('\n\n');

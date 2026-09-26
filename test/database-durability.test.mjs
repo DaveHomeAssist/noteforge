@@ -1,12 +1,13 @@
 import { Database } from '../src/core/database.js';
 import { CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
 
-let assertions = 0;
-function ok(name, condition) {
-  assertions += 1;
-  if (!condition) throw new Error(`FAIL: ${name}`);
-  console.log(`ok ${assertions} - ${name}`);
-}
+import { test } from 'node:test';
+import nodeAssert from 'node:assert/strict';
+
+// Each check is its own node:test case (counted by test/run-node-tests.mjs).
+// The condition is evaluated where ok() is called, so the sequential async flow
+// below is unchanged; a failing check no longer aborts the later ones.
+const ok = (name, condition) => test(name, () => { nodeAssert.ok(condition, name); });
 
 function memoryBackend({ failNotes = false } = {}) {
   const values = new Map();
@@ -383,5 +384,3 @@ function memoryBackend({ failNotes = false } = {}) {
   failNotes = false;
   await db.flush();
 }
-
-console.log(`\n${assertions} database durability assertions passed.`);

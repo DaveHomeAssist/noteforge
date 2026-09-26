@@ -223,6 +223,8 @@ Exit criteria: a Notion export imports with pages, databases, and properties int
 
 ## 8. First 10 working days (Phase 0 kickoff)
 
+Sprint records live in [`docs/roadmap/sprints/`](sprints/); the first is [Phase 0 · Sprint 2](sprints/2026-09-26_phase0_sprint2.md).
+
 1. Open the quick-fix PR (`.sr-only`, forced-colors selector, `aria-current`, labels, skip link, WEB-1 default light and pre-paint theme, dompurify bump).
 2. Hand-sync the canonical deploy to `main`; confirm live hash parity.
 3. Enable branch protection and Dependabot; add `.nvmrc`; fix the concurrency group.

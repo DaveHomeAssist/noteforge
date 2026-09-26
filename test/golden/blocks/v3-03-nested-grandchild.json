@@ -1,0 +1,19 @@
+{
+  "slug": "v3-03-nested-grandchild",
+  "title": "Nested Grandchild",
+  "source": "> [!note] Three levels prove parent identifiers survive loading.\n\n`[[Not a link|inside code]]`",
+  "roundTrip": true,
+  "serialized": "> [!note] Three levels prove parent identifiers survive loading.\n\n`[[Not a link|inside code]]`",
+  "blocks": [
+    {
+      "type": "quote",
+      "text": "[!note] Three levels prove parent identifiers survive loading.",
+      "meta": {}
+    },
+    {
+      "type": "paragraph",
+      "text": "`[[Not a link|inside code]]`",
+      "meta": {}
+    }
+  ]
+}

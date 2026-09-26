@@ -1077,12 +1077,12 @@ export class RevisionStore {
 
   async deleteNoteHistoriesNow(noteIds) {
     const ids = [...new Set(noteIds)];
-    ids.forEach((id) => assertString(id, 'noteId'));
+    for (const id of ids) assertString(id, 'noteId');
     await this.ensureAvailable();
     const recordIds = [];
     for (const noteId of ids) {
       const records = await this.list(noteId);
-      records.forEach((record) => recordIds.push(record.id));
+      for (const record of records) recordIds.push(record.id);
     }
     const purgedSet = new Set(ids);
     const snapshots = await this.listSnapshots();
@@ -1112,7 +1112,7 @@ export class RevisionStore {
 
   async reconcileVaultNoteIdsNow(noteIds) {
     const liveIds = new Set(noteIds);
-    liveIds.forEach((id) => assertString(id, 'noteId'));
+    for (const id of liveIds) assertString(id, 'noteId');
     await this.ensureAvailable();
     const absentIds = new Set();
     const revisionNoteIds = new Set();
@@ -1125,9 +1125,11 @@ export class RevisionStore {
       if (!liveIds.has(record.noteId)) absentIds.add(record.noteId);
     });
     const snapshots = await this.listSnapshots();
-    snapshots.forEach((snapshot) => snapshot.notes.forEach((reference) => {
-      if (!liveIds.has(reference.noteId)) absentIds.add(reference.noteId);
-    }));
+    for (const snapshot of snapshots) {
+      for (const reference of snapshot.notes) {
+        if (!liveIds.has(reference.noteId)) absentIds.add(reference.noteId);
+      }
+    }
 
     const removed = absentIds.size
       ? await this.deleteNoteHistoriesNow([...absentIds])

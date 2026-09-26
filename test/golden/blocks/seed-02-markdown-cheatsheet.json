@@ -1,0 +1,60 @@
+{
+  "slug": "seed-02-markdown-cheatsheet",
+  "title": "Markdown Cheatsheet",
+  "source": "# Markdown Cheatsheet\n\n| Syntax | Result |\n| --- | --- |\n| `**bold**` | **bold** |\n| `*italic*` | *italic* |\n| `[link](url)` | a link |\n| `> quote` | a blockquote |\n\n```js\nfunction hello(name) {\n  return `Hi, ${name}`;\n}\n```\n\nBack to [[Welcome]].",
+  "roundTrip": true,
+  "serialized": "# Markdown Cheatsheet\n\n| Syntax | Result |\n| --- | --- |\n| `**bold**` | **bold** |\n| `*italic*` | *italic* |\n| `[link](url)` | a link |\n| `> quote` | a blockquote |\n\n```js\nfunction hello(name) {\n  return `Hi, ${name}`;\n}\n```\n\nBack to [[Welcome]].",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Markdown Cheatsheet",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "table",
+      "text": "",
+      "meta": {
+        "rows": [
+          [
+            "Syntax",
+            "Result"
+          ],
+          [
+            "`**bold**`",
+            "**bold**"
+          ],
+          [
+            "`*italic*`",
+            "*italic*"
+          ],
+          [
+            "`[link](url)`",
+            "a link"
+          ],
+          [
+            "`> quote`",
+            "a blockquote"
+          ]
+        ],
+        "align": [
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "type": "code",
+      "text": "function hello(name) {\n  return `Hi, ${name}`;\n}",
+      "meta": {
+        "lang": "js"
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "Back to [[Welcome]].",
+      "meta": {}
+    }
+  ]
+}

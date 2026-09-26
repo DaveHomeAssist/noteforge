@@ -1,0 +1,29 @@
+{
+  "slug": "v3-05-image-reference",
+  "title": "Image Reference",
+  "source": "# Image fixture\n\n![One pixel](data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=)\n\nThe image remains Markdown source.",
+  "roundTrip": true,
+  "serialized": "# Image fixture\n\n![One pixel](data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=)\n\nThe image remains Markdown source.",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Image fixture",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "image",
+      "text": "",
+      "meta": {
+        "alt": "One pixel",
+        "src": "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "The image remains Markdown source.",
+      "meta": {}
+    }
+  ]
+}

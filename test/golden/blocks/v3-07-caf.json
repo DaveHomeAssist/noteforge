@@ -1,0 +1,34 @@
+{
+  "slug": "v3-07-caf",
+  "title": "Café 📝",
+  "source": "Unicode, escaped characters, and Windows paths stay exact: `C:\\\\Notes\\\\Atlas`.\n\n| Key | Value |\n| --- | --- |\n| pipe | x\\|y |",
+  "roundTrip": true,
+  "serialized": "Unicode, escaped characters, and Windows paths stay exact: `C:\\\\Notes\\\\Atlas`.\n\n| Key | Value |\n| --- | --- |\n| pipe | x\\|y |",
+  "blocks": [
+    {
+      "type": "paragraph",
+      "text": "Unicode, escaped characters, and Windows paths stay exact: `C:\\\\Notes\\\\Atlas`.",
+      "meta": {}
+    },
+    {
+      "type": "table",
+      "text": "",
+      "meta": {
+        "rows": [
+          [
+            "Key",
+            "Value"
+          ],
+          [
+            "pipe",
+            "x|y"
+          ]
+        ],
+        "align": [
+          "",
+          ""
+        ]
+      }
+    }
+  ]
+}

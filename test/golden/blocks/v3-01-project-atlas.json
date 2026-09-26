@@ -1,0 +1,44 @@
+{
+  "slug": "v3-01-project-atlas",
+  "title": "Project Atlas",
+  "source": "# Project Atlas\n\nSee [[Nested Child|the child overview]] and [[Image Reference]].\n\n- [ ] Preserve the vault\n- [x] Record the baseline\n\n@date(2026-08-19)",
+  "roundTrip": true,
+  "serialized": "# Project Atlas\n\nSee [[Nested Child|the child overview]] and [[Image Reference]].\n\n- [ ] Preserve the vault\n- [x] Record the baseline\n\n@date(2026-08-19)",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Project Atlas",
+      "meta": {
+        "level": 1
+      }
+    },
+    {
+      "type": "paragraph",
+      "text": "See [[Nested Child|the child overview]] and [[Image Reference]].",
+      "meta": {}
+    },
+    {
+      "type": "todo",
+      "text": "Preserve the vault",
+      "meta": {
+        "indent": 0,
+        "checked": false
+      }
+    },
+    {
+      "type": "todo",
+      "text": "Record the baseline",
+      "meta": {
+        "indent": 0,
+        "checked": true
+      }
+    },
+    {
+      "type": "date",
+      "text": "",
+      "meta": {
+        "date": "2026-08-19"
+      }
+    }
+  ]
+}

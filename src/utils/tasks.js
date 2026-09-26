@@ -79,7 +79,6 @@ export function extractTasks(markdown, { noteId = '', noteTitle = '', noteTags =
     const match = TASK_RE.exec(line.text);
     if (!match) continue;
     const due = parseTaskDueText(match[4]);
-    const prefix = `${match[1]}${match[2]}${match[3]}`;
     const lineHash = hashLine(line.text);
     tasks.push(Object.freeze({
       id: `${noteId}:${occurrence}:${lineHash}`,
