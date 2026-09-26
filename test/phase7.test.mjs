@@ -272,9 +272,14 @@ test('adversarial YAML, URL, path, CSP, service-worker, and prototype boundaries
   const vite = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
   assert.match(sw, /key\.startsWith\('noteforge-'\) && key !== CACHE/);
   assert.doesNotMatch(sw, /filter\(\(key\) => key !== CACHE\)/);
-  const prodPolicy = vite.slice(vite.indexOf('prod: ['), vite.indexOf('].join', vite.indexOf('prod: [')));
-  assert.match(prodPolicy, /"script-src 'self'"/);
+  // The production policy is a function of the inline-script hashes computed
+  // from the final HTML (the pre-paint theme boot); it must never fall back to
+  // 'unsafe-inline' for scripts.
+  const prodPolicy = vite.slice(vite.indexOf('prod: ('), vite.indexOf("].join('; ')", vite.indexOf('prod: (')));
+  assert.match(prodPolicy, /\["script-src 'self'", \.\.\.scriptHashes\]/);
   assert.doesNotMatch(prodPolicy, /script-src[^\n]*unsafe/);
+  assert.match(vite, /CSP\.prod\(inlineScriptHashes\(html\)\)/);
+  assert.match(vite, /'sha256-\$\{createHash\('sha256'\)\.update\(match\[1\]\)\.digest\('base64'\)\}'/);
   assert.match(prodPolicy, /"object-src 'none'"/);
   assert.match(prodPolicy, /"form-action 'none'"/);
 });

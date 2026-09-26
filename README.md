@@ -120,7 +120,10 @@ and dark mode — all stored in your browser, no backend required.
 - **Ranked, scoped search** (`Ctrl/⌘+K`) — fuzzy-ranked with match highlighting,
   plus filters: `tag:<name>`, `in:title`, `has:banner`, `is:pinned`,
   `is:archived`, `prop:<key>`, and `prop:<key>=<value>`.
-- **Theme** — light / dark / **system** (follows your OS), persisted.
+- **Theme** — light (the default until you choose) / dark / **system** (follows
+  your OS), persisted. The toggle sits in the sidebar header and in the mobile
+  top bar; your choice is applied before first paint (no flash on reload) and
+  drives `color-scheme` and the browser's `theme-color` too.
 - **Settings** (⚙ in the ⋯ menu) — theme, editor font size & width, autosave delay,
   and the default template for new notes.
 - **Installable PWA** — a web manifest + service worker so it installs to your

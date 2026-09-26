@@ -13,6 +13,11 @@ import { execFileSync } from 'node:child_process';
 // `style-src` keeps 'unsafe-inline' because the app legitimately sets inline
 // styles (banner gradients/positions, the SVG graph); rendered markdown is
 // stripped of style by DOMPurify, so the residual risk is CSS-only.
+//
+// `script-src` never needs 'unsafe-inline': the one inline script (the pre-paint
+// theme boot in index.html) is allow-listed by its SHA-256 hash in production.
+// Dev keeps 'unsafe-inline' and no hashes, because a hash in the policy would
+// switch 'unsafe-inline' off for the HMR client.
 const CSP = {
   dev: [
     "default-src 'self'",
@@ -24,9 +29,9 @@ const CSP = {
     "object-src 'none'",
     "base-uri 'self'",
   ].join('; '),
-  prod: [
+  prod: (scriptHashes = []) => [
     "default-src 'self'",
-    "script-src 'self'",
+    ["script-src 'self'", ...scriptHashes].join(' '),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
@@ -39,6 +44,12 @@ const CSP = {
     // header at the hosting layer for clickjacking protection.
   ].join('; '),
 };
+
+/** CSP source expressions for every bare inline `<script>` in the final HTML. */
+function inlineScriptHashes(html) {
+  return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((match) => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`);
+}
 
 // Stamp a per-build id into the copied dist/sw.js CACHE name. Because the built
 // asset filenames are content-hashed, hashing them yields an id that changes only
@@ -63,21 +74,19 @@ function swVersionPlugin() {
   };
 }
 
+// Runs `post` and after minifyHtmlPlugin so the hash covers the inline script
+// exactly as it is emitted (the minifier may touch surrounding whitespace). The
+// meta is spliced in as a string rather than via `tags`, which would HTML-escape
+// every quote in the policy to `&#39;` (correct, but ~70 wasted shell bytes).
 function cspPlugin() {
   return {
     name: 'inject-csp',
-    transformIndexHtml(html, ctx) {
-      const content = ctx.server ? CSP.dev : CSP.prod;
-      return {
-        html,
-        tags: [
-          {
-            tag: 'meta',
-            attrs: { 'http-equiv': 'Content-Security-Policy', content },
-            injectTo: 'head-prepend',
-          },
-        ],
-      };
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const content = ctx.server ? CSP.dev : CSP.prod(inlineScriptHashes(html));
+        return html.replace(/<head[^>]*>/i, (head) => `${head}<meta http-equiv=Content-Security-Policy content="${content}">`);
+      },
     },
   };
 }
@@ -151,7 +160,9 @@ export default defineConfig(({ command, isPreview }) => ({
   // and a davehomeassist.github.io/noteforge/ mirror); dev + the test servers stay at
   // root so nothing else has to change.
   base: command === 'build' || isPreview ? '/noteforge/' : '/',
-  plugins: [cspPlugin(), buildStampPlugin(), minifyHtmlPlugin(), swVersionPlugin()],
+  // Order matters: the CSP plugin runs `post`, after the build stamp and the
+  // minifier, so its hash covers the inline theme script exactly as emitted.
+  plugins: [buildStampPlugin(), minifyHtmlPlugin(), cspPlugin(), swVersionPlugin()],
   server: {
     port: 5175,
     open: true,
@@ -165,8 +176,8 @@ export default defineConfig(({ command, isPreview }) => ({
   build: {
     outDir: 'dist',
     target: 'es2020',
-    // No inline modulepreload polyfill, so the production CSP can stay at
-    // `script-src 'self'` (no 'unsafe-inline'). es2020 targets support it.
+    // No inline modulepreload polyfill, so the production CSP stays at
+    // `script-src 'self'` plus one hash (no 'unsafe-inline'). es2020 targets support it.
     modulePreload: { polyfill: false },
   },
 }));

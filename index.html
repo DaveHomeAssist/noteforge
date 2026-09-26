@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#3b6ef6" />
+  <meta name="theme-color" content="#ffffff" />
+  <!-- Pre-paint theme: apply the mirrored preference (written by src/ui/theme.js) before CSS/JS load so dark users never see a light flash. Kept single-line and free of double quotes; vite.config.js hashes it into the production CSP. Dark colour = --bg-elev in src/styles.css. -->
+  <script>try{var t=localStorage.getItem('noteforge:theme');if(t==='system')t=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';if(t==='dark'){document.documentElement.dataset.theme=t;document.querySelector('meta[name=theme-color]').content='#1e2127'}}catch(e){}</script>
   <title>NoteForge</title>
 <meta name="description" content="NoteForge is a local-first notes app with Markdown, wikilinks, backlinks, tags, graph view, templates, offline use, and export.">
 <link rel="canonical" href="https://systembydave.com/noteforge/">
@@ -33,6 +35,7 @@
       <button id="mobile-nav-forward" class="btn btn--ghost" aria-label="Forward" disabled>→</button>
     </div>
     <span class="mobile-bar__title">📝 NoteForge</span>
+    <button id="mobile-theme-btn" class="btn btn--ghost mobile-bar__theme" aria-label="Toggle theme">🌙</button>
   </div>
   <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 
@@ -48,7 +51,7 @@
           </div>
           <button id="new-note-btn" class="btn btn--primary" title="New note (Ctrl+N)">＋ New</button>
           <button id="capture-btn" class="btn btn--ghost" aria-label="Open Quick Capture">↘</button>
-          <button id="theme-btn" class="btn btn--ghost" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+          <button id="theme-btn" class="btn btn--ghost" aria-label="Toggle theme">🌙</button>
           <button id="graph-btn" class="btn btn--ghost" title="Toggle graph view" aria-label="Toggle graph view">🕸️</button>
           <div class="menu">
             <button id="menu-btn" class="btn btn--ghost" title="More" aria-label="More actions" aria-controls="menu-dropdown" aria-expanded="false">⋯</button>

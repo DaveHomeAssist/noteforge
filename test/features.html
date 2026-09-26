@@ -21,6 +21,8 @@
   import { NoteList } from '/src/components/note-list.js';
   import { CommandPalette } from '/src/components/command-palette.js';
   import { SettingsView } from '/src/components/settings-view.js';
+  import { Theme } from '/src/ui/theme.js';
+  import { THEME_MIRROR_KEY } from '/src/ui/settings.js';
   import { HistoryView, buildHistoryDiff } from '/src/components/history-view.js';
   import { BackupView } from '/src/components/backup-view.js';
   import { LinkToolsView } from '/src/components/link-tools-view.js';
@@ -1454,6 +1456,68 @@
       && focused.width > 40 && focused.height > 20 && focused.top >= 0 && focused.left >= 0 && focused.top < 60);
     link.blur(); link.remove();
   });
+
+  // ============ theme: WEB-1 light default, persisted choice, mirror + meta + toggles ============
+  section('theme: light default is applied without being written back; toggles persist and stay in sync', () => {
+    const root = document.documentElement;
+    const meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta);
+    const desktopBtn = document.createElement('button'); const mobileBtn = document.createElement('button');
+    scratch.append(desktopBtn, mobileBtn);
+    const surface = () => getComputedStyle(root).getPropertyValue('--bg-elev').trim();
+    const scheme = () => getComputedStyle(root).colorScheme;
+    try {
+      localStorage.removeItem(THEME_MIRROR_KEY);
+      const db = new Database();
+      const theme = new Theme(db, [desktopBtn, mobileBtn]);
+      check('fresh install resolves to light', theme.mode === 'light' && root.getAttribute('data-theme') === 'light');
+      check('the initial apply does not persist a choice', !('themeMode' in db.config));
+      check('the mode is mirrored to localStorage for the pre-paint boot', localStorage.getItem(THEME_MIRROR_KEY) === 'light');
+      check('color-scheme follows the light theme', scheme() === 'light');
+      check('theme-color meta follows the light surface', /^#/.test(meta.content) && meta.content === surface());
+      check('both toggle buttons show the moon and are labelled', [desktopBtn, mobileBtn].every((b) => b.textContent === '🌙' && b.getAttribute('aria-label') === 'Theme: light'));
+      mobileBtn.click();
+      check('mobile toggle switches to dark and persists it', theme.mode === 'dark' && db.config.themeMode === 'dark' && root.getAttribute('data-theme') === 'dark');
+      check('dark mirror, meta, and color-scheme update together', localStorage.getItem(THEME_MIRROR_KEY) === 'dark' && meta.content === surface() && scheme() === 'dark');
+      check('both toggle buttons now show the sun', [desktopBtn, mobileBtn].every((b) => b.textContent === '☀️' && b.getAttribute('aria-label') === 'Theme: dark'));
+      desktopBtn.click();
+      check('desktop toggle switches back to light', theme.mode === 'light' && db.config.themeMode === 'light' && root.getAttribute('data-theme') === 'light');
+      theme.setMode('system', { persist: false });
+      check('setMode without persist applies but leaves the stored choice alone', theme.mode === 'system' && db.config.themeMode === 'light' && localStorage.getItem(THEME_MIRROR_KEY) === 'system');
+      const chosenSystem = new Database(); chosenSystem.config = { ...chosenSystem.config, themeMode: 'system' };
+      check('an explicit system choice survives a reload', new Theme(chosenSystem, null).mode === 'system');
+      const legacy = new Database(); legacy.config = { ...legacy.config, theme: 'dark' };
+      check('a legacy theme key still wins over the light default', new Theme(legacy, []).mode === 'dark');
+    } finally {
+      root.removeAttribute('data-theme'); meta.remove(); desktopBtn.remove(); mobileBtn.remove();
+      try { localStorage.removeItem(THEME_MIRROR_KEY); } catch {}
+    }
+  });
+
+  await (async () => {
+    const root = document.documentElement;
+    const meta = document.createElement('meta'); meta.name = 'theme-color'; meta.content = '#ffffff'; document.head.appendChild(meta);
+    try {
+      const html = await (await fetch('/index.html')).text();
+      const boot = /<script>([^<]*)<\/script>/.exec(html)?.[1] || '';
+      check('index.html ships exactly one bare inline script: the theme boot', boot.length > 0 && (html.match(/<script>/g) || []).length === 1);
+      const run = () => new Function(boot)();
+      localStorage.setItem(THEME_MIRROR_KEY, 'dark'); root.setAttribute('data-theme', 'light'); meta.content = '#ffffff'; run();
+      check('boot script applies a mirrored dark choice on its own (before the app loads)',
+        root.getAttribute('data-theme') === 'dark' && meta.content === getComputedStyle(root).getPropertyValue('--bg-elev').trim());
+      localStorage.setItem(THEME_MIRROR_KEY, 'light'); root.setAttribute('data-theme', 'light'); meta.content = '#ffffff'; run();
+      check('boot script leaves the light default alone for a light choice', root.getAttribute('data-theme') === 'light' && meta.content === '#ffffff');
+      localStorage.removeItem(THEME_MIRROR_KEY); root.setAttribute('data-theme', 'light'); run();
+      check('boot script keeps the light default when nothing is stored', root.getAttribute('data-theme') === 'light');
+      localStorage.setItem(THEME_MIRROR_KEY, 'system'); root.setAttribute('data-theme', 'light'); run();
+      check('boot script resolves a system choice from the OS preference',
+        root.getAttribute('data-theme') === (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    } catch (e) {
+      results.push('FAIL  theme boot script — threw: ' + e.message);
+    } finally {
+      root.removeAttribute('data-theme'); meta.remove();
+      try { localStorage.removeItem(THEME_MIRROR_KEY); } catch {}
+    }
+  })();
 
   section('active note row exposes aria-current="page"', () => {
     const els = mkListEls();

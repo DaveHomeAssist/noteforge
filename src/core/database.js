@@ -42,7 +42,7 @@ export class Database {
     this.notes = new Map(); // id -> Note (both live and trashed)
     // Default config is available synchronously; init() overlays the stored one.
     // No `theme` default here — a fresh install must fall through to the settings
-    // default (themeMode: 'system'); a legacy stored `theme` still wins for upgrades.
+    // default (themeMode: 'light', WEB-1); a legacy stored `theme` still wins for upgrades.
     this.config = { showGraph: false };
     this.listeners = new Set();
     this.ready = false;

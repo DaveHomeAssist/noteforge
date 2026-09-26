@@ -6,7 +6,7 @@ import { Note, normalizeBanner } from '../src/core/note.js';
 import { runMigrations, detectVersion, CURRENT_SCHEMA_VERSION } from '../src/core/migrations.js';
 import { fuzzyMatch, fuzzyHighlight } from '../src/utils/fuzzy.js';
 import { parseQuery, noteMatchesFilters, scoreNote, rankNotes } from '../src/utils/search-query.js';
-import { normalizeSettings, resolveTheme, DEFAULT_SETTINGS } from '../src/ui/settings.js';
+import { normalizeSettings, resolveTheme, DEFAULT_SETTINGS, THEME_MIRROR_KEY } from '../src/ui/settings.js';
 import { Database } from '../src/core/database.js';
 import { buildForest, flattenForest, isDescendant, ancestorChain } from '../src/utils/tree.js';
 import { buildNoteHtmlDoc, noteFileStem } from '../src/utils/export.js';
@@ -347,7 +347,7 @@ ok('normalizeSettings keeps all valid values', (() => {
 })());
 ok('normalizeSettings rejects invalid values back to defaults', (() => {
   const s = normalizeSettings({ themeMode: 'x', fontScale: 'xl', editorWidth: 'huge', autosaveMs: 9999, defaultTemplate: 'nope' });
-  return s.themeMode === 'system' && s.fontScale === 'm' && s.editorWidth === 'normal' && s.autosaveMs === 400 && s.defaultTemplate === 'none';
+  return s.themeMode === 'light' && s.fontScale === 'm' && s.editorWidth === 'normal' && s.autosaveMs === 400 && s.defaultTemplate === 'none';
 })());
 ok('normalizeSettings falls back to legacy theme key', normalizeSettings({ theme: 'dark' }).themeMode === 'dark');
 ok('normalizeSettings prefers themeMode over legacy theme', normalizeSettings({ theme: 'dark', themeMode: 'light' }).themeMode === 'light');
@@ -356,10 +356,47 @@ ok('resolveTheme: system + prefersDark -> dark', resolveTheme('system', true) ==
 ok('resolveTheme: system + light -> light', resolveTheme('system', false) === 'light');
 ok('resolveTheme: explicit dark ignores system', resolveTheme('dark', false) === 'dark');
 ok('resolveTheme: explicit light ignores system', resolveTheme('light', true) === 'light');
-// A fresh install must NOT be hard-coded to light — it should fall through to 'system'.
-ok('fresh Database config has no hardcoded theme key', !('theme' in new Database().config));
-ok('fresh install normalizes to themeMode: system', normalizeSettings(new Database().config).themeMode === 'system');
+// WEB-1: a fresh install (no choice yet) defaults to light. The Database never
+// hard-codes a theme, so any persisted choice — including an explicit 'system'
+// — or a legacy `theme` key wins over that default.
+ok('DEFAULT_SETTINGS.themeMode is light (WEB-1)', DEFAULT_SETTINGS.themeMode === 'light');
+ok('fresh Database config has no hardcoded theme key', !('theme' in new Database().config) && !('themeMode' in new Database().config));
+ok('fresh install normalizes to themeMode: light', normalizeSettings(new Database().config).themeMode === 'light');
+ok('an explicit system choice is preserved', normalizeSettings({ themeMode: 'system' }).themeMode === 'system');
 ok('a legacy stored theme still wins on upgrade', normalizeSettings({ ...new Database().config, theme: 'dark' }).themeMode === 'dark');
+// Migration-safe: running any older payload forward never rewrites a theme choice.
+for (const from of [undefined, 3, CURRENT_SCHEMA_VERSION - 1]) {
+  const upgraded = runMigrations({ notes: [], config: { themeMode: 'system' } }, from);
+  ok(`migration from v${from ?? 0} keeps an explicit system theme`,
+    upgraded.data.config.themeMode === 'system' && normalizeSettings(upgraded.data.config).themeMode === 'system');
+}
+ok('migration from legacy keeps the old theme key for normalizeSettings',
+  normalizeSettings(runMigrations({ notes: [], config: { theme: 'dark' } }, undefined).data.config).themeMode === 'dark');
+
+// --- pre-paint theme boot + theme surfaces (index.html / styles.css) ---
+const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const cssVar = (block, name) => new RegExp(`${block}\\s*\\{[^}]*--${name}:\\s*(#[0-9a-f]{3,8})`, 'i').exec(stylesCss)?.[1];
+const lightSurface = cssVar(':root', 'bg-elev');
+const darkSurface = cssVar(':root\\[data-theme="dark"\\]', 'bg-elev');
+ok('index.html defaults to the light theme before any script runs', /<html[^>]*\sdata-theme="light"/.test(indexHtml));
+const bootScripts = [...indexHtml.matchAll(/<script>([^<]*)<\/script>/g)].map((m) => m[1]);
+const boot = bootScripts[0] || '';
+ok('index.html has exactly one bare inline script (the theme boot)', bootScripts.length === 1);
+ok('theme boot runs in <head> before the stylesheet and the module entry',
+  indexHtml.indexOf('<script>') < indexHtml.indexOf('<link rel="stylesheet"') && indexHtml.indexOf('<script>') < indexHtml.indexOf('<script type="module"'));
+ok('theme boot reads the localStorage mirror key theme.js writes', boot.includes(`localStorage.getItem('${THEME_MIRROR_KEY}')`));
+ok('theme boot resolves a system choice via prefers-color-scheme', boot.includes('prefers-color-scheme') && boot.includes("'dark'") && boot.includes("'light'"));
+ok('theme boot sets data-theme on <html>', boot.includes('document.documentElement.dataset.theme'));
+ok('theme boot is single-line, quote-safe, and guarded (stable CSP hash through the HTML minifier)',
+  !boot.includes('\n') && !boot.includes('"') && !/[<>]/.test(boot) && boot.startsWith('try{') && boot.endsWith('catch(e){}'));
+ok('static theme-color meta matches the light --bg-elev', !!lightSurface && indexHtml.includes(`<meta name="theme-color" content="${lightSurface}"`));
+ok('theme boot switches theme-color to the dark --bg-elev', !!darkSurface && boot.includes(`content='${darkSurface}'`));
+const mobileBar = indexHtml.slice(indexHtml.indexOf('<div class="mobile-bar">'), indexHtml.indexOf('<div class="sidebar-backdrop"'));
+ok('mobile top bar contains the theme toggle', /<button id="mobile-theme-btn"[^>]*aria-label="Toggle theme"/.test(mobileBar));
+ok('sidebar header keeps the desktop theme toggle', /<button id="theme-btn"[^>]*aria-label="Toggle theme"/.test(indexHtml));
+ok('color-scheme follows [data-theme] in styles.css',
+  /:root\s*\{[^}]*color-scheme:\s*light/.test(stylesCss) && /:root\[data-theme="dark"\]\s*\{[^}]*color-scheme:\s*dark/.test(stylesCss));
 
 // --- PWA manifest is valid + installable-shaped ---
 const manifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
@@ -372,6 +409,7 @@ ok('manifest has at least one typed icon', Array.isArray(manifest.icons) && mani
 ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.startsWith('./')));
 ok('manifest has a maskable icon', manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')));
 ok('manifest has theme + background colors', /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color));
+ok('manifest splash colours match the light default (WEB-1)', manifest.background_color === cssVar(':root', 'bg') && manifest.theme_color === lightSurface);
 ok('manifest share target is relative, GET-only, and allowlists title/text/url', (() => {
   const target = manifest.share_target;
   return target?.action === './?source=share-target'

@@ -33,6 +33,7 @@ class App {
       paletteBtn: document.getElementById('palette-btn'),
       templateBtn: document.getElementById('template-btn'),
       themeBtn: document.getElementById('theme-btn'),
+      mobileThemeBtn: document.getElementById('mobile-theme-btn'),
       graphBtn: document.getElementById('graph-btn'),
       menuBtn: document.getElementById('menu-btn'),
       menuDropdown: document.getElementById('menu-dropdown'),
@@ -140,7 +141,7 @@ class App {
         onSelectionChange: (ids) => this.#selectionChanged(ids),
       }
     );
-    this.theme = new Theme(this.db, this.el.themeBtn);
+    this.theme = new Theme(this.db, [this.el.themeBtn, this.el.mobileThemeBtn]);
     this.history = null; // loaded on first open to keep recovery UI out of the initial shell
     this.backup = null;
     // Apply persisted font/width/autosave on load (Theme already applied the theme).
@@ -317,7 +318,9 @@ class App {
     const root = document.documentElement;
     root.dataset.font = s.fontScale;   // CSS: html[data-font] .editor { font-size }
     root.dataset.width = s.editorWidth; // CSS: html[data-width] { --editor-measure }
-    if (this.theme) this.theme.setMode(s.themeMode);
+    // Settings already persisted `s`; the load path must not write, so a fresh
+    // install keeps "never chose" (WEB-1 light default) distinct from a choice.
+    if (this.theme) this.theme.setMode(s.themeMode, { persist: false });
     if (this.editor) this.editor.setAutosaveInterval(s.autosaveMs);
   }
 

@@ -1,9 +1,11 @@
 /* ===========================================================================
    NoteForge — theme tokens + layout + components
-   Light/dark switch via [data-theme] on <html>.
+   Light/dark switch via [data-theme] on <html>. `color-scheme` makes native
+   controls, scrollbars, and form widgets follow the same switch.
    ========================================================================= */
 
 :root {
+  color-scheme: light;
   --bg: #f6f7f9;
   --bg-elev: #ffffff;
   --bg-sunken: #eef0f3;
@@ -24,6 +26,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #16181d;
   --bg-elev: #1e2127;
   --bg-sunken: #14161a;
@@ -465,19 +468,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 }
 .editor__tools { display: flex; align-items: center; gap: 8px; }
 
-.segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
-.seg {
-  font: inherit;
-  font-size: 13px;
-  border: none;
-  background: var(--bg-elev);
-  color: var(--text-muted);
-  padding: 5px 12px;
-  cursor: pointer;
-}
-.seg:hover { background: var(--bg-sunken); }
-.seg--on { background: var(--accent); color: #fff; }
-
 .editor__tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 14px 0 18px; }
 .chip {
   display: inline-flex;
@@ -507,20 +497,6 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
   font-size: 13px;
   outline: none;
   min-width: 90px;
-}
-
-.editor__content { min-height: 40vh; }
-.editor__textarea {
-  width: 100%;
-  min-height: 52vh;
-  border: none;
-  outline: none;
-  resize: vertical;
-  background: transparent;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 15px;
-  line-height: 1.7;
 }
 
 .editor__meta { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
@@ -1061,6 +1037,7 @@ html[data-font="l"] .editor { --editor-font: 17px; }
     border-bottom: 1px solid var(--border);
     z-index: 46;
   }
+  .mobile-bar__theme { margin-left: auto; }
   .app {
     grid-template-columns: 1fr;
     margin-top: 48px;

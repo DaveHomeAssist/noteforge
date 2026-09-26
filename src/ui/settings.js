@@ -3,13 +3,20 @@
 // components/settings-view.js; applying settings lives in the app controller.
 
 export const THEME_MODES = ['light', 'dark', 'system'];
+// localStorage key mirroring the persisted theme mode so index.html can apply it
+// synchronously before first paint (the Database itself loads asynchronously).
+// The inline boot script in index.html hard-codes the same string.
+export const THEME_MIRROR_KEY = 'noteforge:theme';
 export const FONT_SCALES = { s: '14px', m: '15px', l: '17px' };
 export const EDITOR_WIDTHS = { normal: '760px', wide: '1040px', full: 'none' };
 export const AUTOSAVE_OPTIONS = [250, 400, 800];
 export const TEMPLATE_IDS = ['none', 'daily', 'meeting', 'project'];
 
+// Workspace rule WEB-1: light is the default until the user chooses. A persisted
+// `themeMode` (including an explicit 'system') or legacy `theme` always wins in
+// normalizeSettings(), so existing installs keep whatever they picked.
 export const DEFAULT_SETTINGS = {
-  themeMode: 'system',
+  themeMode: 'light',
   fontScale: 'm',
   editorWidth: 'normal',
   autosaveMs: 400,

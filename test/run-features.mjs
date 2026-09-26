@@ -9,6 +9,7 @@
 // Run locally: `npm run test:browser` (requires `npx playwright install chromium`).
 
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -328,6 +329,32 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
     stage = 'closing Backup center after restore';
     await page.keyboard.press('Escape');
     await page.locator('#backup-overlay').waitFor({ state: 'hidden' });
+
+    stage = 'toggling the theme from the mobile top bar';
+    const themeState = () => page.evaluate(() => {
+      const root = document.documentElement;
+      const cs = getComputedStyle(root);
+      return {
+        theme: root.dataset.theme,
+        colorScheme: cs.colorScheme,
+        metaMatchesSurface: document.querySelector('meta[name="theme-color"]')?.content === cs.getPropertyValue('--bg-elev').trim(),
+        stored: window.app.db.config.themeMode ?? null,
+        mirror: localStorage.getItem('noteforge:theme'),
+        labels: [...document.querySelectorAll('#theme-btn, #mobile-theme-btn')].map((b) => `${b.textContent}|${b.getAttribute('aria-label')}`),
+      };
+    });
+    check('mobile top bar shows a visible theme toggle', await page.locator('.mobile-bar #mobile-theme-btn').isVisible());
+    const light = await themeState();
+    check('a fresh vault boots light (WEB-1 default) without writing a theme choice',
+      light.theme === 'light' && light.colorScheme === 'light' && light.stored === null && light.mirror === 'light' && light.metaMatchesSurface);
+    await page.locator('#mobile-theme-btn').click();
+    const dark = await themeState();
+    check('mobile toggle switches to dark, persists it, mirrors it for the pre-paint boot, and syncs both buttons',
+      dark.theme === 'dark' && dark.colorScheme === 'dark' && dark.stored === 'dark' && dark.mirror === 'dark' && dark.metaMatchesSurface
+        && dark.labels.length === 2 && dark.labels.every((label) => label === '☀️|Theme: dark'));
+    await page.locator('#mobile-theme-btn').click();
+    const back = await themeState();
+    check('mobile toggle switches back to light', back.theme === 'light' && back.stored === 'light' && back.mirror === 'light');
     return checks.join('\n');
   } catch (error) {
     const status = await page.locator('#backup-status').textContent().catch(() => 'unavailable');
@@ -1669,6 +1696,16 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
     const entryMatch = shellHtml.match(/<script[^>]+src=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/);
     const entryPath = entryMatch?.[1] || entryMatch?.[2] || entryMatch?.[3];
     if (!shellResponse.ok || !entryPath) throw new Error(`Production shell preflight failed (${shellResponse.status})`);
+    const cspContent = (/http-equiv="?Content-Security-Policy"?\s+content="([^"]+)"/i.exec(shellHtml)?.[1] || '')
+      .replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    const scriptSrc = cspContent.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src')) || '';
+    const inlineScripts = [...shellHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const inlineHashes = inlineScripts.map((code) => `'sha256-${createHash('sha256').update(code).digest('base64')}'`);
+    if (inlineScripts.length !== 1 || !inlineScripts[0].includes("localStorage.getItem('noteforge:theme')")
+      || /unsafe-inline/.test(scriptSrc) || !inlineHashes.every((hash) => scriptSrc.includes(hash))) {
+      throw new Error(`Production CSP does not hash the inline theme boot: ${scriptSrc || 'no script-src'} / ${inlineScripts.length} inline script(s)`);
+    }
+    checks.push('PASS  production CSP allow-lists the pre-paint theme boot by SHA-256 hash (script-src stays free of unsafe-inline)');
     const entryResponse = await fetch(new URL(entryPath, root));
     const entryType = entryResponse.headers.get('content-type') || '';
     if (!entryResponse.ok || !/javascript/i.test(entryType)) {
@@ -1726,6 +1763,31 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
       window.app.db.initializeKnowledgeIndex(),
       window.app.editor.enableOutline(),
     ]));
+
+    stage = 'verifying a persisted dark theme is applied when the production shell parses';
+    await page.locator('#mobile-theme-btn').click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark' && localStorage.getItem('noteforge:theme') === 'dark', undefined, { timeout: TIMEOUT });
+    // The config write is queued and drained asynchronously; reloading before it
+    // lands would boot from the previous (light) config and only prove the mirror.
+    if (!await page.evaluate(() => window.app.db.flushCurrentWrites())) throw new Error('Theme choice did not persist before reload');
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    const atParse = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      meta: document.querySelector('meta[name="theme-color"]')?.content,
+    }));
+    if (atParse.theme !== 'dark' || atParse.meta !== '#1e2127') {
+      throw new Error(`Persisted dark theme was not applied at parse time: ${JSON.stringify(atParse)}`);
+    }
+    checks.push('PASS  production shell applies the persisted dark theme before the app boots (no light flash)');
+    await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.ready);
+    if (await page.evaluate(() => window.app.theme.mode !== 'dark' || document.documentElement.dataset.theme !== 'dark')) {
+      throw new Error('Persisted dark theme was not restored from the Database after reload');
+    }
+    checks.push('PASS  production app restores the persisted dark theme from the Database after reload');
+    await page.locator('#mobile-theme-btn').click(); // back to light for the rest of the smoke
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'light', undefined, { timeout: TIMEOUT });
+    await page.evaluate(() => window.app.db.flushCurrentWrites());
 
     stage = 'reloading the production app offline';
     await context.setOffline(true);

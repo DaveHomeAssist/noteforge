@@ -116,6 +116,19 @@ full HTML/CSS/JavaScript/service-worker output is 672,545 bytes across 71 files.
 No dependency was added in this phase, and the high-severity audit reports zero
 vulnerabilities.
 
+WEB-1 theme measurement on 2026-09-25 (Node 25.8.1 locally, Vite 6.4.3):
+`index.html` 6,047 bytes + directly referenced CSS 24,199 bytes + directly
+referenced JavaScript 226,865 bytes = 257,111-byte initial shell, 69 bytes below
+the authoritative 257,180-byte ceiling. JavaScript is 9,678 bytes above its
+diagnostic ceiling, offset by HTML being 2,453 bytes and CSS being 7,294 bytes
+below theirs; the combined budget remains green without an exception. The shell
+gained a hashed single-line pre-paint theme boot script, a mobile top-bar theme
+toggle, a `color-scheme` declaration per theme root, theme.js mirror/meta sync,
+and (from the canonical-sync work merged the same evening) the 12-character
+`noteforge-build` stamp; the production CSP meta is now spliced in unescaped
+(about 70 bytes) and six dead rules (the unused segmented control and legacy
+textarea editor) left `styles.css`. No dependency was added.
+
 ## Revision and backup storage bounds
 
 - Revision bodies and metadata snapshots are content-addressed by SHA-256. Identical content is stored once even when referenced by multiple revision records or rolling snapshots.
