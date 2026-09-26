@@ -50,7 +50,7 @@ S2-1 → S2-2 → S2-3 → S2-4 → S2-5 → S2-6, each landing green on `npm ru
 
 | Item | 🚦 | Evidence |
 |---|---|---|
-| S2-1 Toolchain + CI | 🟢 | `.nvmrc`, `.npmrc`, `.github/dependabot.yml`, `dompurify` 3.4.16; `verify (node 22)` and `verify (node 24)` legs; `cancel-in-progress` only for pull requests; JUnit uploaded per leg; Pages artifact from the Node 22 leg. |
+| S2-1 Toolchain + CI | 🟢 | `.nvmrc`, `.npmrc`, `.github/dependabot.yml`, `dompurify` 3.4.16; `verify (node 22)` and `verify (node 24)` legs feeding one aggregate job named `verify` (the name System by Dave's sync and branch protection key on); `cancel-in-progress` only for pull requests; JUnit uploaded per leg; Pages artifact from the Node 22 leg. |
 | S2-2 Test harness | 🟢 | `npm test` → `test/run-node-tests.mjs`: 541 `node:test` cases (was 115 counted + 3 opaque scripts), floor 520, JUnit at `test-results/junit.xml`. |
 | S2-3 Static gates | 🟢 | `npm run lint`: 0 errors, 0 warnings, 1 info over 102 files (36 errors fixed, 3 CSS-only rules disabled with reasons in `biome.jsonc`). `npm run typecheck`: 56 errors across 15 files frozen in `test/typecheck-baseline.json`; any file exceeding its entry fails CI. Formatter off (deferred). |
 | S2-4 Golden corpus | 🟢 | 11 sources (4 seed + 7 schema-v3 fixture notes); `test/golden/blocks/` (10 byte-identical round trips, 1 normalizing) checked in Node; `test/golden/render/` captured in Chromium and compared in `test/features.html` (12 checks). `node test/golden/update.mjs` regenerates. |

@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
+  verify-matrix:
     name: verify (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
@@ -79,6 +79,17 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
+
+  # One job named exactly `verify`. System by Dave's noteforge-sync.yml releases
+  # only when a job with this name concluded success, and branch protection can
+  # require it; a matrix job cannot carry a fixed name, so this aggregates the
+  # legs (it is skipped, hence not green, when any leg fails).
+  verify:
+    needs: verify-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: All verify legs succeeded
+        run: echo "verify (node 22) and verify (node 24) are green for $GITHUB_SHA"
 
   deploy:
     if: github.event_name != 'pull_request'
