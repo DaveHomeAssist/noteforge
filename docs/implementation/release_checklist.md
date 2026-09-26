@@ -58,6 +58,7 @@ test -f dist/manifest.webmanifest
 ! rg -n '__PRECACHE_ASSETS__' dist/sw.js
 rg -n "const CACHE = 'noteforge-[0-9a-f]{12}'" dist/sw.js
 rg -n 'Content-Security-Policy|https://systembydave.com/noteforge/' dist/index.html
+rg -n "noteforge-build content=$(git rev-parse --short=12 HEAD)" dist/index.html
 find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 ```
 
@@ -95,6 +96,8 @@ test "$(gh run view "$NF_RUN_ID" --repo DaveHomeAssist/noteforge --json conclusi
 The workflow must use Node 22, run dependency audit, Node tests, installed Playwright Chromium browser tests, build, and Pages deployment. Record the run URL and exact head SHA. Do not synchronize System by Dave from a merely local or branch build.
 
 ## 5. Synchronize the canonical System by Dave source
+
+Since 2026-09-25 this section runs itself: the `deploy` job of `deploy.yml` sends a `noteforge-release` `repository_dispatch` to `DaveHomeAssist/system-by-dave` (repository secret `SYSTEM_BY_DAVE_DISPATCH_TOKEN`), whose `.github/workflows/noteforge-sync.yml` builds the exact SHA under Node 22, runs the commands below, commits `noteforge: sync to <sha>` to its `main`, and deploys. Its nightly `noteforge-drift.yml` fails when the canonical provenance or the live `noteforge-build` stamp lags NoteForge `main`. Use the manual steps only when the automation is unavailable, or to re-sync or roll back by hand: `gh workflow run noteforge-sync.yml --repo DaveHomeAssist/system-by-dave -f sha=<40-character sha>`.
 
 System by Dave has a separate Node 24 contract. Stop if its primary checkout is dirty, has untracked files, is behind/diverged, or no longer matches remote `main`.
 
@@ -163,6 +166,7 @@ Required source/provenance checks:
 
 - `https://davehomeassist.github.io/noteforge/` and `https://systembydave.com/noteforge/` return HTTP 200.
 - Live `source_provenance.json.sourceCommit` on the canonical route equals `NF_SHA`.
+- The `<meta name=noteforge-build>` stamp on both surfaces is a prefix of `NF_SHA`: `curl -s https://systembydave.com/noteforge/ | rg -o 'noteforge-build content=[0-9a-f]+'`.
 - Every canonical artifact declared by provenance hashes to its declared value.
 - Every declared non-index artifact matches local `dist/` and the mirror byte-for-byte.
 - Mirror `index.html` matches local `dist/index.html`; canonical `index.html` matches its provenance hash and contains exactly one breadcrumb, navigation stylesheet/script, shell style, canonical URL, manifest, and effective meta CSP.
