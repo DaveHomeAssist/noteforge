@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 // Content-Security-Policy. Two profiles: a permissive one for `vite dev` (HMR
 // needs inline/eval + a WebSocket), and a strict one baked into the production
@@ -81,6 +82,50 @@ function cspPlugin() {
   };
 }
 
+// Stamp the source commit into the shell so drift between the github.io mirror
+// and the canonical systembydave.com/noteforge/ copy is inspectable with one
+// curl:
+//   curl -s https://systembydave.com/noteforge/ | grep -o 'noteforge-build content=[0-9a-f]*'
+// system-by-dave's scripts/verify_noteforge_release.js requires the value to
+// be a prefix of the provenance sourceCommit, and its nightly drift check
+// compares the live page against provenance. Twelve hex characters (the same
+// width as the service-worker cache id) keep the tag inside the initial-shell
+// ceiling in docs/implementation/performance_budgets.md, which had 71 bytes of
+// headroom at 392ed92; the full 40-character SHA would cost 76.
+const BUILD_STAMP_LENGTH = 12;
+
+function resolveBuildCommit() {
+  if (process.env.NOTEFORGE_BUILD_SHA) return process.env.NOTEFORGE_BUILD_SHA.trim();
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+}
+
+function buildStampPlugin() {
+  return {
+    name: 'noteforge-build-stamp',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const commit = resolveBuildCommit();
+      if (!/^[0-9a-f]{40}$/.test(commit)) {
+        throw new Error('noteforge-build-stamp: cannot resolve the source commit; build inside the git checkout or set NOTEFORGE_BUILD_SHA to the 40-character SHA');
+      }
+      return {
+        html,
+        tags: [
+          {
+            tag: 'meta',
+            attrs: { name: 'noteforge-build', content: commit.slice(0, BUILD_STAMP_LENGTH) },
+            injectTo: 'head',
+          },
+        ],
+      };
+    },
+  };
+}
+
 function minifyHtmlPlugin() {
   return {
     name: 'minify-html',
@@ -106,7 +151,7 @@ export default defineConfig(({ command, isPreview }) => ({
   // and a davehomeassist.github.io/noteforge/ mirror); dev + the test servers stay at
   // root so nothing else has to change.
   base: command === 'build' || isPreview ? '/noteforge/' : '/',
-  plugins: [cspPlugin(), minifyHtmlPlugin(), swVersionPlugin()],
+  plugins: [cspPlugin(), buildStampPlugin(), minifyHtmlPlugin(), swVersionPlugin()],
   server: {
     port: 5175,
     open: true,
