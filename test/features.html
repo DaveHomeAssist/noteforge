@@ -964,6 +964,20 @@
       groups() === 'Headings' && /#i-heading-1$/.test(els.list.querySelector('.palette__icon use')?.getAttribute('href') || ''));
     check('a heading result previews its note', /Alpha Notes/.test(els.preview.textContent));
     cp.close();
+    let openedTag = null;
+    const viewCmd = { id: 'saved-search-x', group: 'views', title: 'Run saved view: Weekly review', hint: 'tag:x', icon: 'search', run: () => {} };
+    const cp2 = new CommandPalette(els, {
+      getNotes: () => db.getAllNotes(), getCommands: () => [...cmds, viewCmd], onOpenNote: () => {},
+      getTags: () => [['weekly', 3], ['work', 1]], onOpenTag: (tag) => (openedTag = tag),
+    });
+    cp2.show();
+    typeInput(els.input, 'week');
+    check('saved views and tags get their own groups', /Views/.test(groups()) && /Tags/.test(groups()));
+    const tagRow = [...els.list.querySelectorAll('[role="option"]')].find((o) => /weekly/.test(o.textContent));
+    check('a tag result shows its note count and a hash icon',
+      /3 notes/.test(tagRow?.textContent || '') && /#i-hash$/.test(tagRow?.querySelector('use')?.getAttribute('href') || ''));
+    tagRow.click();
+    check('choosing a tag filters by it', openedTag === 'weekly' && els.overlay.hidden === true);
     els.overlay.remove();
   });
 

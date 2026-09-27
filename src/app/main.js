@@ -756,6 +756,12 @@ class App {
           getNotes: () => this.db.getAllNotes(),
           getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
           getCommands: () => this.#commands(),
+          getTags: () => [...this.db.tagCounts().entries()],
+          onOpenTag: (tag) => {
+            this.setView('editor');
+            this.noteList.applySearchState({ ...this.noteList.getSearchState(), query: '', activeTag: tag });
+            this.#focusSearch();
+          },
           onOpenNote: (id) => this.openNote(id),
           onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
         });
