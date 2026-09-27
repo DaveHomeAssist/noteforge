@@ -49,6 +49,11 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
     await tasks.click();
     await expect(page.locator('#task-dashboard-overlay'), 'a second press returns to the editor').toBeHidden();
     await expect(tasks).toHaveAttribute('aria-pressed', 'false');
+    await tasks.click();
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('#search-input'), 'global shortcuts work while a view is shown').toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#task-dashboard-overlay')).toBeHidden();
     await rail.getByRole('button', { name: 'Open settings' }).click();
     await expect(page.locator('#settings-overlay')).toBeVisible();
     await page.keyboard.press('Escape');
