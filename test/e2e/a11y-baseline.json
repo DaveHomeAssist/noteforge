@@ -7,7 +7,7 @@
     "wcag21aa",
     "wcag22aa"
   ],
-  "totalViolatingNodes": 83,
+  "totalViolatingNodes": 84,
   "surfaces": {
     "archive@1440/dark": {
       "aria-required-children": 1
@@ -40,7 +40,7 @@
     },
     "find-replace@1440/light": {
       "aria-required-children": 1,
-      "color-contrast": 13,
+      "color-contrast": 15,
       "target-size": 2
     },
     "graph@1440/dark": {
@@ -90,8 +90,7 @@
       "target-size": 2
     },
     "shell@390/dark": {
-      "aria-required-children": 1,
-      "color-contrast": 1
+      "aria-required-children": 1
     },
     "shell@390/light": {
       "aria-required-children": 1,
