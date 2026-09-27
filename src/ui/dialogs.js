@@ -12,6 +12,7 @@
 // (src/utils/when-confirmed.js) to handle both sync and async answers.
 
 import { Modal } from '../components/modal.js';
+import { icon } from './icons.js';
 import './dialogs.css';
 
 let confirmUi = null;
@@ -118,7 +119,7 @@ export function toast(message, { tone = 'info', action = null, duration } = {}) 
   close.type = 'button';
   close.className = 'toast__close';
   close.setAttribute('aria-label', 'Dismiss notification');
-  close.textContent = '×';
+  close.innerHTML = icon('x');
   close.addEventListener('click', dismiss);
   item.append(close);
   const ms = duration ?? (action ? 10_000 : tone === 'error' ? 8_000 : 5_000);

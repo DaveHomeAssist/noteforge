@@ -139,12 +139,12 @@ function announce(message) {
 }
 
 const CALLOUTS = {
-  note: { icon: 'ℹ️', label: 'Note' },
-  tip: { icon: '💡', label: 'Tip' },
-  info: { icon: 'ℹ️', label: 'Info' },
-  important: { icon: '❗', label: 'Important' },
-  warning: { icon: '⚠️', label: 'Warning' },
-  caution: { icon: '🛑', label: 'Caution' },
+  note: { icon: 'info', label: 'Note' },
+  tip: { icon: 'lightbulb', label: 'Tip' },
+  info: { icon: 'info', label: 'Info' },
+  important: { icon: 'circle-alert', label: 'Important' },
+  warning: { icon: 'triangle-alert', label: 'Warning' },
+  caution: { icon: 'octagon-alert', label: 'Caution' },
 };
 
 /** Parse a GitHub-style callout header `[!kind] rest` from a quote's text. */
@@ -611,7 +611,7 @@ export class BlockEditor {
     content.classList.add('blk--callout', 'blk--callout-' + kind);
     const box = el('div', 'blk-callout');
     const head = el('div', 'blk-callout__head');
-    head.textContent = `${meta.icon} ${meta.label}`;
+    head.innerHTML = `${icon(meta.icon, { className: 'blk-callout__icon' })}<span>${meta.label}</span>`;
     const bodyEl = el('div', 'blk-callout__body markdown');
     bodyEl.innerHTML = body ? renderInline(body, this.#renderOptions()) : '';
     box.append(head, bodyEl);

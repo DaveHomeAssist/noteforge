@@ -114,6 +114,11 @@ export const SURFACES = {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await visible(page, '.blk-menu [role="option"]');
   },
+  // A notice with an action, as after moving a note to Trash.
+  toast: async (page) => {
+    await page.evaluate(() => window.app.toast('Moved “Welcome” to Trash.', { action: { label: 'Undo', run() {} } }));
+    await visible(page, '.toasts .toast .toast__close');
+  },
   // A destructive confirmation with the pointer on its confirm button, so the
   // hover colors are what axe measures.
   'confirm-danger': async (page) => {

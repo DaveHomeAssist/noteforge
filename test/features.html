@@ -1095,6 +1095,9 @@
     check('callout box rendered', !!box);
     check('callout shows kind label + body', /Warning/.test(box.textContent) && /be careful/.test(box.textContent));
     check('callout carries its kind class', !!be.host.querySelector('.blk--callout-warning'));
+    check('callout header uses an icon, not an emoji',
+      /#i-triangle-alert$/.test(box.querySelector('.blk-callout__head svg.icon use')?.getAttribute('href') || '') &&
+      !/[\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u.test(box.querySelector('.blk-callout__head').textContent));
     check('callout round-trips as a blockquote', be.serialize() === '> [!warning] be careful');
     const blk = be.host.querySelector('.blk-row[data-type="quote"] .blk'); blk.focus();
     check('focused callout shows raw markdown', blk.textContent.includes('[!warning]'));
@@ -1172,6 +1175,8 @@
     const parentRow = els.list.querySelector(`.note-item[data-id="${p.id}"]`);
     const childRow = els.list.querySelector(`.note-item[data-id="${c.id}"]`);
     check('parent has a disclosure twist', !!parentRow.querySelector('[data-twist]'));
+    check('the twist is a chevron icon, not a ▸/▾ glyph',
+      !!parentRow.querySelector('[data-twist] svg.icon') && parentRow.querySelector('[data-twist]').textContent.trim() === '');
     check('child is indented (depth 1)', childRow.style.getPropertyValue('--depth') === '1');
     parentRow.querySelector('[data-twist]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('collapsing the parent hides the child', !els.list.querySelector(`.note-item[data-id="${c.id}"]`));
@@ -2667,6 +2672,9 @@
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const error = document.querySelector('.toasts .toast--error');
       check('an error toast is an alert and can be dismissed', error?.getAttribute('role') === 'alert');
+      const close = error?.querySelector('.toast__close');
+      check('the toast close button is a named icon, not a × glyph',
+        !!close?.querySelector('svg.icon') && close.textContent.trim() === '' && !!close.getAttribute('aria-label'));
       error?.querySelector('.toast__close')?.click();
       trigger.remove();
     } catch (e) {
