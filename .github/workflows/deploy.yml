@@ -200,3 +200,46 @@ jobs:
             https://api.github.com/repos/DaveHomeAssist/system-by-dave/dispatches \
             -d "{\"event_type\":\"noteforge-release\",\"client_payload\":{\"sha\":\"$GITHUB_SHA\",\"run_id\":\"$GITHUB_RUN_ID\"}}"
           echo "Dispatched noteforge-release for $GITHUB_SHA to DaveHomeAssist/system-by-dave"
+
+  # Tags the deployed commit and publishes a GitHub Release when package.json
+  # names a version that has no tag yet; the notes are that version's section of
+  # CHANGELOG.md. Bumping the version (with its CHANGELOG section) in a merged PR
+  # is the whole release procedure. release-please is not used: it needs Actions
+  # to open pull requests, which this repository does not allow
+  # (docs/architecture/decisions.md).
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Tag and release a new package.json version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release."
+            exit 0
+          fi
+          awk -v v="$version" '
+            /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/notes.md")" ]; then
+            echo "::error::CHANGELOG.md has no [$version] section, so $tag cannot be released"
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$tag" -m "NoteForge $version" "$GITHUB_SHA"
+          git push origin "$tag"
+          gh release create "$tag" --title "NoteForge $version" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          echo "Released $tag at $GITHUB_SHA"
