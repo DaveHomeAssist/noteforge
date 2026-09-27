@@ -1415,8 +1415,9 @@ class App {
   async #seed() {
     const { sampleNotes } = await import('./seed.js');
     let firstId = null;
-    // One second apart in seed order, so the list reads Welcome first on every
-    // machine instead of depending on whether two notes shared a millisecond.
+    // One millisecond apart in seed order, so the list reads Welcome first on
+    // every machine instead of depending on whether two notes shared a
+    // millisecond, while every sample still shows the same minute.
     const seededAt = Date.now();
     for (const [index, data] of sampleNotes.entries()) {
       const existing = this.db.resolveTitleResult(data.title);
@@ -1425,7 +1426,7 @@ class App {
         continue;
       }
       if (existing.status === 'ambiguous') continue;
-      const stamp = new Date(seededAt - index * 1000).toISOString();
+      const stamp = new Date(seededAt - index).toISOString();
       const note = this.db.createNote({ ...data, createdAt: stamp, updatedAt: stamp });
       if (!firstId) firstId = note.id;
     }
