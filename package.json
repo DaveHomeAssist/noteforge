@@ -1,6 +1,6 @@
 {
   "name": "noteforge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "NoteForge — local-first note-taking app inspired by Obsidian/Notion: markdown, wikilinks, backlinks, tags, graph view",
   "type": "module",
   "engines": {

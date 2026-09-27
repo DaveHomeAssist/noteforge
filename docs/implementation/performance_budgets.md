@@ -48,6 +48,15 @@ over. CI runs it after every build on Node 22 and 24.
 | settings | settings, Trash | 4,193 B | 5,120 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
+### Measurements
+
+| Date | Change | shell | daily | properties | precache |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 2026-09-27 | Budgets set (Vite 6.4.3, marked 15) | 75,571 B | 19,629 B | 43,344 B | 220,873 B |
+| 2026-09-27 | marked 18, Vite 8 (Rolldown groups for the runtime and YAML) | 74.1 KiB | 18.5 KiB | 41.1 KiB | 210.9 KiB |
+
+Vite 8 without the Rolldown groups put the YAML parser in the Daily route (49.0 KiB against 22 KiB); the budget gate caught it (PR #14).
+
 ### Raising a budget
 
 A budget rises only in a pull request that edits `test/bundle-budgets.json` and

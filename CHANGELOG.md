@@ -7,6 +7,32 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-27
+
+Closes Phase 0 of the NoteForge 2 roadmap: every pull request now runs the lint,
+format, type, unit, end-to-end, accessibility, screenshot, and size gates the
+rewrite will be held to.
+
+### Added
+- Playwright Test suite (`playwright.config.mjs`, `test/e2e/`): the in-page feature suite and the eight end-to-end smokes as separate tests, one CI retry, traces and an HTML report for failures.
+- A fixed, forward-running test clock (2026-09-16 11:00 America/New_York), so date fixtures and rendered times are identical on every machine.
+- Accessibility gate: axe-core scans of 16 surfaces in both themes, held to a ratchet (`test/e2e/a11y-baseline.json`, 85 violating nodes, may only go down).
+- Screenshot baselines of the shell, command palette, settings, and Trash in both themes at 390, 1440, and 2560 px, compared in the pinned Playwright container; the `Visual baselines` workflow regenerates them.
+- Per-route gzip budgets (`test/bundle-budgets.json`): shell, editor, graph, recovery, retrieval, daily, properties, workspace, settings, and the offline precache, with a raise procedure and budget log in `docs/implementation/performance_budgets.md`.
+- A `release` job that tags the deployed commit and publishes a GitHub Release whenever `package.json` names an untagged version.
+- Architecture and process decision log (`docs/architecture/decisions.md`).
+
+### Changed
+- Sample notes are seeded in a fixed order with Welcome first, and the note list breaks equal timestamps by title, then id, so its order no longer changes between loads.
+- The source tree is formatted by Biome; CI runs `biome ci`.
+- `marked` 18, Vite 8 (Rolldown), `yaml` 2.9.1, Playwright 1.63.0, `actions/deploy-pages` 5.0.1. Rolldown's runtime and the YAML parser are split into their own chunks, so the Daily route does not load YAML.
+
+### Removed
+- `test/run-features.mjs` (replaced by Playwright Test) and the raw 257,180-byte initial-shell ceiling (replaced by per-route budgets).
+
+### Fixed
+- A race in the Phase 6 workspace check: pane scroll offsets were set before a tab close finished restoring the next tab's offset.
+
 ## [1.1.0] - 2026-09-26
 
 Phase 0 of the NoteForge 2 roadmap: audit quick fixes, release safety, and the

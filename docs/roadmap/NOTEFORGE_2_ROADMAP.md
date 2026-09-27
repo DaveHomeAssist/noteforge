@@ -62,6 +62,8 @@ Why views come before the editor rewrite: database views are the number-one swit
 
 ### Phase 0 — Foundation and release safety (2–3 weeks)
 
+**Status: complete 2026-09-27 (v1.2.0).** Sprint records: [Sprint 2](sprints/2026-09-26_phase0_sprint2.md), [Sprint 3](sprints/2026-09-27_phase0_sprint3.md). Two scope changes: release-please became a version-bump `release` job (Actions may not open PRs here), and Conventional Commits were not adopted ([decision log](../architecture/decisions.md)). Still with Dave: branch protection, Dependabot alerts, merged-branch cleanup.
+
 Goal: make the rewrite safe to start and make the two live surfaces provably identical.
 
 Week 1 quick fixes (no architecture change, ship as one PR):
