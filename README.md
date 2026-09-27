@@ -152,9 +152,12 @@ export operate on the same `.md` content and are unaffected by the editor.
 | `Ctrl/⌘ + F` | Find and replace in the current note or vault |
 | `Ctrl/⌘ + G` | Toggle graph view |
 | `Ctrl + Page Up` / `Ctrl + Page Down` | Cycle tabs in the active pane |
+| `Alt + Shift + M` | Move the focused tab to the other pane |
+| `Ctrl/⌘ + \` | Collapse or expand the notes sidebar |
 | `Alt + Left` / `Alt + Right` | Back / forward through opened notes |
 | `Ctrl/⌘ + Z` / `Shift+Ctrl/⌘ + Z` | Undo / redo (within the editor) |
 | `/` | Open the block slash menu |
+| `Alt + Shift + ↑` / `Alt + Shift + ↓` | Move the current block up / down |
 | `[[` | Wikilink title autocomplete |
 | `Esc` | Close menu / leave graph view |
 | `Tab` / `Shift+Tab` | Indent / outdent a list item (else insert spaces) |

@@ -23,28 +23,120 @@ const SAFE_IMG = /^(?:https?:\/\/|data:image\/(?:png|jpe?g|gif|webp|avif|bmp|svg
 const MAX_INDENT = 6;
 const UNDO_LIMIT = 100;
 
+// The slash menu lists items in this order, under these group labels.
+const SLASH_GROUPS = [
+  { id: 'text', label: 'Text' },
+  { id: 'lists', label: 'Lists' },
+  { id: 'insert', label: 'Insert' },
+];
+
 const SLASH_ITEMS = [
-  { key: 'paragraph', label: 'Text', hint: 'Plain paragraph', apply: { type: 'paragraph' } },
-  { key: 'h1', label: 'Heading 1', hint: 'Big section heading', apply: { type: 'heading', meta: { level: 1 } } },
-  { key: 'h2', label: 'Heading 2', hint: 'Medium heading', apply: { type: 'heading', meta: { level: 2 } } },
-  { key: 'h3', label: 'Heading 3', hint: 'Small heading', apply: { type: 'heading', meta: { level: 3 } } },
-  { key: 'bullet', label: 'Bulleted list', hint: 'Simple bullet list', apply: { type: 'bullet' } },
-  { key: 'numbered', label: 'Numbered list', hint: 'Ordered list', apply: { type: 'numbered' } },
-  { key: 'todo', label: 'To-do', hint: 'Checkbox task', apply: { type: 'todo', meta: { checked: false } } },
-  { key: 'quote', label: 'Quote', hint: 'Callout / quote', apply: { type: 'quote' } },
-  { key: 'code', label: 'Code', hint: 'Code block', apply: { type: 'code', meta: { lang: '' } } },
-  { key: 'date', label: 'Date', hint: "Insert today's date", apply: { type: 'date' } },
-  { key: 'divider', label: 'Divider', hint: 'Horizontal rule', apply: { type: 'divider' } },
-  { key: 'image', label: 'Image', hint: 'Upload a picture', apply: { type: 'image' } },
-  { key: 'callout', label: 'Callout', hint: 'Highlighted note box', apply: { type: 'quote', text: '[!note] ' } },
-  { key: 'table', label: 'Table', hint: 'Editable table', apply: { type: 'table' } },
+  {
+    key: 'paragraph',
+    group: 'text',
+    icon: 'pilcrow',
+    label: 'Text',
+    hint: 'Plain paragraph',
+    apply: { type: 'paragraph' },
+  },
+  {
+    key: 'h1',
+    group: 'text',
+    icon: 'heading-1',
+    label: 'Heading 1',
+    hint: 'Big section heading',
+    apply: { type: 'heading', meta: { level: 1 } },
+  },
+  {
+    key: 'h2',
+    group: 'text',
+    icon: 'heading-2',
+    label: 'Heading 2',
+    hint: 'Medium heading',
+    apply: { type: 'heading', meta: { level: 2 } },
+  },
+  {
+    key: 'h3',
+    group: 'text',
+    icon: 'heading-3',
+    label: 'Heading 3',
+    hint: 'Small heading',
+    apply: { type: 'heading', meta: { level: 3 } },
+  },
+  { key: 'quote', group: 'text', icon: 'text-quote', label: 'Quote', hint: 'Quoted passage', apply: { type: 'quote' } },
+  {
+    key: 'callout',
+    group: 'text',
+    icon: 'message-square-warning',
+    label: 'Callout',
+    hint: 'Highlighted note box',
+    apply: { type: 'quote', text: '[!note] ' },
+  },
+  {
+    key: 'code',
+    group: 'text',
+    icon: 'code',
+    label: 'Code',
+    hint: 'Code block',
+    apply: { type: 'code', meta: { lang: '' } },
+  },
+  {
+    key: 'bullet',
+    group: 'lists',
+    icon: 'list',
+    label: 'Bulleted list',
+    hint: 'Simple bullet list',
+    apply: { type: 'bullet' },
+  },
+  {
+    key: 'numbered',
+    group: 'lists',
+    icon: 'list-ordered',
+    label: 'Numbered list',
+    hint: 'Ordered list',
+    apply: { type: 'numbered' },
+  },
+  {
+    key: 'todo',
+    group: 'lists',
+    icon: 'square-check-big',
+    label: 'To-do',
+    hint: 'Checkbox task',
+    apply: { type: 'todo', meta: { checked: false } },
+  },
   {
     key: 'toggle',
+    group: 'lists',
+    icon: 'list-collapse',
     label: 'Toggle',
     hint: 'Collapsible section',
     apply: { type: 'raw', text: '<details>\n<summary>Toggle</summary>\n\nHidden content\n\n</details>' },
   },
+  { key: 'table', group: 'insert', icon: 'table', label: 'Table', hint: 'Editable table', apply: { type: 'table' } },
+  {
+    key: 'divider',
+    group: 'insert',
+    icon: 'minus',
+    label: 'Divider',
+    hint: 'Horizontal rule',
+    apply: { type: 'divider' },
+  },
+  {
+    key: 'date',
+    group: 'insert',
+    icon: 'calendar',
+    label: 'Date',
+    hint: "Insert today's date",
+    apply: { type: 'date' },
+  },
+  { key: 'image', group: 'insert', icon: 'image', label: 'Image', hint: 'Upload a picture', apply: { type: 'image' } },
 ];
+
+/** Polite announcement through the app's status region, when the host page has one. */
+function announce(message) {
+  const status = document.getElementById('app-status');
+  if (status) status.textContent = message;
+}
 
 const CALLOUTS = {
   note: { icon: 'ℹ️', label: 'Note' },
@@ -390,8 +482,8 @@ export class BlockEditor {
     const gutter = el('div', 'blk-gutter');
     gutter.contentEditable = 'false';
     gutter.innerHTML =
-      '<button class="blk-add" title="Insert block below" tabindex="-1">+</button>' +
-      '<button class="blk-handle" title="Turn into / drag to reorder" draggable="true" tabindex="-1">⋮⋮</button>';
+      `<button type="button" class="blk-add" title="Insert block below" aria-label="Insert block below" tabindex="-1">${icon('plus')}</button>` +
+      `<button type="button" class="blk-handle" title="Turn into, or drag to reorder" aria-label="Turn into, or drag to reorder" draggable="true" tabindex="-1">${icon('grip-vertical')}</button>`;
     row.appendChild(gutter);
 
     const marker = this.#buildMarker(block, numbers);
@@ -1002,6 +1094,10 @@ export class BlockEditor {
     if (!block) return;
     if (this.isComposing) return;
 
+    if (e.altKey && e.shiftKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      return this.#moveBlock(e, block, content, e.key === 'ArrowUp' ? -1 : 1);
+    }
+
     switch (e.key) {
       case 'Enter':
         if (e.shiftKey) return this.#insertSoftBreak(e, block, content);
@@ -1021,6 +1117,23 @@ export class BlockEditor {
       default:
         return;
     }
+  }
+
+  /** Alt+Shift+↑/↓: swap the block with its neighbour, keeping the caret. */
+  #moveBlock(e, block, content, step) {
+    e.preventDefault();
+    const from = this.#indexOf(block.id);
+    const to = from + step;
+    if (to < 0 || to >= this.blocks.length) return;
+    const offset = this.#caretOffset(content);
+    this.#commit(block, content);
+    this.blocks.splice(from, 1);
+    this.blocks.splice(to, 0, block);
+    this.#dropFocusAndRender();
+    this.#focusBlock(block.id, offset);
+    this.#snapshot();
+    this.onChange();
+    announce(step < 0 ? 'Block moved up.' : 'Block moved down.');
   }
 
   #onEnter(e, block, content) {
@@ -1386,17 +1499,30 @@ export class BlockEditor {
     if (this.menu) this.#closeMenu();
   }
 
+  // ARIA 1.2 combobox: focus stays in the block, which becomes a combobox that
+  // controls the listbox while it is open; aria-activedescendant tells screen
+  // readers which option is active.
   #openMenu(kind, block, content, range) {
     if (!this.menu || this.menu.kind !== kind || this.menu.blockId !== block.id) {
       this.#closeMenu();
       const box = el('div', 'blk-menu');
+      box.id = `blk-menu-${uid()}`;
+      box.setAttribute('role', 'listbox');
+      box.setAttribute('aria-label', kind === 'slash' ? 'Block types' : 'Notes to link');
       document.body.appendChild(box);
-      this.menu = { kind, el: box, blockId: block.id, index: 0, items: [], range };
+      this.menu = { kind, el: box, blockId: block.id, index: 0, items: [], range, query: null, owner: content };
+      content.setAttribute('role', 'combobox');
+      content.setAttribute('aria-label', kind === 'slash' ? 'Filter block types' : 'Filter notes to link');
+      content.setAttribute('aria-autocomplete', 'list');
+      content.setAttribute('aria-expanded', 'true');
+      content.setAttribute('aria-controls', box.id);
     } else {
       this.menu.range = range;
     }
-    this.menu.query = range?.query ?? '';
-    this.menu.items = kind === 'slash' ? this.#slashItems(this.menu.query) : this.#linkItems(this.menu.query);
+    const query = range?.query ?? '';
+    if (query !== this.menu.query) this.menu.index = 0; // a new filter starts at its best match
+    this.menu.query = query;
+    this.menu.items = kind === 'slash' ? this.#slashItems(query) : this.#linkItems(query);
     if (this.menu.items.length === 0) {
       this.#closeMenu();
       return;
@@ -1420,15 +1546,25 @@ export class BlockEditor {
 
   #renderMenu(_content) {
     const m = this.menu;
-    m.el.innerHTML = m.items
-      .map(
-        (it, i) => `
-        <button class="blk-menu__item ${i === m.index ? 'is-active' : ''}" data-i="${i}" tabindex="-1">
-          <span class="blk-menu__label">${escapeHtml(it.label)}</span>
-          ${it.hint ? `<span class="blk-menu__hint">${escapeHtml(it.hint)}</span>` : ''}
-        </button>`,
-      )
-      .join('');
+    const option = (it, i) => `
+        <button type="button" class="blk-menu__item" role="option" id="${m.el.id}-${i}" data-i="${i}" aria-selected="false" tabindex="-1">
+          ${it.icon ? icon(it.icon, { className: 'blk-menu__icon' }) : ''}
+          <span class="blk-menu__text"><span class="blk-menu__label">${escapeHtml(it.label)}</span>${
+            it.hint ? `<span class="blk-menu__hint">${escapeHtml(it.hint)}</span>` : ''
+          }</span>
+        </button>`;
+    const indexed = m.items.map((it, i) => [it, i]);
+    m.el.innerHTML =
+      m.kind === 'slash'
+        ? SLASH_GROUPS.map((group) => {
+            const members = indexed.filter(([it]) => it.group === group.id);
+            if (!members.length) return '';
+            return `<div class="blk-menu__group" role="group" aria-labelledby="blk-menu-group-${group.id}">
+          <div class="blk-menu__group-label" id="blk-menu-group-${group.id}" aria-hidden="true">${group.label}</div>
+          ${members.map(([it, i]) => option(it, i)).join('')}
+        </div>`;
+          }).join('')
+        : indexed.map(([it, i]) => option(it, i)).join('');
     // Keep focus in the editable block: prevent the menu from stealing it.
     m.el.querySelectorAll('.blk-menu__item').forEach((btn) => {
       btn.addEventListener('mousedown', (e) => e.preventDefault());
@@ -1438,6 +1574,27 @@ export class BlockEditor {
       });
     });
     this.#positionMenu();
+    this.#setMenuIndex(m.index);
+  }
+
+  /** Mark option `index` active and keep it in view. */
+  #setMenuIndex(index) {
+    const m = this.menu;
+    m.index = index;
+    const box = m.el;
+    for (const option of box.querySelectorAll('.blk-menu__item')) {
+      const active = Number(option.dataset.i) === index;
+      option.classList.toggle('is-active', active);
+      option.setAttribute('aria-selected', String(active));
+      if (!active) continue;
+      // Scroll the menu itself; scrollIntoView could scroll the page, and a
+      // page scroll closes the menu.
+      const top = option.offsetTop;
+      const bottom = top + option.offsetHeight;
+      if (top < box.scrollTop) box.scrollTop = top;
+      else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+      m.owner?.setAttribute('aria-activedescendant', option.id);
+    }
   }
 
   #positionMenu() {
@@ -1456,13 +1613,11 @@ export class BlockEditor {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        m.index = (m.index + 1) % m.items.length;
-        this.#renderMenu(this.#contentEl(m.blockId));
+        this.#setMenuIndex((m.index + 1) % m.items.length);
         return true;
       case 'ArrowUp':
         e.preventDefault();
-        m.index = (m.index - 1 + m.items.length) % m.items.length;
-        this.#renderMenu(this.#contentEl(m.blockId));
+        this.#setMenuIndex((m.index - 1 + m.items.length) % m.items.length);
         return true;
       case 'Enter':
       case 'Tab':
@@ -1568,6 +1723,15 @@ export class BlockEditor {
 
   #closeMenu() {
     if (this.menu) {
+      for (const name of [
+        'role',
+        'aria-label',
+        'aria-autocomplete',
+        'aria-expanded',
+        'aria-controls',
+        'aria-activedescendant',
+      ])
+        this.menu.owner?.removeAttribute(name);
       this.menu.el.remove();
       this.menu = null;
     }
