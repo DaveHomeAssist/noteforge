@@ -210,6 +210,9 @@ code {
   box-shadow: var(--elevation-1);
   animation: nf-fade-in var(--duration-fast) var(--ease-enter);
 }
+.trash-page {
+  width: min(720px, 100%);
+}
 /* The views' dialog-era height caps would clip them inside a scrolling main area. */
 .main-view .main-view__page {
   max-height: none;

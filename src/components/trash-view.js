@@ -1,23 +1,24 @@
 // Trash: a modal listing soft-deleted notes with Restore / Delete-forever, plus
 // Empty-trash. Notes live in the store with a `deletedAt` marker; this view is
 // the only place they resurface. Keeps a count badge on the menu item in sync.
-// Focus/inert/keyboard handling is delegated to the shared Modal controller.
+// It opens in the main area in place of the editor (see main-view.js).
 
 import { escapeHtml, truncate, formatDate } from '../utils/helpers.js';
-import { Modal } from './modal.js';
+import { MainViewHost, createMainViewSection } from './main-view.js';
 import { whenConfirmed } from '../utils/when-confirmed.js';
 import { icon } from '../ui/icons.js';
 
 // The in-app dialog loads only when a permanent delete needs confirming.
 const confirmDialog = async (options) => (await import('../ui/dialogs.js')).confirmDialog(options);
 
-export function createTrashElements({ badge = document.getElementById('trash-badge'), root = document.body } = {}) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal';
-  overlay.id = 'trash-overlay';
-  overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Trash" tabindex="-1"><header class="modal__header"><h2 class="modal__title">${icon('trash-2')} Trash</h2><div class="modal__actions"><button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button><button class="btn btn--ghost" data-close title="Close" aria-label="Close Trash">${icon('x')}</button></div></header><div id="trash-list" class="trash-list"></div></div>`;
-  root.appendChild(overlay);
+export function createTrashElements({ badge = document.getElementById('trash-badge'), root = null } = {}) {
+  const overlay = createMainViewSection({
+    id: 'trash-overlay',
+    view: 'trash',
+    labelledBy: 'trash-title',
+    root,
+    html: `<div class="main-view__page trash-page"><header class="modal__header"><h2 class="modal__title" id="trash-title">${icon('trash-2')} Trash</h2><div class="modal__actions"><button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button><button class="btn btn--ghost" data-close title="Close" aria-label="Close Trash">${icon('x')}</button></div></header><div id="trash-list" class="trash-list"></div></div>`,
+  });
   return { overlay, list: overlay.querySelector('#trash-list'), empty: overlay.querySelector('#trash-empty'), badge };
 }
 
@@ -36,7 +37,10 @@ export class TrashView {
     this.db = db;
     this.onOpenNote = onOpenNote;
     this.confirm = confirm;
-    this.modal = new Modal(els.overlay);
+    this.modal = new MainViewHost(els.overlay, {
+      view: 'trash',
+      initialFocus: () => this.els.list.querySelector('button'),
+    });
 
     this.els.list.addEventListener('click', (e) => this.#onListClick(e));
     this.els.empty.addEventListener('click', () => this.#empty());

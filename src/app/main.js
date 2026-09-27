@@ -355,13 +355,11 @@ class App {
 
   #anyModalOpen() {
     return !!(
-      this.trash?.open ||
       this.palette?.open ||
       this.settings?.open ||
       this.history?.open ||
       this.backup?.open ||
       this.linkTools?.open ||
-      this.archive?.open ||
       this.savedSearches?.open ||
       this.phase4?.open ||
       this.phase5?.properties?.open ||
@@ -1440,7 +1438,10 @@ class App {
     this.el.newBtn.addEventListener('click', () => this.newNote());
     this.el.graphBtn.addEventListener('click', () => this.toggleGraph());
     // Subject-area views announce themselves; the main area follows.
-    this.el.mainEl.addEventListener('mainview:open', (event) => this.setView(event.detail.view));
+    this.el.mainEl.addEventListener('mainview:open', (event) => {
+      this.#closeSidebar(); // the phone drawer and tablet overlay would cover (and inert) the view
+      this.setView(event.detail.view);
+    });
     this.el.mainEl.addEventListener('mainview:close', (event) => {
       if (this.view === event.detail.view) this.setView('editor');
     });

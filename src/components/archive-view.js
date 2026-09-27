@@ -1,20 +1,21 @@
 import './archive-view.css';
-import { Modal } from './modal.js';
+import { MainViewHost, createMainViewSection } from './main-view.js';
 import { escapeHtml, formatDate, truncate } from '../utils/helpers.js';
 import { icon } from '../ui/icons.js';
 
-export function createArchiveElements(root = document.body) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal';
-  overlay.id = 'archive-overlay';
-  overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
-    <div class="modal__panel archive-modal" role="dialog" aria-modal="true" aria-labelledby="archive-title" tabindex="-1">
+export function createArchiveElements(root = null) {
+  const overlay = createMainViewSection({
+    id: 'archive-overlay',
+    view: 'archive',
+    labelledBy: 'archive-title',
+    root,
+    html: `
+    <div class="main-view__page archive-modal">
       <header class="modal__header"><div><h2 class="modal__title" id="archive-title">Archive</h2><p class="muted">Notes kept out of active lists without moving them to Trash</p></div><button class="btn btn--ghost" data-close aria-label="Close Archive">${icon('x')}</button></header>
       <div class="archive-layout"><div id="archive-list" class="archive-list" role="list" aria-label="Archived notes"></div><article id="archive-preview" class="archive-preview" aria-live="polite"><p class="muted">Choose an archived note to preview it.</p></article></div>
       <footer class="archive-footer"><span id="archive-status" role="status" aria-live="polite"></span><button class="btn btn--ghost" data-close>Close</button></footer>
-    </div>`;
-  root.appendChild(overlay);
+    </div>`,
+  });
   return {
     overlay,
     list: overlay.querySelector('#archive-list'),
@@ -29,8 +30,9 @@ export class ArchiveView {
     this.db = db;
     this.onRestored = onRestored;
     this.selectedId = null;
-    this.modal = new Modal(els.overlay, {
-      initialFocus: () => this.els.list.querySelector('button') || this.modal.panel,
+    this.modal = new MainViewHost(els.overlay, {
+      view: 'archive',
+      initialFocus: () => this.els.list.querySelector('button'),
     });
     this.els.list.addEventListener('click', (event) => this.#onClick(event));
     this.unsubscribe = db.subscribe(() => {
