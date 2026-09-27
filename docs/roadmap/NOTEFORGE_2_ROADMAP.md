@@ -101,7 +101,7 @@ Scope:
 - **Page chrome.** Page icon (new note field, additive migration) and cover, breadcrumbs, title, property strip, last-edited, empty states, skeletons for lazy chunks.
 - **Command palette v2.** Grouped results (Pages, Commands, Views, Tags, Recent), icons, key chips, inline preview, nested actions. *Groups (Recent, Notes, Commands, Headings), icons, key chips, and the preview shipped 2026-09-27; Views and Tags groups and nested actions are open.*
 - **Slash menu v2** with icons, groups, and listbox ARIA; separate block action menu; Alt+Shift+↑/↓ block moves. *Icons, groups, combobox + listbox ARIA, and block moves shipped 2026-09-27; the separate block action menu is open.*
-- **Motion.** Dialog and menu enter/exit (120–180 ms), drawer, list reorder, spring-damped drag and splitter; reduced motion respected.
+- **Motion.** Dialog and menu enter/exit (120–180 ms), drawer, list reorder, spring-damped drag and splitter; reduced motion respected. *Enter animations and the tokenized drawer shipped 2026-09-27; exits stay instant (delaying `hidden` would complicate focus return and inert). List reorder and drag motion are open.*
 - **Overflow menu** grouped (Create / Views / Knowledge / Data / Help) with separators, icons, shortcut hints, arrow keys. *Shipped 2026-09-27 with App (Settings) in place of Help; see the [decision log](../architecture/decisions.md).*
 
 Exit criteria: visual baselines approved at 390 / 768 / 1440 / 1920 / 2560 in both themes; axe clean; no emoji in chrome; Lighthouse accessibility and best-practices ≥ 95; WEB-1/2/3 pass; no storage change beyond the additive `icon` field; the Phase 0 count floors hold.

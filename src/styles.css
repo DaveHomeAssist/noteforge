@@ -1552,6 +1552,40 @@ mark {
   box-shadow: var(--elevation-3);
   overflow: hidden;
 }
+
+/* Motion: dialogs, the palette, and menus enter with a short fade and lift;
+   exits are instant. The reduced-motion rule below shortens both to nothing. */
+@keyframes nf-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes nf-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+@keyframes nf-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.modal:not([hidden]) .modal__backdrop {
+  animation: nf-fade-in var(--duration-fast) var(--ease-enter);
+}
+.modal:not([hidden]) .modal__panel {
+  animation: nf-rise-in var(--duration-base) var(--ease-enter);
+}
+.menu__dropdown:not([hidden]) {
+  transform-origin: top right;
+  animation: nf-drop-in var(--duration-fast) var(--ease-enter);
+}
+.blk-menu {
+  transform-origin: top left;
+  animation: nf-drop-in var(--duration-fast) var(--ease-enter);
+}
 .modal__header {
   display: flex;
   align-items: center;
@@ -1825,7 +1859,7 @@ html[data-font="l"] .editor {
     z-index: 50;
     box-shadow: var(--shadow);
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
+    transition: transform var(--duration-base) var(--ease-standard);
   }
   .app.sidebar-open .sidebar {
     transform: none;
