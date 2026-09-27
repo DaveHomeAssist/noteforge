@@ -1,52 +1,15 @@
-// Headless runner for the browser feature suite (test/features.html).
-//
-// Boots a Vite dev server in-process (so ES-module imports from /src resolve the
-// same way they do during development), drives it with Playwright/Chromium, and
-// reads the pass/fail summary the page publishes to document.title. Exit code is
-// 0 only when every assertion passes without browser errors — this is what CI
-// gates on.
-//
-// Run locally: `npm run test:browser` (requires `npx playwright install chromium`).
+// The eight end-to-end smokes that used to run inside test/run-features.mjs,
+// moved verbatim into a module so Playwright Test can run each one as its own
+// test (retries, traces, and reports per smoke). Each smoke creates its own
+// context through `newAppContext` (fixed clock, time zone, locale), asserts with
+// a fail-fast `check`, and returns its PASS lines for the report attachment.
 
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { createServer, preview } from 'vite';
-import { chromium } from 'playwright';
+import { createHash } from 'node:crypto';
+import { captureRuntimeErrors, newAppContext, TIMEOUT } from './runtime.mjs';
 
-const TIMEOUT = 60_000;
-const execFileAsync = promisify(execFile);
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const VITE_CLI = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
-
-async function buildProduction() {
-  // Vite's dev server sets NODE_ENV in-process. Build in a fresh process so
-  // import.meta.env.PROD is compiled correctly and production-only PWA
-  // registration cannot be tree-shaken out after the component/dev suite.
-  await execFileAsync(process.execPath, [VITE_CLI, 'build'], {
-    cwd: REPO_ROOT,
-    env: { ...process.env, NODE_ENV: 'production' },
-    maxBuffer: 10 * 1024 * 1024,
-  });
-}
-
-function captureRuntimeErrors(page, errors) {
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
-  });
-  page.on('pageerror', (err) => errors.push(`pageerror: ${err.stack || err.message || err}`));
-  page.on('requestfailed', (request) => {
-    errors.push(`requestfailed: ${request.url()} — ${request.failure()?.errorText || 'unknown error'}`);
-  });
-  page.on('response', (response) => {
-    if (response.status() >= 400) errors.push(`http ${response.status()}: ${response.url()}`);
-  });
-}
-
-async function warmLazyAppModules(browser, base) {
-  const context = await browser.newContext();
+export async function warmLazyAppModules(browser, base) {
+  const context = await newAppContext(browser);
   const page = await context.newPage();
   const modules = [
     '/src/components/history-view.js',
@@ -137,8 +100,8 @@ async function warmLazyAppModules(browser, base) {
   }
 }
 
-async function runRecoverySmoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+export async function runRecoverySmoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   await page.route(
     '**/src/components/history-view.js*',
@@ -468,8 +431,8 @@ async function runRecoverySmoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+export async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
@@ -712,8 +675,8 @@ async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runPhase3Smoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+export async function runPhase3Smoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
@@ -1025,8 +988,8 @@ async function runPhase3Smoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runPhase4Smoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+export async function runPhase4Smoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   let releaseDailyImport = () => {};
   let markDailyImportRequested;
@@ -1550,8 +1513,8 @@ async function runPhase4Smoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runPhase5Smoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+export async function runPhase5Smoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.__phase5Clipboard = '';
@@ -1800,8 +1763,8 @@ async function runPhase5Smoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runPhase6Smoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+export async function runPhase6Smoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.__phase6Clipboard = '';
@@ -2110,8 +2073,8 @@ async function runPhase6Smoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runPhase7Smoke(browser, base, runtimeErrors) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+export async function runPhase7Smoke(browser, base, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const page = await context.newPage();
   page.on('dialog', (dialog) => dialog.accept());
   captureRuntimeErrors(page, runtimeErrors);
@@ -2393,12 +2356,9 @@ async function runPhase7Smoke(browser, base, runtimeErrors) {
   }
 }
 
-async function runProductionOfflineSmoke(browser, runtimeErrors) {
-  await buildProduction();
-  const server = await preview({ logLevel: 'warn', preview: { open: false, host: '127.0.0.1', port: 0 } });
-  const root = server.resolvedUrls?.local?.[0];
-  if (!root) throw new Error('Vite preview did not report a local URL');
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'allow' });
+// `root` is the Vite preview of the production build that global setup started.
+export async function runProductionOfflineSmoke(browser, root, runtimeErrors) {
+  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 }, serviceWorkers: 'allow' });
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
@@ -2635,105 +2595,5 @@ async function runProductionOfflineSmoke(browser, runtimeErrors) {
   } finally {
     await context.setOffline(false).catch(() => {});
     await context.close();
-    await new Promise((resolve) => server.httpServer.close(resolve));
   }
 }
-
-async function main() {
-  const server = await createServer({
-    // Never pop a browser open in CI; everything else comes from vite.config.js.
-    server: { open: false },
-    logLevel: 'warn',
-  });
-  await server.listen();
-
-  const base = server.resolvedUrls?.local?.[0];
-  if (!base) throw new Error('Vite did not report a local URL');
-  const target = new URL('test/features.html', base).href;
-
-  // Prefer Playwright's bundled Chromium (installed in CI via `playwright
-  // install`); fall back to a system Chrome/Edge install so the suite runs
-  // locally without a browser download.
-  let browser;
-  try {
-    browser = await chromium.launch();
-  } catch (err) {
-    const channel = process.env.PW_CHANNEL || 'chrome';
-    console.warn(`[test] bundled Chromium unavailable (${err.message}); trying channel "${channel}"`);
-    browser = await chromium.launch({ channel });
-  }
-  const page = await browser.newPage();
-
-  // Banner/image tests use these reserved hosts to exercise URL handling. Stub
-  // them so the suite stays offline and expected image failures do not obscure
-  // real console, page, or same-origin resource errors.
-  const imageBody = Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64');
-  await page.route(/^https:\/\/(?:example\.com|invalid\.invalid)\//, (route) =>
-    route.fulfill({ status: 200, contentType: 'image/gif', body: imageBody }),
-  );
-
-  // Let Vite finish first-load dependency discovery before the authoritative
-  // error-captured pass. Its optimizer can intentionally reload once and abort
-  // module requests; those are dev-server setup, not application failures.
-  await page.goto(target, { waitUntil: 'load', timeout: TIMEOUT });
-  await page.waitForFunction(() => /^(ALL PASS|FAILURES)/.test(document.title), undefined, { timeout: TIMEOUT });
-
-  // The integrated app uses several genuinely post-usable chunks. Transform
-  // them before error capture so Vite's one-time dependency discovery cannot
-  // abort an authoritative delayed-import request.
-  await warmLazyAppModules(browser, base);
-  await server.waitForRequestsIdle();
-
-  const runtimeErrors = [];
-  captureRuntimeErrors(page, runtimeErrors);
-
-  let title = '';
-  let output = '';
-  let failed = false;
-  let devServerClosed = false;
-  try {
-    await page.goto(target, { waitUntil: 'load', timeout: TIMEOUT });
-    await page.waitForFunction(() => /^(ALL PASS|FAILURES)/.test(document.title), undefined, { timeout: TIMEOUT });
-    title = await page.title();
-    // Locator reads retry across a transient Vite full-page reload; a raw
-    // $eval can lose its execution context between the completed title wait
-    // and result extraction even though the rerun remains healthy.
-    output = await page.locator('#out').textContent({ timeout: TIMEOUT });
-    const recoveryOutput = await runRecoverySmoke(browser, base, runtimeErrors);
-    const linkIntegrityOutput = await runLinkIntegritySmoke(browser, base, runtimeErrors);
-    const phase3Output = await runPhase3Smoke(browser, base, runtimeErrors);
-    const phase4Output = await runPhase4Smoke(browser, base, runtimeErrors);
-    const phase5Output = await runPhase5Smoke(browser, base, runtimeErrors);
-    const phase6Output = await runPhase6Smoke(browser, base, runtimeErrors);
-    const phase7Output = await runPhase7Smoke(browser, base, runtimeErrors);
-    await page.close();
-    await server.close();
-    devServerClosed = true;
-    const offlineOutput = await runProductionOfflineSmoke(browser, runtimeErrors);
-    output += `\n${recoveryOutput}\n${linkIntegrityOutput}\n${phase3Output}\n${phase4Output}\n${phase5Output}\n${phase6Output}\n${phase7Output}\n${offlineOutput}`;
-  } catch (err) {
-    failed = true;
-    output += `${output ? '\n' : ''}Runner error: ${err.message || err}`;
-  } finally {
-    await browser.close();
-    if (!devServerClosed) await server.close();
-  }
-
-  console.log(output);
-  if (runtimeErrors.length) {
-    console.error('\nUnexpected browser errors during run:');
-    for (const error of runtimeErrors) console.error('  ' + error);
-  }
-
-  if (failed || runtimeErrors.length || !title.startsWith('ALL PASS')) {
-    console.error(`\n❌ Browser feature tests failed${title ? ` — ${title}` : ''}`);
-    process.exit(1);
-  }
-  console.log(`\n✅ ${title}`);
-  process.exit(0);
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});

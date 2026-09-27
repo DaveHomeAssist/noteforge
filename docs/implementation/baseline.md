@@ -45,7 +45,7 @@ Exact uncompressed bytes from the clean production build:
 | Initial shell total | 214,316 | n/a |
 | Entire `dist/` tree | 219,285 | n/a |
 
-The Phase 0 initial-shell ceiling is 257,180 uncompressed bytes, which is the baseline HTML, CSS, and JavaScript total plus 20%, rounded up. See [performance_budgets.md](performance_budgets.md) for the measurement contract.
+The Phase 0 initial-shell ceiling is 257,180 uncompressed bytes, which is the baseline HTML, CSS, and JavaScript total plus 20%, rounded up. See [performance_budgets.md](performance_budgets.md) for the measurement contract. Superseded on 2026-09-27 by per-route gzip budgets (budget policy v2 in the same file).
 
 ## Search baseline
 

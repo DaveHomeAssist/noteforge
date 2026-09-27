@@ -31,18 +31,18 @@ Required before editing:
 cd "$NF_REPO"
 test "$(node -p 'process.versions.node.split(".")[0]')" = 22
 npm ci
-npm test
-npm run test:browser
-npm run build
+npm run test:all          # check, typecheck, unit, browser (features + smokes), a11y, build, budget
 npm audit --audit-level=high
 git diff --check
 ```
 
 Required results:
 
-- Node assertions meet or exceed the Phase 0 count with zero failures.
-- Browser assertions meet or exceed 306 with zero failures and no unexpected `console.error`, `pageerror`, failed request, or HTTP 4xx/5xx.
-- Local fallback to system Chrome is allowed only when reported. CI must still run installed Playwright Chromium.
+- Node cases meet or exceed the floor in `test/run-node-tests.mjs` with zero failures.
+- The in-page suite meets or exceeds the floor in `test/e2e/features.spec.mjs`, all eight smokes pass, and no test reports an unexpected `console.error`, `pageerror`, failed request, or HTTP 4xx/5xx.
+- The axe ratchet passes; if a count dropped, the lowered `test/e2e/a11y-baseline.json` is committed.
+- Screenshot baselines are compared by the CI `visual` job only (pinned Playwright container). An intended UI change regenerates them with `gh workflow run visual-baselines.yml --ref <branch>`, then `gh run download <id> -n visual-baselines -D test/e2e/__screenshots__`; review every changed image before committing.
+- Local runs may use an installed Chrome (`PW_CHANNEL=chrome`) when reported. CI runs Playwright's Chromium.
 - The build completes without unexplained warnings.
 - Audit reports no high or critical vulnerability.
 - Schema fixture migrations, Markdown fixed points, backup envelopes, accessibility regression checks, and the feature row's explicit exit criteria pass.
@@ -62,7 +62,7 @@ rg -n "noteforge-build content=$(git rev-parse --short=12 HEAD)" dist/index.html
 find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 ```
 
-- Initial HTML/CSS/JS shell is at most 257,180 uncompressed bytes unless an approved exception is recorded.
+- `npm run test:budget` passes: every route in `test/bundle-budgets.json` is within its gzip budget, or the PR raises it with a budget-log row in `performance_budgets.md`.
 - The effective production CSP is meta-delivered by Vite; do not falsely require a Pages response header or `frame-ancestors` from the meta policy.
 - Service-worker activation deletes stale `noteforge-*` caches only. The executable sentinel-cache regression must pass.
 

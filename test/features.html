@@ -52,6 +52,17 @@
   const results = [];
   const check = (name, cond) => results.push((cond ? 'PASS' : 'FAIL') + '  ' + name);
   const section = (name, fn) => { try { fn(); } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); } };
+  // Poll a condition instead of sleeping a fixed time: debounces, image encoding,
+  // and pane handoffs can run late on a loaded CI runner. Resolves true as soon as
+  // the condition holds, or false after `timeout` ms.
+  const until = async (cond, timeout = 5000) => {
+    const start = performance.now();
+    while (!cond()) {
+      if (performance.now() - start > timeout) return false;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return true;
+  };
 
   const scratch = document.getElementById('scratch');
   const mkHost = () => { const h = document.createElement('div'); h.className = 'editor__blocks'; scratch.appendChild(h); return h; };
@@ -987,7 +998,7 @@
       const file = new File([blob], 'pic.png', { type: 'image/png' });
       const dt = new DataTransfer(); dt.items.add(file);
       blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-      await new Promise((r) => setTimeout(r, 250));
+      await until(() => /^data:image\/jpeg/.test(be.host.querySelector('img.blk-img')?.getAttribute('src') || ''));
       const img = be.host.querySelector('img.blk-img');
       check(name, !!img && /^data:image\/jpeg/.test(img.getAttribute('src')));
     } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
@@ -1057,7 +1068,7 @@
       const file = new File([blob], 'a]b.png', { type: 'image/png' });
       const dt = new DataTransfer(); dt.items.add(file);
       blk.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-      await new Promise((r) => setTimeout(r, 250));
+      await until(() => /!\[a b\]\(data:image\/jpeg/.test(be.serialize()));
       const md = be.serialize();
       check(name, /!\[a b\]\(data:image\/jpeg/.test(md) && parse(md).some((b) => b.type === 'image'));
     } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
@@ -2310,6 +2321,9 @@
       const actions = { openNote: (id, options) => workspace.requestOpen(id, options), openOrCreateByTitle: () => {}, announce: () => {} };
       const primary = new Editor(primaryElement, db, actions);
       primary.open(one.id);
+      // closeTab() finishes asynchronously (durable handoff, then the next tab's
+      // open restores each pane's saved scroll); its last step is this announcement.
+      let workspaceAnnouncement = '';
       workspace = new WorkspaceView({
         primaryElement,
         primaryEditor: primary,
@@ -2320,6 +2334,7 @@
         onEmpty: () => { activeId = null; },
         onArchived: () => {},
         onStorageError: () => {},
+        announce: (message) => { workspaceAnnouncement = message; },
       });
       await workspace.initialize();
       await workspace.requestOpen(two.id);
@@ -2364,15 +2379,14 @@
       tab.focus(); key(tab, 'ArrowRight');
       check('Phase 6 tablist Arrow keys move roving focus without activating', document.activeElement?.getAttribute('role') === 'tab' && activeId === 'workspace-three');
       key(document.activeElement, 'Delete');
-      await new Promise((resolve) => setTimeout(resolve));
+      await until(() => /^Closed .* tab\.$/.test(workspaceAnnouncement));
       check('Phase 6 Delete closes a focused tab and retains a reopenable entry', workspace.state.recentlyClosed[0] !== null && workspace.element.querySelector('[data-reopen]').disabled === false);
       Object.defineProperty(workspace.editors.primary.container, 'scrollTop', { value: 11, writable: true, configurable: true });
       Object.defineProperty(workspace.editors.secondary.container, 'scrollTop', { value: 22, writable: true, configurable: true });
       workspace.editors.primary.container.dispatchEvent(new Event('scroll'));
       workspace.editors.secondary.container.dispatchEvent(new Event('scroll'));
-      await new Promise((resolve) => setTimeout(resolve, 350));
       check('Phase 6 persists independent primary and secondary scroll positions',
-        workspace.state.panes.primary.scrollTop === 11 && workspace.state.panes.secondary.scrollTop === 22);
+        await until(() => workspace.state.panes.primary.scrollTop === 11 && workspace.state.panes.secondary.scrollTop === 22));
       workspace.element.remove();
 
       let copied = '';

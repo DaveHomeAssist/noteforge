@@ -217,12 +217,24 @@ for migration, scale, accessibility, security, and cross-feature recovery eviden
 ## Tests
 
 ```bash
-npm run lint           # Biome lint over src/ (zero errors required)
+npm run check          # biome ci: lint (zero errors) + formatting (npm run format writes)
 npm run typecheck      # tsc --checkJs over src/core + src/utils with a per-file error ratchet
 npm test               # Node (node --test): round-trip, migrations, model, golden corpus, NFM conformance; JUnit + case floor
-npm run test:browser   # Headless (Playwright/Chromium): full interactive feature suite + render goldens
-npm run test:all       # lint, typecheck, unit, browser, build, budget
+npm run test:browser   # Playwright Test: in-page feature suite + render goldens, and the eight end-to-end smokes
+npm run test:a11y      # Playwright + axe-core over 16 app surfaces, both themes, held to a ratchet
+npm run test:visual    # Screenshot baselines; compared only in the pinned Playwright container (CI job `visual`)
+npm run test:all       # check, typecheck, unit, browser, a11y, build, budget
 ```
+
+The Playwright suite (`playwright.config.mjs`, `test/e2e/`) runs every page on a
+fixed, forward-running clock (2026-09-16 11:00 America/New_York, `en-US`) so date
+fixtures and rendered timestamps are identical on every machine. CI retries a
+failed test once and reports a retried pass as flaky; traces, screenshots, and the
+HTML report are uploaded for failures. The axe ratchet
+(`test/e2e/a11y-baseline.json`) lets a surface's violation count only go down:
+lower it with `UPDATE_A11Y_BASELINE=1 npm run test:a11y`. Screenshot baselines live
+in `test/e2e/__screenshots__/` and are regenerated with the `Visual baselines`
+workflow.
 
 `test/roundtrip.test.mjs` (262 assertions) proves the `parse()`/`serialize()`
 round-trip is lossless (blocks incl. images, tables, toggles — even nested toggles
@@ -258,14 +270,14 @@ backup/restore fidelity, independent revision migration, exact-ID derived-index
 invalidation/full-vault reset, incremental task/calendar/property updates,
 20-query search p95, bounded workspace repair, and adversarial YAML/JSON/path/
 input/CSP/service-worker coverage. The complete Node gate is 425 checks.
-`test/features.html` (394 assertions) drives
+`test/features.html` (443 assertions) drives
 the editor (incl. images, callouts, editable tables, toggles, multi-select), banner,
 Trash, command palette, sidebar sort/pin/search/nesting, list virtualization, graph
 layout caching, note + graph + vault export, settings, and the keyboard-navigable
 graph and recovery views in a real browser; `npm run test:browser`
-runs it headlessly via
-`test/run-features.mjs` (boots Vite, waits for the summary the page publishes to
-`document.title`, then runs 15 integrated recovery checks, 16 Phase 2 link and
+runs it headlessly under Playwright Test (`test/e2e/features.spec.mjs` waits for
+the summary the page publishes to `document.title` and enforces a check floor;
+`test/e2e/smokes.spec.mjs` then runs 15 integrated recovery checks, 16 Phase 2 link and
 navigation checks, 17 integrated Phase 3 checks, 28 integrated Phase 4 checks at
 390 px and a 200%-equivalent viewport, 14 integrated Phase 5 properties/block-link/
 transclusion checks, 18 integrated Phase 6 workspace/clipper/reconciliation checks,
@@ -365,8 +377,9 @@ src/
 └── styles.css          # Tokenized light/dark theme
 public/                 # manifest.webmanifest, sw.js (service worker), icon.svg
 test/roundtrip.test.mjs # Node invariants: blocks, migrations, note model, fuzzy, search, settings, manifest
-test/features.html      # Browser feature suite (editor, banner, Trash, palette, settings, graph)
-test/run-features.mjs   # Headless runner for features.html (npm run test:browser)
+test/features.html      # In-page browser feature suite (editor, banner, Trash, palette, settings, graph)
+test/e2e/               # Playwright Test: features + smokes, axe ratchet, screenshot baselines
+playwright.config.mjs   # Playwright projects (features, a11y, visual), fixed clock via test/e2e/support
 test/link-integrity.test.mjs # Node invariants for Phase 2 identity/link/navigation behavior
 test/phase3.test.mjs     # Node invariants for Archive, saved views, replacement, and batches
 test/phase4.test.mjs     # Node invariants for Daily, capture, tasks, and calendar
