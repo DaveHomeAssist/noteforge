@@ -1,5 +1,5 @@
 import './calendar-view.css';
-import { Modal } from './modal.js';
+import { MainViewHost, createMainViewSection } from './main-view.js';
 import { NoteDerivedIndex } from '../core/note-derived-index.js';
 import { buildCalendarItems, calendarItemsByDate, calendarPeriod } from '../utils/calendar.js';
 import {
@@ -15,13 +15,14 @@ import { icon } from '../ui/icons.js';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function createCalendarElements(root = document.body) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal';
-  overlay.id = 'calendar-overlay';
-  overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel calendar-modal" role="dialog" aria-modal="true" aria-labelledby="calendar-title" tabindex="-1"><header class="modal__header"><div><h2 class="modal__title" id="calendar-title">Calendar</h2><p class="muted">Daily notes, date blocks, and task due dates</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Calendar">${icon('x')}</button></header><div class="calendar-toolbar"><div class="calendar-nav"><button type="button" class="btn btn--ghost" data-period="previous" aria-label="Previous period">${icon('chevron-left')}</button><button type="button" class="btn btn--ghost" data-period="today">Today</button><button type="button" class="btn btn--ghost" data-period="next" aria-label="Next period">${icon('chevron-right')}</button></div><strong id="calendar-period-label"></strong><div role="group" aria-label="Calendar view"><button type="button" class="btn btn--ghost" data-calendar-mode="month" aria-pressed="true">Month</button><button type="button" class="btn btn--ghost" data-calendar-mode="week" aria-pressed="false">Week</button></div></div><div id="calendar-grid" class="calendar-grid" role="grid" aria-label="Calendar dates"></div><div id="calendar-agenda" class="calendar-agenda" aria-label="Calendar agenda"></div><footer class="calendar-footer"><span id="calendar-status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-open-daily>Open Daily note</button><button type="button" class="btn btn--ghost" data-close>Close</button></div></footer></div>`;
-  root.appendChild(overlay);
+export function createCalendarElements(root = null) {
+  const overlay = createMainViewSection({
+    id: 'calendar-overlay',
+    view: 'calendar',
+    labelledBy: 'calendar-title',
+    root,
+    html: `<div class="main-view__page calendar-modal"><header class="modal__header"><div><h2 class="modal__title" id="calendar-title">Calendar</h2><p class="muted">Daily notes, date blocks, and task due dates</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Calendar">${icon('x')}</button></header><div class="calendar-toolbar"><div class="calendar-nav"><button type="button" class="btn btn--ghost" data-period="previous" aria-label="Previous period">${icon('chevron-left')}</button><button type="button" class="btn btn--ghost" data-period="today">Today</button><button type="button" class="btn btn--ghost" data-period="next" aria-label="Next period">${icon('chevron-right')}</button></div><strong id="calendar-period-label"></strong><div role="group" aria-label="Calendar view"><button type="button" class="btn btn--ghost" data-calendar-mode="month" aria-pressed="true">Month</button><button type="button" class="btn btn--ghost" data-calendar-mode="week" aria-pressed="false">Week</button></div></div><div id="calendar-grid" class="calendar-grid" role="grid" aria-label="Calendar dates"></div><div id="calendar-agenda" class="calendar-agenda" aria-label="Calendar agenda"></div><footer class="calendar-footer"><span id="calendar-status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-open-daily>Open Daily note</button><button type="button" class="btn btn--ghost" data-close>Close</button></div></footer></div>`,
+  });
   return {
     overlay,
     grid: overlay.querySelector('#calendar-grid'),
@@ -43,8 +44,9 @@ export class CalendarView {
     this.items = [];
     this.days = [];
     this.index = new NoteDerivedIndex(db, (note) => buildCalendarItems([note]));
-    this.modal = new Modal(els.overlay, {
-      initialFocus: () => this.els.grid.querySelector('[tabindex="0"]') || this.modal.panel,
+    this.modal = new MainViewHost(els.overlay, {
+      view: 'calendar',
+      initialFocus: () => this.els.grid.querySelector('[tabindex="0"]'),
     });
     this.els.overlay.addEventListener('click', (event) => this.#onClick(event));
     this.els.grid.addEventListener('keydown', (event) => this.#onGridKey(event));

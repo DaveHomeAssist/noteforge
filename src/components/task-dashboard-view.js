@@ -1,5 +1,5 @@
 import './task-dashboard-view.css';
-import { Modal } from './modal.js';
+import { MainViewHost, createMainViewSection } from './main-view.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { localDateKey } from '../utils/local-date.js';
 import { groupTasks } from '../utils/tasks.js';
@@ -14,13 +14,14 @@ const GROUPS = [
 ];
 const PAGE_SIZE = 50;
 
-export function createTaskDashboardElements(root = document.body) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal';
-  overlay.id = 'task-dashboard-overlay';
-  overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel task-dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="task-dashboard-title" tabindex="-1"><header class="modal__header"><div><h2 class="modal__title" id="task-dashboard-title">Tasks</h2><p class="muted">Source-verified tasks from active Markdown notes</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Tasks">${icon('x')}</button></header><div class="task-dashboard-filters"><label>Group<select id="task-group-filter"><option value="all">All groups</option>${GROUPS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Note<select id="task-note-filter"><option value="">All notes</option></select></label><label>Tag<select id="task-tag-filter"><option value="">All tags</option></select></label></div><div id="task-dashboard-list" class="task-dashboard-list"></div><footer class="task-dashboard-footer"><span id="task-dashboard-status" role="status" aria-live="polite"></span><button type="button" class="btn btn--ghost" data-close>Close</button></footer></div>`;
-  root.appendChild(overlay);
+export function createTaskDashboardElements(root = null) {
+  const overlay = createMainViewSection({
+    id: 'task-dashboard-overlay',
+    view: 'tasks',
+    labelledBy: 'task-dashboard-title',
+    root,
+    html: `<div class="main-view__page task-dashboard-modal"><header class="modal__header"><div><h2 class="modal__title" id="task-dashboard-title">Tasks</h2><p class="muted">Source-verified tasks from active Markdown notes</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Tasks">${icon('x')}</button></header><div class="task-dashboard-filters"><label>Group<select id="task-group-filter"><option value="all">All groups</option>${GROUPS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Note<select id="task-note-filter"><option value="">All notes</option></select></label><label>Tag<select id="task-tag-filter"><option value="">All tags</option></select></label></div><div id="task-dashboard-list" class="task-dashboard-list"></div><footer class="task-dashboard-footer"><span id="task-dashboard-status" role="status" aria-live="polite"></span><button type="button" class="btn btn--ghost" data-close>Close</button></footer></div>`,
+  });
   return {
     overlay,
     list: overlay.querySelector('#task-dashboard-list'),
@@ -40,7 +41,7 @@ export class TaskDashboardView {
     this.tasks = [];
     this.visibleTasks = [];
     this.pages = new Map();
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.els.group });
+    this.modal = new MainViewHost(els.overlay, { view: 'tasks', initialFocus: () => this.els.group });
     this.els.list.addEventListener('change', (event) => void this.#onChange(event));
     this.els.list.addEventListener('click', (event) => this.#onClick(event));
     for (const filter of [els.group, els.note, els.tag])

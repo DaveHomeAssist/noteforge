@@ -22,6 +22,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - A block action menu opens from a block's drag handle or with Ctrl/⌘+/: Turn into…, Duplicate (without the block's link ID), Move up, Move down, and Delete, all keyboard-operable and undoable.
 - The command palette groups results under Recent, Notes, Commands, and Headings (the best match's group first), shows each command's keyboard shortcut as keys, and on screens 1024 px and wider previews the highlighted note or command beside the list.
 - On tablets (761–1023 px) the notes sidebar floats over the editor from the rail instead of squeezing it. It starts closed and closes after you pick a note, press Escape, or tap the editor; tablet toggles do not change the desktop collapse setting.
+- Tasks and Calendar open in the main area in place of the editor, as the graph does, instead of in dialogs. Their rail buttons show which view is active; pressing one again, Escape, Close, or opening a note returns to the editor. Global shortcuts keep working while they are shown.
 
 ### Changed
 - Dialogs, the command palette, the More actions menu, and the slash menu fade in over 120–180 ms, and the phone sidebar slides on the same motion tokens; with reduced motion requested, they appear at once.

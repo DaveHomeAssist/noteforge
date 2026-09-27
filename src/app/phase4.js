@@ -39,8 +39,9 @@ export class Phase4Controller {
     this.calendarReady = null;
   }
 
+  // Tasks and Calendar are main-area views, not dialogs; only Quick Capture is modal.
   get open() {
-    return Boolean(this.quickCapture?.open || this.taskDashboard?.open || this.calendar?.open);
+    return Boolean(this.quickCapture?.open);
   }
 
   async openDailyNote(date = null) {
