@@ -10,7 +10,7 @@ export const VIEWPORTS = {
   2560: { width: 2560, height: 1440 },
 };
 
-async function openFromMenu(page, buttonSelector) {
+export async function openMenu(page) {
   // Below 760 px the overflow menu lives in the off-canvas sidebar. Its button
   // still counts as "visible" there (it has a size, just off-screen), so key on
   // the mobile bar's sidebar toggle instead.
@@ -21,6 +21,11 @@ async function openFromMenu(page, buttonSelector) {
     await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
   }
   await page.locator('#menu-btn').click();
+  await page.locator('#menu-dropdown').waitFor({ state: 'visible', timeout: TIMEOUT });
+}
+
+async function openFromMenu(page, buttonSelector) {
+  await openMenu(page);
   await page.locator(buttonSelector).click();
 }
 
@@ -31,6 +36,9 @@ async function visible(page, selector) {
 /** name → how to reach it from the booted shell. */
 export const SURFACES = {
   shell: async () => {},
+  menu: async (page) => {
+    await openMenu(page);
+  },
   graph: async (page) => {
     await page.locator('#graph-btn:visible').first().click();
     await visible(page, '#graph:not([hidden])');

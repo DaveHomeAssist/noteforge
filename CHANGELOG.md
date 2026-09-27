@@ -16,6 +16,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - App shell icon rail: sidebar toggle, search, Quick Capture, tasks, calendar, graph, theme, and settings in a left column; on phones the same rail is a bottom bar of 44 px targets.
 - The notes sidebar collapses (rail button or Ctrl/⌘+\\) and resizes from 240 to 480 px by dragging or with the arrow keys; both are remembered.
 - Wide editors show a context column beside the text with the outline, backlinks, and unlinked mentions; each editor decides by its own width, so split panes and phones keep one column.
+- The More actions menu is grouped into Create, Views, Knowledge, Data, and App, with separators and a shortcut hint for Today's note. It works from the keyboard: arrow keys, Home, End, and first letters move between items; Escape closes it and returns focus to its button.
 
 ### Changed
 - Every text and background color pair meets WCAG AA contrast in both themes; the accessibility gate reports zero violations and now fails on any.
@@ -28,6 +29,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - Destructive and primary buttons keep AA contrast on hover (the destructive hover measured 1.14:1).
 - The "Add banner" control no longer fades below AA contrast.
 - On phones the workspace toolbar fits on one row and the note title row keeps Properties, Pin, and Delete on screen.
+- The More actions menu scrolls instead of running past the bottom of short screens, and its shortcut hints align to the right edge.
 
 ## [1.2.0] - 2026-09-27
 
