@@ -13,6 +13,7 @@ import { escapeHtml, uid } from '../utils/helpers.js';
 import { fileToBannerDataURL } from '../utils/image.js';
 import { nextHeadingAnchor } from '../utils/headings.js';
 import { splitFrontmatterSource } from '../utils/frontmatter-boundary.js';
+import { icon } from '../ui/icons.js';
 
 const MULTILINE = new Set(['code', 'raw']); // edited as plain multi-line text
 const NONTEXT = new Set(['divider', 'date', 'image']); // not text-editable: select & delete
@@ -457,7 +458,7 @@ export class BlockEditor {
       const iso = block.meta?.date || '';
       content.innerHTML =
         `<button class="blk-date" type="button" tabindex="-1" title="Change date">` +
-        `📅 ${escapeHtml(formatDateLabel(iso))}</button>`;
+        `${icon('calendar')} ${escapeHtml(formatDateLabel(iso))}</button>`;
       return;
     }
     if (MULTILINE.has(block.type)) {

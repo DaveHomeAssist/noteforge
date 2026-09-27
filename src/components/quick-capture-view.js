@@ -4,6 +4,7 @@ import { buildCaptureMarkdown } from '../utils/capture.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { fileToBannerDataURL } from '../utils/image.js';
 import { localDateKey } from '../utils/local-date.js';
+import { icon } from '../ui/icons.js';
 
 export function createQuickCaptureElements(root = document.body) {
   const overlay = document.createElement('div');
@@ -12,7 +13,7 @@ export function createQuickCaptureElements(root = document.body) {
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
     <div class="modal__panel quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title" tabindex="-1">
-      <header class="modal__header"><div><h2 class="modal__title" id="quick-capture-title">Quick Capture</h2><p class="muted">Route text, a link, clipboard content, or one local image into your vault.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Quick Capture">✕</button></header>
+      <header class="modal__header"><div><h2 class="modal__title" id="quick-capture-title">Quick Capture</h2><p class="muted">Route text, a link, clipboard content, or one local image into your vault.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Quick Capture">${icon('x')}</button></header>
       <form id="quick-capture-form" class="quick-capture-form">
         <label>Shared title<input id="capture-title" maxlength="300" autocomplete="off" placeholder="Optional label for a link"></label>
         <label>Text<textarea id="capture-text" rows="6" maxlength="100000" placeholder="What do you want to remember?"></textarea></label>

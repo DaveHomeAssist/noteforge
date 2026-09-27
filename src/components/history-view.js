@@ -6,6 +6,7 @@
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 import './recovery.css';
+import { icon } from '../ui/icons.js';
 
 const REASON_LABELS = {
   autosave: 'Autosave',
@@ -35,7 +36,7 @@ export function createHistoryElements(root = document.body) {
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
     <div class="modal__panel recovery-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1">
-      <header class="modal__header"><div><h2 class="modal__title" id="history-title">↶ Revision history</h2><p class="muted recovery-modal__subtitle">Browser-local recovery points for the current note</p></div><button class="btn btn--ghost" data-close title="Close" aria-label="Close revision history">✕</button></header>
+      <header class="modal__header"><div><h2 class="modal__title" id="history-title">${icon('history')} Revision history</h2><p class="muted recovery-modal__subtitle">Browser-local recovery points for the current note</p></div><button class="btn btn--ghost" data-close title="Close" aria-label="Close revision history">${icon('x')}</button></header>
       <div class="history-view"><nav id="history-list" class="history-view__list" aria-label="Note revisions"></nav><div class="history-view__detail"><div id="history-preview" class="history-view__preview"></div><div id="history-diff" class="history-view__diff"></div></div></div>
       <footer class="recovery-modal__footer"><span id="history-status" class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button id="history-restore-copy" class="btn btn--ghost" disabled>Restore as copy</button><button id="history-restore" class="btn btn--primary" disabled>Restore revision</button></div></footer>
     </div>`;

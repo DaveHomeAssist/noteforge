@@ -17,10 +17,11 @@
     "lint": "biome lint",
     "typecheck": "node test/typecheck-ratchet.mjs",
     "format": "biome format --write",
-    "check": "biome ci",
+    "check": "biome ci && node scripts/build-icons.mjs --check",
     "test:a11y": "playwright test --project=a11y",
     "test:visual": "playwright test --project=visual",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
@@ -31,6 +32,7 @@
     "@axe-core/playwright": "4.13.0",
     "@biomejs/biome": "^2.5.14",
     "@playwright/test": "1.63.0",
+    "lucide-static": "1.48.0",
     "playwright": "1.63.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"

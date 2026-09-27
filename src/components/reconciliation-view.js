@@ -2,6 +2,7 @@ import './phase6.css';
 import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { readVaultDirectory, readVaultFileList } from '../utils/vault-import.js';
+import { icon } from '../ui/icons.js';
 
 const PREVIEW_LIMIT = 20_000;
 const PAGE_SIZE = 50;
@@ -19,7 +20,7 @@ export function createReconciliationElements(root = document.body) {
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
     <div class="modal__panel reconciliation-modal" role="dialog" aria-modal="true" aria-labelledby="reconciliation-title" tabindex="-1">
-      <header class="modal__header"><div><h2 class="modal__title" id="reconciliation-title">Reconcile Markdown folder</h2><p class="muted">Preview-only scan. Applying creates a portable backup and local revisions; files and missing notes are never deleted.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close folder reconciliation">✕</button></header>
+      <header class="modal__header"><div><h2 class="modal__title" id="reconciliation-title">Reconcile Markdown folder</h2><p class="muted">Preview-only scan. Applying creates a portable backup and local revisions; files and missing notes are never deleted.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close folder reconciliation">${icon('x')}</button></header>
       <div class="reconciliation-view">
         <section class="reconciliation-picker" aria-labelledby="reconciliation-source-title"><div><h3 id="reconciliation-source-title">1. Select source</h3><p class="muted">Chromium can open a directory directly. Other browsers can select a folder or multiple Markdown files.</p></div><div class="reconciliation-picker__actions"><button type="button" class="btn btn--primary" data-directory>Choose folder</button><label class="btn btn--ghost reconciliation-file-label">Select folder files<input data-folder-files type="file" accept=".md,text/markdown,text/plain" multiple webkitdirectory></label><label class="btn btn--ghost reconciliation-file-label">Select Markdown files<input data-files type="file" accept=".md,text/markdown,text/plain" multiple></label></div></section>
         <section class="reconciliation-plan" aria-labelledby="reconciliation-plan-title"><h3 id="reconciliation-plan-title">2. Review plan</h3><div class="reconciliation-summary muted">No folder scanned.</div><div class="reconciliation-items"></div><nav class="reconciliation-pagination" aria-label="Reconciliation plan pages" hidden><button type="button" class="btn btn--ghost" data-page-previous>Previous</button><span data-page-status aria-live="polite"></span><button type="button" class="btn btn--ghost" data-page-next>Next</button></nav></section>

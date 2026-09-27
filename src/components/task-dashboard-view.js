@@ -3,6 +3,7 @@ import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { localDateKey } from '../utils/local-date.js';
 import { groupTasks } from '../utils/tasks.js';
+import { icon } from '../ui/icons.js';
 
 const GROUPS = [
   ['today', 'Today'],
@@ -18,7 +19,7 @@ export function createTaskDashboardElements(root = document.body) {
   overlay.className = 'modal';
   overlay.id = 'task-dashboard-overlay';
   overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel task-dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="task-dashboard-title" tabindex="-1"><header class="modal__header"><div><h2 class="modal__title" id="task-dashboard-title">Tasks</h2><p class="muted">Source-verified tasks from active Markdown notes</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Tasks">✕</button></header><div class="task-dashboard-filters"><label>Group<select id="task-group-filter"><option value="all">All groups</option>${GROUPS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Note<select id="task-note-filter"><option value="">All notes</option></select></label><label>Tag<select id="task-tag-filter"><option value="">All tags</option></select></label></div><div id="task-dashboard-list" class="task-dashboard-list"></div><footer class="task-dashboard-footer"><span id="task-dashboard-status" role="status" aria-live="polite"></span><button type="button" class="btn btn--ghost" data-close>Close</button></footer></div>`;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel task-dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="task-dashboard-title" tabindex="-1"><header class="modal__header"><div><h2 class="modal__title" id="task-dashboard-title">Tasks</h2><p class="muted">Source-verified tasks from active Markdown notes</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close Tasks">${icon('x')}</button></header><div class="task-dashboard-filters"><label>Group<select id="task-group-filter"><option value="all">All groups</option>${GROUPS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Note<select id="task-note-filter"><option value="">All notes</option></select></label><label>Tag<select id="task-tag-filter"><option value="">All tags</option></select></label></div><div id="task-dashboard-list" class="task-dashboard-list"></div><footer class="task-dashboard-footer"><span id="task-dashboard-status" role="status" aria-live="polite"></span><button type="button" class="btn btn--ghost" data-close>Close</button></footer></div>`;
   root.appendChild(overlay);
   return {
     overlay,

@@ -8,6 +8,7 @@ import { parseQuery, noteMatchesFilters, scoreNote } from '../utils/search-query
 import { fuzzyHighlight } from '../utils/fuzzy.js';
 import { buildForest, flattenForest } from '../utils/tree.js';
 import { createSelection, toggleSelection, pruneSelection } from '../utils/selection.js';
+import { icon } from '../ui/icons.js';
 
 const SORT_MODES = ['updated', 'created', 'title'];
 const ROW_STRIDE = 72; // px per row — MUST equal the fixed .note-item height in styles.css
@@ -126,7 +127,9 @@ export class NoteList {
         </button>`,
       )
       .join('');
-    const clear = this.activeTag ? `<button class="tag-chip tag-chip--clear" data-tag="">✕ clear</button>` : '';
+    const clear = this.activeTag
+      ? `<button class="tag-chip tag-chip--clear" data-tag="">${icon('x')} clear</button>`
+      : '';
     this.els.tags.innerHTML = chips + clear;
   }
 
@@ -295,7 +298,7 @@ export class NoteList {
     return `
         <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''} ${note.isArchived ? 'note-item--archived' : ''} ${this.selection.ids.has(note.id) ? 'note-item--selected' : ''}"
              data-id="${escapeHtml(note.id)}" draggable="true" style="--depth:${depth}"${note.id === this.activeId ? ' aria-current="page"' : ''}>
-          <button type="button" class="note-item__select" data-select role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? '✓' : ''}</button>
+          <button type="button" class="note-item__select" data-select role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? icon('check') : ''}</button>
           ${twist}
           <button class="note-item__main" data-open>
             <span class="note-item__title">${title}</span>
@@ -305,7 +308,7 @@ export class NoteList {
               ${note.tags.length ? `· ${note.tags.map((t) => '#' + escapeHtml(t)).join(' ')}` : ''}
             </span>
           </button>
-          ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">📌</button>`}
+          ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">${icon('pin')}</button>`}
         </div>`;
   }
 

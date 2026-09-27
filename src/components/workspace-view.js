@@ -14,6 +14,7 @@ import {
   setWorkspaceSplit,
 } from '../utils/workspace.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { icon } from '../ui/icons.js';
 
 const otherPane = (name) => (name === 'primary' ? 'secondary' : 'primary');
 
@@ -354,8 +355,8 @@ export class WorkspaceView {
             aria-selected="${selected}" tabindex="${tabIndex}" title="${escapeHtml(note.title)}${note.isArchived ? ' — archived' : ''}">
             <span>${escapeHtml(note.title || 'Untitled')}</span>${note.isArchived ? '<span class="workspace-tab__state">Archived</span>' : ''}
           </button>
-          <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Move to other pane (Alt+Shift+M)">⇄</button>
-          <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Close tab (Delete)">×</button>
+          <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Move to other pane (Alt+Shift+M)">${icon('arrow-left-right')}</button>
+          <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Close tab (Delete)">${icon('x')}</button>
         </div>`;
         })
         .join('');

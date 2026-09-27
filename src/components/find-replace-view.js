@@ -2,6 +2,7 @@ import './find-replace-view.css';
 import { escapeHtml } from '../utils/helpers.js';
 import { findLiteralMatches, replaceLiteral } from '../utils/find-replace.js';
 import { BulkOperations } from '../core/bulk-operations.js';
+import { icon } from '../ui/icons.js';
 
 export function createFindReplaceElements(root = document.querySelector('.main')) {
   const panel = document.createElement('section');
@@ -9,7 +10,7 @@ export function createFindReplaceElements(root = document.querySelector('.main')
   panel.id = 'find-replace-panel';
   panel.hidden = true;
   panel.setAttribute('aria-labelledby', 'find-replace-title');
-  panel.innerHTML = `<header><h2 id="find-replace-title">Find and replace</h2><div class="find-replace__scope" role="group" aria-label="Search scope"><button type="button" class="btn btn--ghost" data-scope="current" aria-pressed="true">Current note</button><button type="button" class="btn btn--ghost" data-scope="vault" aria-pressed="false">Vault</button></div><button type="button" class="btn btn--ghost" data-find-close aria-label="Close find and replace">✕</button></header>
+  panel.innerHTML = `<header><h2 id="find-replace-title">Find and replace</h2><div class="find-replace__scope" role="group" aria-label="Search scope"><button type="button" class="btn btn--ghost" data-scope="current" aria-pressed="true">Current note</button><button type="button" class="btn btn--ghost" data-scope="vault" aria-pressed="false">Vault</button></div><button type="button" class="btn btn--ghost" data-find-close aria-label="Close find and replace">${icon('x')}</button></header>
     <div class="find-replace__controls"><label>Find<input id="find-input" type="text" autocomplete="off"></label><label>Replace with<input id="replace-input" type="text" autocomplete="off"></label><label class="find-replace__check"><input id="find-case" type="checkbox"> Match case</label><label class="find-replace__check"><input id="find-word" type="checkbox"> Whole word</label><label class="find-replace__check find-replace__vault-option" hidden><input id="find-archive" type="checkbox"> Include Archive</label><label class="find-replace__check find-replace__vault-option" hidden><input id="find-trash" type="checkbox"> Include Trash</label></div>
     <div class="find-replace__actions"><button type="button" class="btn btn--ghost" data-find-prev>Previous</button><button type="button" class="btn btn--ghost" data-find-next>Next</button><button type="button" class="btn btn--ghost" data-find-preview>Preview</button><button type="button" class="btn btn--primary" data-find-apply disabled>Apply</button></div>
     <div class="find-replace__preview" aria-live="polite"></div><footer><span class="find-replace__status" role="status" aria-live="polite"></span></footer>`;

@@ -1,6 +1,7 @@
 import './saved-searches-view.css';
 import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { icon } from '../ui/icons.js';
 import {
   createSavedSearch,
   moveSavedSearch,
@@ -24,7 +25,7 @@ export function createSavedSearchElements({
   overlay.id = 'saved-searches-overlay';
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel saved-searches-modal" role="dialog" aria-modal="true" aria-labelledby="saved-searches-modal-title" tabindex="-1">
-    <header class="modal__header"><div><h2 class="modal__title" id="saved-searches-modal-title">Manage saved views</h2><p class="muted">Saved views keep query, sort, and active tag together.</p></div><button class="btn btn--ghost" data-close aria-label="Close saved views">✕</button></header>
+    <header class="modal__header"><div><h2 class="modal__title" id="saved-searches-modal-title">Manage saved views</h2><p class="muted">Saved views keep query, sort, and active tag together.</p></div><button class="btn btn--ghost" data-close aria-label="Close saved views">${icon('x')}</button></header>
     <div class="saved-searches-modal__body"><form class="saved-searches-form"><label>Name<input name="name" required maxlength="80"></label><label>Icon<input name="icon" value="🔎" maxlength="8"></label><label>Query<input name="query" maxlength="500"></label><label>Sort<select name="sortMode"><option value="updated">Updated</option><option value="created">Created</option><option value="title">Title</option></select></label><label>Active tag<input name="activeTag" maxlength="80" placeholder="Optional"></label><button class="btn btn--primary" type="submit">Save view</button></form><div class="saved-searches-manage" role="list" aria-label="Saved views"></div></div>
     <footer class="saved-searches-modal__footer"><span role="status" aria-live="polite"></span><button class="btn btn--ghost" data-close>Close</button></footer>
   </div>`;

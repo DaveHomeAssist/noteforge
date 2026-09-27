@@ -4,6 +4,7 @@
 import { escapeHtml } from '../utils/helpers.js';
 import { downloadText } from '../utils/download.js';
 import './graph.css';
+import { icon } from '../ui/icons.js';
 
 const WIDTH = 900;
 const HEIGHT = 640;
@@ -120,7 +121,7 @@ export class GraphView {
     this.container.innerHTML = `
       <div class="graph__toolbar">
         <span class="graph__stat">${nodes.length} notes · ${edges.length} links${notice}</span>
-        <button class="graph__export" type="button" title="Download this graph as an SVG image">⬇ SVG</button>
+        <button class="graph__export" type="button" title="Download this graph as an SVG image">${icon('download')} SVG</button>
       </div>
       <svg class="graph__svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" preserveAspectRatio="xMidYMid meet">
         <g class="graph__edges">${edgeSvg}</g>

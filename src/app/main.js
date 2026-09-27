@@ -12,6 +12,7 @@ import { TEMPLATES, templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
 import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
+import { icon } from '../ui/icons.js';
 
 class App {
   constructor() {
@@ -389,13 +390,12 @@ class App {
     bar.className = 'storage-error';
     bar.setAttribute('role', 'alert');
     const msg = document.createElement('span');
-    msg.textContent =
-      "⚠️ Your changes couldn't be saved to storage. Export your notes (⋯ → Export JSON) to avoid losing them.";
+    msg.innerHTML = `${icon('triangle-alert')} <span>Your changes couldn't be saved to storage. Export your notes (More actions, then Export JSON) to avoid losing them.</span>`;
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'storage-error__close';
     close.setAttribute('aria-label', 'Dismiss');
-    close.textContent = '×';
+    close.innerHTML = icon('x');
     close.addEventListener('click', () => bar.remove());
     bar.append(msg, close);
     this._storageErrorBar = bar;
@@ -415,7 +415,7 @@ class App {
     close.type = 'button';
     close.className = 'storage-error__close';
     close.setAttribute('aria-label', 'Dismiss');
-    close.textContent = '×';
+    close.innerHTML = icon('x');
     close.addEventListener('click', () => bar.remove());
     bar.append(msg, close);
     this._historyErrorBar = bar;
@@ -995,29 +995,35 @@ class App {
   #commands() {
     const cur = this.currentId ? this.db.getNote(this.currentId) : null;
     const cmds = [
-      { id: 'new', title: 'New note', hint: 'Create', icon: '📝', run: () => this.newNote() },
+      { id: 'new', title: 'New note', hint: 'Create', icon: 'plus', run: () => this.newNote() },
       {
         id: 'today',
         title: 'Open Today’s Note',
         hint: 'Local Daily note · Ctrl/⌘ Shift D',
-        icon: '◫',
+        icon: 'calendar-days',
         run: () => this.openDailyNote(),
       },
       {
         id: 'capture',
         title: 'Quick Capture',
         hint: 'Text, URL, clipboard, image · Ctrl/⌘ Shift C',
-        icon: '↘',
+        icon: 'inbox',
         run: () => this.#showQuickCapture(),
       },
       {
         id: 'tasks',
         title: 'Open task dashboard',
         hint: 'Today, overdue, upcoming',
-        icon: '☑',
+        icon: 'square-check-big',
         run: () => this.#showTaskDashboard(),
       },
-      { id: 'calendar', title: 'Open calendar', hint: 'Month and week', icon: '▦', run: () => this.#showCalendar() },
+      {
+        id: 'calendar',
+        title: 'Open calendar',
+        hint: 'Month and week',
+        icon: 'calendar',
+        run: () => this.#showCalendar(),
+      },
       ...TEMPLATES.map((t) => ({
         id: 'tpl-' + t.id,
         title: `New ${t.label.toLowerCase()}`,
@@ -1025,89 +1031,101 @@ class App {
         icon: t.icon,
         run: () => this.newFromTemplate(t),
       })),
-      { id: 'search', title: 'Search notes', hint: 'Sidebar', icon: '🔍', run: () => this.#focusSearch() },
+      { id: 'search', title: 'Search notes', hint: 'Sidebar', icon: 'search', run: () => this.#focusSearch() },
       {
         id: 'back',
         title: 'Go back to previous note',
         hint: 'Navigation · Alt+Left',
-        icon: '←',
+        icon: 'arrow-left',
         run: () => this.goBack(),
       },
       {
         id: 'forward',
         title: 'Go forward to next note',
         hint: 'Navigation · Alt+Right',
-        icon: '→',
+        icon: 'arrow-right',
         run: () => this.goForward(),
       },
       {
         id: 'graph',
         title: this.view === 'graph' ? 'Close graph view' : 'Open graph view',
         hint: 'View',
-        icon: '🕸️',
+        icon: 'waypoints',
         run: () => this.toggleGraph(),
       },
       {
         id: 'theme',
         title: 'Toggle dark / light theme',
         hint: 'Appearance',
-        icon: '🌓',
+        icon: 'sun-moon',
         run: () => this.theme.toggle(),
       },
       {
         id: 'find',
         title: 'Find and replace in current note',
         hint: 'Source Markdown · Ctrl/⌘ F',
-        icon: '⌕',
+        icon: 'text-search',
         run: () => this.#showFindReplace('current'),
       },
       {
         id: 'find-vault',
         title: 'Find and replace across vault',
         hint: 'Preview required',
-        icon: '⌕',
+        icon: 'text-search',
         run: () => this.#showFindReplace('vault'),
       },
       {
         id: 'archive-view',
         title: 'Open Archive',
         hint: `${this.db.getArchived().length} archived`,
-        icon: '🗄',
+        icon: 'archive',
         run: () => this.#showArchive(),
       },
       {
         id: 'trash',
         title: 'Open Trash',
         hint: `${this.db.getTrash().length} in trash`,
-        icon: '🗑',
+        icon: 'trash-2',
         run: () => this.#showTrash(),
       },
-      { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.#showSettings() },
-      { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
+      {
+        id: 'settings',
+        title: 'Open settings',
+        hint: 'Preferences',
+        icon: 'settings',
+        run: () => this.#showSettings(),
+      },
+      { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: 'life-buoy', run: () => this.#showBackup() },
       {
         id: 'clipper',
         title: 'Set up web clipper',
         hint: 'Capture web pages',
-        icon: '✂',
+        icon: 'scissors',
         run: () => this.#showClipper(),
       },
       {
         id: 'reconcile',
         title: 'Reconcile Markdown folder',
         hint: 'Preview, backup, then apply',
-        icon: '⇄',
+        icon: 'folder-sync',
         run: () => this.#showReconciliation(),
       },
       {
         id: 'link-report',
         title: 'Open link integrity report',
         hint: 'Knowledge graph',
-        icon: '🔗',
+        icon: 'link',
         run: () => this.#showLinkReport(),
       },
-      { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
-      { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
-      { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
+      { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: 'download', run: () => this.#export() },
+      {
+        id: 'import',
+        title: 'Import notes from JSON',
+        hint: 'Data',
+        icon: 'upload',
+        run: () => this.el.importFile.click(),
+      },
+      { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: 'sparkles', run: () => this.#seed() },
       ...(this.savedSearches?.commands() || []),
     ];
     // Save-to-folder needs the File System Access API (Chromium) — only offer it there.
@@ -1116,7 +1134,7 @@ class App {
         id: 'save-folder',
         title: 'Save all notes to a folder…',
         hint: 'Markdown vault',
-        icon: '📁',
+        icon: 'folder',
         run: () => this.saveVaultToFolder(),
       });
     }
@@ -1125,28 +1143,28 @@ class App {
         id: 'properties',
         title: 'Edit note properties',
         hint: 'YAML frontmatter',
-        icon: '◇',
+        icon: 'sliders-horizontal',
         run: () => this.#showProperties(cur.id),
       });
       cmds.push({
         id: 'history',
         title: 'Open revision history',
         hint: cur.title,
-        icon: '↶',
+        icon: 'history',
         run: () => this.#showHistory(),
       });
       cmds.push({
         id: 'archive',
         title: 'Archive current note',
         hint: cur.title,
-        icon: '🗄',
+        icon: 'archive',
         run: () => this.#archiveCurrent(),
       });
       cmds.push({
         id: 'child',
         title: 'New sub-note under current',
         hint: cur.title,
-        icon: '↳',
+        icon: 'corner-down-right',
         run: () => this.newChild(cur.id),
       });
       if (cur.parentId)
@@ -1154,35 +1172,35 @@ class App {
           id: 'unnest',
           title: 'Move current note to top level',
           hint: cur.title,
-          icon: '↤',
+          icon: 'arrow-up-to-line',
           run: () => this.reparent(cur.id, null),
         });
       cmds.push({
         id: 'pin',
         title: cur.pinned ? 'Unpin current note' : 'Pin current note to top',
         hint: cur.title,
-        icon: '📌',
+        icon: 'pin',
         run: () => this.togglePin(cur.id),
       });
       cmds.push({
         id: 'export-html',
         title: 'Export note as HTML',
         hint: 'Shareable page',
-        icon: '🌐',
+        icon: 'globe',
         run: () => this.exportNoteHtml(cur),
       });
       cmds.push({
         id: 'export-md',
         title: 'Download note as Markdown',
         hint: 'Save .md',
-        icon: '⬇',
+        icon: 'file-down',
         run: () => this.downloadNoteMarkdown(cur),
       });
       cmds.push({
         id: 'del',
         title: 'Delete current note',
         hint: cur.title,
-        icon: '🗑',
+        icon: 'trash-2',
         run: () => this.deleteNote(cur.id),
       });
     }

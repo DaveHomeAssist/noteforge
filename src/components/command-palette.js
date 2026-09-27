@@ -7,6 +7,7 @@ import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 import { extractHeadings } from '../utils/headings.js';
 import './command-palette.css';
+import { icon, isIconName } from '../ui/icons.js';
 
 const RECENT_LIMIT = 6;
 const MAX_RESULTS = 50;
@@ -159,7 +160,7 @@ export class CommandPalette {
 
   #noteItem(note, positions, sub = null) {
     return {
-      icon: note.pinned ? '📌' : '📄',
+      icon: note.pinned ? 'pin' : 'file-text',
       labelHtml: fuzzyHighlight(note.title || 'Untitled', positions),
       sub: sub || (note.tags.length ? note.tags.map((t) => '#' + t).join(' ') : 'Note'),
       run: () => this.onOpenNote(note.id),
@@ -168,7 +169,7 @@ export class CommandPalette {
 
   #cmdItem(cmd, positions) {
     return {
-      icon: cmd.icon || '⚡',
+      icon: cmd.icon || 'zap',
       labelHtml: fuzzyHighlight(cmd.title, positions),
       sub: cmd.hint || 'Command',
       run: cmd.run,
@@ -197,7 +198,7 @@ export class CommandPalette {
       .map(
         (it, i) => `
         <button type="button" id="palette-opt-${i}" class="palette__item${i === this.active ? ' palette__item--active' : ''}" data-index="${i}" role="option" aria-selected="${i === this.active}">
-          <span class="palette__icon">${escapeHtml(it.icon)}</span>
+          <span class="palette__icon">${isIconName(it.icon) ? icon(it.icon) : escapeHtml(it.icon)}</span>
           <span class="palette__label">${it.labelHtml}</span>
           <span class="palette__sub">${escapeHtml(it.sub)}</span>
         </button>`,

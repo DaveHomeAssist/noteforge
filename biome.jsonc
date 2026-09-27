@@ -36,6 +36,7 @@
     // callbacks that the recommended rules reject.
     "includes": [
       "src/**",
+      "scripts/**",
       "vite.config.js",
       "playwright.config.mjs",
       "test/e2e/**",

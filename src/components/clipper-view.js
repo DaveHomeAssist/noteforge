@@ -1,6 +1,7 @@
 import './phase6.css';
 import { Modal } from './modal.js';
 import { buildClipperBookmarklet } from '../utils/clipper.js';
+import { icon } from '../ui/icons.js';
 
 export function createClipperElements(root = document.body) {
   const overlay = document.createElement('div');
@@ -9,7 +10,7 @@ export function createClipperElements(root = document.body) {
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
     <div class="modal__panel clipper-modal" role="dialog" aria-modal="true" aria-labelledby="clipper-title" tabindex="-1">
-      <header class="modal__header"><div><h2 class="modal__title" id="clipper-title">NoteForge web clipper</h2><p class="muted">Save this bookmark, then use it on a page you want to capture.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close web clipper">✕</button></header>
+      <header class="modal__header"><div><h2 class="modal__title" id="clipper-title">NoteForge web clipper</h2><p class="muted">Save this bookmark, then use it on a page you want to capture.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close web clipper">${icon('x')}</button></header>
       <div class="clipper-view">
         <ol><li>Drag <strong>Clip to NoteForge</strong> to your bookmarks bar.</li><li>Use it on any http or https page.</li><li>Review the text and destination in Quick Capture, then choose Save capture.</li></ol>
         <a class="btn btn--primary clipper-bookmarklet" draggable="true">Clip to NoteForge</a>

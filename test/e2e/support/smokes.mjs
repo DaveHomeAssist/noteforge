@@ -367,7 +367,8 @@ export async function runRecoverySmoke(browser, base, runtimeErrors) {
           stored: window.app.db.config.themeMode ?? null,
           mirror: localStorage.getItem('noteforge:theme'),
           labels: [...document.querySelectorAll('#theme-btn, #mobile-theme-btn')].map(
-            (b) => `${b.textContent}|${b.getAttribute('aria-label')}`,
+            (b) =>
+              `${b.querySelector('svg.icon use')?.getAttribute('href')?.split('#')[1]}|${b.getAttribute('aria-label')}`,
           ),
         };
       });
@@ -394,7 +395,7 @@ export async function runRecoverySmoke(browser, base, runtimeErrors) {
         dark.mirror === 'dark' &&
         dark.metaMatchesSurface &&
         dark.labels.length === 2 &&
-        dark.labels.every((label) => label === '☀️|Theme: dark'),
+        dark.labels.every((label) => label === 'i-sun|Theme: dark'),
     );
     await page.locator('#mobile-theme-btn').click();
     const back = await themeState();

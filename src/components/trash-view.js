@@ -6,6 +6,7 @@
 import { escapeHtml, truncate, formatDate } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 import { whenConfirmed } from '../utils/when-confirmed.js';
+import { icon } from '../ui/icons.js';
 
 // The in-app dialog loads only when a permanent delete needs confirming.
 const confirmDialog = async (options) => (await import('../ui/dialogs.js')).confirmDialog(options);
@@ -15,7 +16,7 @@ export function createTrashElements({ badge = document.getElementById('trash-bad
   overlay.className = 'modal';
   overlay.id = 'trash-overlay';
   overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Trash" tabindex="-1"><header class="modal__header"><h2 class="modal__title">🗑 Trash</h2><div class="modal__actions"><button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button><button class="btn btn--ghost" data-close title="Close">✕</button></div></header><div id="trash-list" class="trash-list"></div></div>`;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Trash" tabindex="-1"><header class="modal__header"><h2 class="modal__title">${icon('trash-2')} Trash</h2><div class="modal__actions"><button id="trash-empty" class="btn btn--danger-ghost">Empty trash</button><button class="btn btn--ghost" data-close title="Close" aria-label="Close Trash">${icon('x')}</button></div></header><div id="trash-list" class="trash-list"></div></div>`;
   root.appendChild(overlay);
   return { overlay, list: overlay.querySelector('#trash-list'), empty: overlay.querySelector('#trash-empty'), badge };
 }
