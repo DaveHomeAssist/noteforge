@@ -19,7 +19,7 @@
   import { TrashView } from '/src/components/trash-view.js';
   import { Modal } from '/src/components/modal.js';
   import { NoteList } from '/src/components/note-list.js';
-  import { CommandPalette } from '/src/components/command-palette.js';
+  import { CommandPalette, createCommandPaletteElements } from '/src/components/command-palette.js';
   import { SettingsView } from '/src/components/settings-view.js';
   import { Theme } from '/src/ui/theme.js';
   import { THEME_MIRROR_KEY } from '/src/ui/settings.js';
@@ -887,6 +887,36 @@
     typeInput(els.input, 'beta');
     els.list.querySelector('.palette__item').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('clicking a note item opens it', clickOpened !== null && els.overlay.hidden === true);
+  });
+
+  section('command palette v2: groups, key chips, heading icons, preview', () => {
+    const db = new Database();
+    db.createNote({ title: 'Alpha Notes', content: '---\ntags: [x]\n---\n# Heading One\n\n- [ ] local-first **task** with [[Beta Plan|beta]]' });
+    db.createNote({ title: 'Beta Plan', content: 'plain' });
+    const els = createCommandPaletteElements(scratch);
+    const cmds = [{ id: 'new', title: 'New note', hint: 'Create', keys: ['Ctrl/⌘', 'N'], icon: 'plus', run: () => {} }];
+    const cp = new CommandPalette(els, { getNotes: () => db.getAllNotes(), getCommands: () => cmds, onOpenNote: () => {} });
+    const groups = () => [...els.list.querySelectorAll('[role="group"]')].map((g) => document.getElementById(g.getAttribute('aria-labelledby'))?.textContent).join();
+    cp.show();
+    check('an empty palette groups Recent then Commands', groups() === 'Recent,Commands');
+    check('commands show their shortcut as key chips',
+      [...els.list.querySelectorAll('.palette__keys kbd')].map((k) => k.textContent).join(' ') === 'Ctrl/⌘ N');
+    typeInput(els.input, 'n');
+    check('a query groups notes and commands, best group first', groups() === 'Notes,Commands' || groups() === 'Commands,Notes');
+    check('option ids stay in visual order across groups',
+      [...els.list.querySelectorAll('[role="option"]')].every((o, i) => o.id === `palette-opt-${i}`));
+    typeInput(els.input, 'alpha');
+    const preview = els.preview.textContent;
+    check('the preview shows the active note as plain text',
+      /Alpha Notes/.test(preview) && /Heading One/.test(preview) && /local-first task with beta/.test(preview) && !/tags:|\*\*|\[\[|- \[ \]/.test(preview));
+    typeInput(els.input, '>');
+    check('the preview describes the active command', /New note/.test(els.preview.textContent) && !!els.preview.querySelector('kbd'));
+    typeInput(els.input, '#heading');
+    check('headings use heading icons and their own group',
+      groups() === 'Headings' && /#i-heading-1$/.test(els.list.querySelector('.palette__icon use')?.getAttribute('href') || ''));
+    check('a heading result previews its note', /Alpha Notes/.test(els.preview.textContent));
+    cp.close();
+    els.overlay.remove();
   });
 
   // ============ Round 2: sidebar sort + pin ============
