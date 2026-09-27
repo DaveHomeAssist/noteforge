@@ -13,6 +13,7 @@ import { registerServiceWorker } from './pwa.js';
 import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { icon } from '../ui/icons.js';
+import { moveMenuFocus } from '../ui/menu-nav.js';
 
 class App {
   constructor() {
@@ -474,28 +475,14 @@ class App {
     return [...this.el.menuDropdown.querySelectorAll('[role="menuitem"]:not(:disabled)')];
   }
 
-  // Arrows wrap, Home/End jump, a letter jumps to the next item starting with
-  // it, and Tab leaves the menu from its button.
+  // Roving focus comes from moveMenuFocus; Tab leaves the menu from its button.
   #onMenuKeydown(e) {
-    const items = this.#menuItems();
-    const index = items.indexOf(document.activeElement);
-    let next = null;
-    if (e.key === 'ArrowDown') next = items[(index + 1) % items.length];
-    else if (e.key === 'ArrowUp') next = items[index <= 0 ? items.length - 1 : index - 1];
-    else if (e.key === 'Home') next = items[0];
-    else if (e.key === 'End') next = items.at(-1);
-    else if (e.key === 'Tab') {
+    if (e.key === 'Tab') {
       this.#closeMenu();
       this.el.menuBtn.focus();
       return;
-    } else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const key = e.key.toLowerCase();
-      const rotated = [...items.slice(index + 1), ...items.slice(0, index + 1)];
-      next = rotated.find((item) => item.textContent.trim().toLowerCase().startsWith(key));
     }
-    if (!next) return;
-    e.preventDefault();
-    next.focus();
+    moveMenuFocus(e, this.#menuItems());
   }
 
   #closeMenu() {

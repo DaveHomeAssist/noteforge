@@ -9,9 +9,11 @@
 
 export const ICON_NAMES = [
   'archive',
+  'arrow-down',
   'arrow-left',
   'arrow-left-right',
   'arrow-right',
+  'arrow-up',
   'arrow-up-to-line',
   'calendar',
   'calendar-days',
@@ -23,6 +25,7 @@ export const ICON_NAMES = [
   'code',
   'columns-2',
   'command',
+  'copy',
   'corner-down-right',
   'download',
   'ellipsis',
@@ -60,6 +63,7 @@ export const ICON_NAMES = [
   'pilcrow',
   'pin',
   'plus',
+  'repeat',
   'rotate-ccw',
   'scissors',
   'search',

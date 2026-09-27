@@ -6,7 +6,7 @@ import { captureRuntimeErrors, devUrl, newAppContext, TIMEOUT } from './support/
 import { expect, test } from './support/test.mjs';
 
 // Raise when checks are added; a refactor that silently drops checks fails here.
-const CHECK_FLOOR = 450;
+const CHECK_FLOOR = 500;
 
 // Banner/image checks use these reserved hosts to exercise URL handling. Stub
 // them so the suite stays offline and expected image failures do not look like

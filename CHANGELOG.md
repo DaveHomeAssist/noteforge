@@ -19,6 +19,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The More actions menu is grouped into Create, Views, Knowledge, Data, and App, with separators and a shortcut hint for Today's note. It works from the keyboard: arrow keys, Home, End, and first letters move between items; Escape closes it and returns focus to its button.
 - The slash menu groups block types under Text, Lists, and Insert, with an icon for each. Screen readers hear it as a list of options controlled by the block being typed in, with the active option announced as it changes.
 - Alt+Shift+↑ and Alt+Shift+↓ move the current block up or down, keeping the caret; the move can be undone.
+- A block action menu opens from a block's drag handle or with Ctrl/⌘+/: Turn into…, Duplicate (without the block's link ID), Move up, Move down, and Delete, all keyboard-operable and undoable.
 - The command palette groups results under Recent, Notes, Commands, and Headings (the best match's group first), shows each command's keyboard shortcut as keys, and on screens 1024 px and wider previews the highlighted note or command beside the list.
 - On tablets (761–1023 px) the notes sidebar floats over the editor from the rail instead of squeezing it. It starts closed and closes after you pick a note, press Escape, or tap the editor; tablet toggles do not change the desktop collapse setting.
 
