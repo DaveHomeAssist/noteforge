@@ -14,7 +14,7 @@
 //   node test/bundle-budget.mjs            # check
 //   node test/bundle-budget.mjs --json     # machine-readable measurements
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -28,8 +28,20 @@ export function gzipBytes(buffer) {
   return gzipSync(buffer, { level: 9 }).length;
 }
 
-/** Resolve a route entry to its manifest key: exact key, else a dynamic entry whose chunk name is the file stem. */
+/**
+ * Resolve a route entry to its manifest key: `chunk:<name>` names a chunk the
+ * bundler groups by name (a vendor group); otherwise the exact key, else a
+ * dynamic entry whose chunk name is the file stem.
+ */
 export function resolveEntry(manifest, entry) {
+  if (entry.startsWith('chunk:')) {
+    const name = entry.slice('chunk:'.length);
+    const named = Object.keys(manifest).filter((key) => manifest[key].name === name);
+    if (named.length === 1) return named[0];
+    throw new Error(
+      `Route entry ${entry} is not in the build manifest${named.length ? ` (ambiguous: ${named.join(', ')})` : ''}`,
+    );
+  }
   if (manifest[entry]) return entry;
   const stem = entry
     .split('/')
@@ -78,6 +90,7 @@ export function measure({ dist = DIST, manifestPath = MANIFEST, budgetsPath = BU
   };
   const shellFiles = new Set(['index.html', ...closure(manifest, 'index.html')]);
   const results = [];
+  const merged = [];
   for (const [name, route] of Object.entries(routes)) {
     let files;
     if (route.all) {
@@ -86,7 +99,23 @@ export function measure({ dist = DIST, manifestPath = MANIFEST, budgetsPath = BU
       files = [...shellFiles];
     } else {
       const set = new Set();
-      for (const entry of route.entries) closure(manifest, resolveEntry(manifest, entry), set);
+      for (const entry of route.entries) {
+        let key;
+        try {
+          key = resolveEntry(manifest, entry);
+        } catch (error) {
+          // A module the bundler folded into another chunk (because something
+          // already loaded imports it statically) has no manifest entry of its
+          // own; its bytes are counted wherever it lives. A module that no
+          // longer exists is a stale route definition and fails the gate.
+          if (!entry.startsWith('chunk:') && existsSync(resolve(ROOT, entry))) {
+            merged.push(`${name}: ${entry}`);
+            continue;
+          }
+          throw error;
+        }
+        closure(manifest, key, set);
+      }
       files = [...set].filter((file) => !shellFiles.has(file));
     }
     files.sort();
@@ -103,6 +132,7 @@ export function measure({ dist = DIST, manifestPath = MANIFEST, budgetsPath = BU
       within: gzip <= route.gzipBudget,
     });
   }
+  results.merged = merged;
   return results;
 }
 
@@ -133,6 +163,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       );
     }
   }
+  if (results.merged.length)
+    console.log(`Folded into another chunk (counted where they live): ${results.merged.join('; ')}`);
   const over = results.filter((r) => !r.within);
   if (over.length) {
     console.error(
