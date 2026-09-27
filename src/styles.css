@@ -645,15 +645,19 @@ mark {
   .editor__document {
     display: contents;
   }
+  /* The measure rule's auto margins would center these grid items and shrink
+     them to their content: an empty note had a 41 px body. */
   .editor .editor__blocks {
     grid-column: 1;
     grid-row: 1 / span 4;
     max-width: none;
+    margin-inline: 0;
   }
   .editor .editor__meta {
     grid-column: 1;
     grid-row: 5;
     max-width: none;
+    margin-inline: 0;
   }
   .editor__outline {
     grid-column: 2;

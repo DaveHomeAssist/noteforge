@@ -30,6 +30,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The "Add banner" control no longer fades below AA contrast.
 - On phones the workspace toolbar fits on one row and the note title row keeps Properties, Pin, and Delete on screen.
 - The More actions menu scrolls instead of running past the bottom of short screens, and its shortcut hints align to the right edge.
+- In wide editors an empty note's body was 41 px wide and could not be clicked, and short notes were centered; the text column now fills its width.
 
 ## [1.2.0] - 2026-09-27
 
