@@ -506,7 +506,8 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.history = new HistoryView(createHistoryElements(), this.recovery, {
-      confirmRestore: ({ message }) => confirm(message),
+      confirmRestore: ({ message }) =>
+        this.confirm({ title: 'Restore this revision?', message, confirmLabel: 'Restore' }),
       onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
       onRestoreCopy: ({ note }) => this.openNote(note.id),
     });
@@ -520,7 +521,8 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.backup = new BackupView(createBackupElements(), this.recovery, {
-      confirmRestore: ({ message }) => confirm(message),
+      confirmRestore: ({ message }) =>
+        this.confirm({ title: 'Restore this backup?', message, confirmLabel: 'Restore' }),
       onRestored: () => this.#openFirstRestoredNote(),
     });
     return this.backup;
@@ -701,7 +703,8 @@ class App {
     this.findReplaceReady = Promise.all([import('../components/find-replace-view.js'), this.#ensureRecovery()])
       .then(([{ FindReplaceView, createFindReplaceElements }]) => {
         this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
-          confirmVaultApply: ({ message }) => confirm(message),
+          confirmVaultApply: ({ message }) =>
+            this.confirm({ title: 'Replace across the vault?', message, confirmLabel: 'Replace' }),
           onApplied: () => this.noteList.render(),
         });
         return this.findReplace;
@@ -750,6 +753,8 @@ class App {
           openNote: (id, options) => this.openNote(id, options),
           showStorageError: () => this.#showStorageError(),
           announce: (message) => this.#announce(message),
+          confirm: (options) => this.confirm(options),
+          toast: (message, options) => this.toast(message, options),
         });
         return this.phase4;
       })
@@ -821,6 +826,7 @@ class App {
           showQuickCapture: (options) => this.#showQuickCapture(options),
           showStorageError: () => this.#showStorageError(),
           announce: (message) => this.#announce(message),
+          confirm: (options) => this.confirm(options),
         });
         await this.phase6.ready;
         return this.phase6;
@@ -906,7 +912,8 @@ class App {
     this.bulkActionsReady = Promise.all([import('../components/bulk-actions-view.js'), this.#ensureRecovery()])
       .then(([{ BulkActionsView, createBulkActionElements }]) => {
         this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
-          confirmAction: ({ message }) => confirm(message),
+          confirmAction: ({ message }) =>
+            this.confirm({ title: 'Apply to the selected notes?', message, confirmLabel: 'Apply' }),
           onApplied: () => this.#syncCurrentAfterBatch(),
         });
         return this.bulkActions;
@@ -1201,11 +1208,14 @@ class App {
     this.openNote(note.id, { focus: 'content' });
   }
 
-  /** Move a note to the Trash (recoverable) and advance to the next note. */
+  /**
+   * Move a note to the Trash and advance to the next note. Trash is
+   * recoverable, so there is no confirmation: the notice offers Undo instead.
+   */
   deleteNote(id) {
     const note = this.db.getNote(id);
     if (!note) return;
-    if (!confirm(`Move "${note.title || 'Untitled'}" to Trash? You can restore it later.`)) return;
+    const title = note.title || 'Untitled';
     const wasCurrent = this.currentId === id;
     this.db.deleteNote(id); // soft-delete; the emit refreshes the (now empty) editor
     if (wasCurrent) {
@@ -1213,6 +1223,25 @@ class App {
       if (next) this.openNote(next.id);
       else this.currentId = null;
     }
+    this.toast(`Moved “${title}” to Trash.`, {
+      action: {
+        label: 'Undo',
+        run: () => {
+          if (this.db.restoreNote(id)) this.openNote(id);
+        },
+      },
+    });
+  }
+
+  /** In-app confirmation (lazily loaded src/ui/dialogs.js); resolves true or false. */
+  async confirm(options) {
+    const { confirmDialog } = await import('../ui/dialogs.js');
+    return confirmDialog(options);
+  }
+
+  /** Non-blocking notice (lazily loaded src/ui/dialogs.js). */
+  toast(message, options) {
+    void import('../ui/dialogs.js').then(({ toast }) => toast(message, options));
   }
 
   async #archiveCurrent() {
@@ -1332,7 +1361,9 @@ class App {
   /** Save the whole (live) vault to a chosen folder as Obsidian-compatible .md files. */
   async saveVaultToFolder() {
     if (!window.showDirectoryPicker) {
-      alert('Saving to a folder needs a Chromium-based browser (Chrome/Edge). Use Export JSON instead.');
+      this.toast('Saving to a folder needs a Chromium-based browser (Chrome or Edge). Use Export JSON instead.', {
+        tone: 'error',
+      });
       return;
     }
     let dir;
@@ -1346,10 +1377,14 @@ class App {
       this.editor?.flushPending();
       const written = await saveVaultToFolder(dir, this.db);
       if (!(await this.db.flushCurrentWrites())) this.#showStorageError();
-      alert(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`);
+      this.toast(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`, {
+        tone: 'success',
+      });
     } catch (err) {
       console.warn('[vault] save failed:', err);
-      alert("Couldn't finish saving to that folder. Check the folder's write permission and try again.");
+      this.toast("Couldn't finish saving to that folder. Check the folder's write permission and try again.", {
+        tone: 'error',
+      });
     }
   }
 
@@ -1398,15 +1433,16 @@ class App {
       const tools = await this.#ensureLinkTools();
       const report = tools.integrityReport();
       if (report.healthy) {
-        alert(`Imported ${imported} note${imported === 1 ? '' : 's'}.`);
+        this.toast(`Imported ${imported} note${imported === 1 ? '' : 's'}.`, { tone: 'success' });
       } else {
-        alert(
+        this.toast(
           `Imported ${imported} note${imported === 1 ? '' : 's'}. ${report.ambiguities.length} ambiguous title or alias group${report.ambiguities.length === 1 ? '' : 's'} need repair; NoteForge will never guess those link targets.`,
+          { duration: 10_000 },
         );
         tools.showReport();
       }
     } catch (err) {
-      alert(`Import failed: ${err.message}`);
+      this.toast(`Import failed: ${err.message}`, { tone: 'error' });
     } finally {
       event.target.value = ''; // allow re-importing the same file
     }

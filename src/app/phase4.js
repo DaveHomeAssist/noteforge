@@ -23,12 +23,14 @@ export function editorTaskOccurrence(content, reference) {
 }
 
 export class Phase4Controller {
-  constructor({ db, editor, openNote, showStorageError, announce }) {
+  constructor({ db, editor, openNote, showStorageError, announce, confirm, toast }) {
     this.db = db;
     this.editor = editor;
     this.openNote = openNote;
     this.showStorageError = showStorageError;
     this.announce = announce;
+    this.confirm = confirm;
+    this.toast = toast;
     this.quickCapture = null;
     this.quickCaptureReady = null;
     this.taskDashboard = null;
@@ -57,13 +59,23 @@ export class Phase4Controller {
         return resolution.note;
       }
       if (resolution.status === 'ambiguous') {
-        alert(`More than one note is titled ${dateKey}. Resolve the duplicate titles before opening the Daily note.`);
+        this.toast(
+          `More than one note is titled ${dateKey}. Resolve the duplicate titles before opening the Daily note.`,
+          {
+            tone: 'error',
+          },
+        );
         return null;
       }
       if (resolution.status === 'trashed' || resolution.status === 'archived') {
         const archived = resolution.status === 'archived';
         const verb = archived ? 'Unarchive' : 'Restore';
-        if (!confirm(`“${dateKey}” is ${archived ? 'archived' : 'in Trash'}. ${verb} and open it?`)) {
+        const approved = await this.confirm({
+          title: `${verb} the Daily note?`,
+          message: `“${dateKey}” is ${archived ? 'archived' : 'in Trash'}. ${verb} and open it?`,
+          confirmLabel: `${verb} and open`,
+        });
+        if (!approved) {
           this.announce(`Daily note ${verb.toLowerCase()} cancelled.`);
           return null;
         }
@@ -85,7 +97,7 @@ export class Phase4Controller {
       this.announce(`Created Daily note ${dateKey}.`);
       return note;
     } catch (error) {
-      alert(error?.message || String(error));
+      this.toast(error?.message || String(error), { tone: 'error' });
       return null;
     }
   }

@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { captureRuntimeErrors, newAppContext, TIMEOUT } from './runtime.mjs';
+import { captureRuntimeErrors, confirmAll, confirmNext, newAppContext, TIMEOUT } from './runtime.mjs';
 
 export async function warmLazyAppModules(browser, base) {
   const context = await newAppContext(browser);
@@ -252,7 +252,7 @@ export async function runRecoverySmoke(browser, base, runtimeErrors) {
         /Showing revision from/i.test(document.querySelector('#history-status')?.textContent || '')
       );
     }, targetRevisionId);
-    page.once('dialog', (dialog) => dialog.accept());
+    await confirmNext(page, 'accept');
     await page.locator('#history-restore').click();
     await page.waitForFunction(() =>
       window.app.db.getNote(window.app.currentId)?.content.includes('Typed during lazy History initialization'),
@@ -329,7 +329,7 @@ export async function runRecoverySmoke(browser, base, runtimeErrors) {
       /No data has been changed/i.test(await page.locator('#backup-preview').innerText()),
     );
     stage = 'confirming and applying the portable restore';
-    page.once('dialog', (dialog) => dialog.accept());
+    await confirmNext(page, 'accept');
     const [safetyDownload] = await Promise.all([
       page.waitForEvent('download'),
       page.locator('#backup-restore').click(),
@@ -609,7 +609,6 @@ export async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
     );
 
     stage = 'importing an ambiguous alias for repair reporting';
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('#import-file').setInputFiles({
       name: 'phase2-alias-import.json',
       mimeType: 'application/json',
@@ -764,7 +763,7 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
         /2 skipped/.test(previewText) &&
         (await page.evaluate(() => window.app.db.getNote('phase3-vault')?.content === 'needle needle')),
     );
-    page.once('dialog', (dialog) => dialog.accept());
+    await confirmNext(page, 'accept');
     await page.locator('[data-find-apply]').click();
     await page.waitForFunction(() =>
       /0 failed/.test(document.querySelector('.find-replace__status')?.textContent || ''),
@@ -837,7 +836,6 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
     );
 
     stage = 'importing archived hierarchy';
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('#import-file').setInputFiles({
       name: 'phase3-archive-import.json',
       mimeType: 'application/json',
@@ -893,7 +891,7 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
     await page.locator('.note-item[data-id="phase3-batch-a"] [data-select]').click();
     await page.locator('.note-item[data-id="phase3-batch-b"] [data-select]').click();
     await page.locator('.bulk-actions').waitFor({ state: 'visible' });
-    page.once('dialog', (dialog) => dialog.accept());
+    await confirmNext(page, 'accept');
     await page.locator('[data-bulk-action="trash"]').click();
     await page.waitForFunction(
       () => !window.app.db.getNote('phase3-batch-a') && !window.app.db.getNote('phase3-batch-b'),
@@ -1128,7 +1126,14 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
       ),
     );
     await openMenuAction('#today-btn');
-    await page.waitForFunction((id) => window.app.currentId === id, firstDailyId);
+    // The note is already current, so also wait for this invocation to finish:
+    // trashing the note while it is still resolving would make it prompt.
+    await page.waitForFunction(
+      (id) =>
+        window.app.currentId === id &&
+        /Opened Daily note/.test(document.querySelector('#app-status')?.textContent || ''),
+      firstDailyId,
+    );
     check(
       'repeated Today invocation reopens one live note without duplication',
       await page.evaluate(
@@ -1142,16 +1147,14 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
       window.app.db.deleteNote(id);
       await window.app.db.flush();
     }, firstDailyId);
-    let dailyDialogChoice = 'dismiss';
-    const handleDailyDialog = (dialog) => (dailyDialogChoice === 'accept' ? dialog.accept() : dialog.dismiss());
-    page.on('dialog', handleDailyDialog);
+    await confirmNext(page, 'dismiss');
     await openMenuAction('#today-btn');
     await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#app-status')?.textContent || ''));
     check(
       'trashed Today requires an explicit restore choice and cancellation leaves it in Trash',
       await page.evaluate((id) => Boolean(window.app.db.notes.get(id)?.isTrashed), firstDailyId),
     );
-    dailyDialogChoice = 'accept';
+    await confirmNext(page, 'accept');
     await openMenuAction('#today-btn');
     await page.waitForFunction(
       (id) =>
@@ -1160,7 +1163,6 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
         /Restored and opened/.test(document.querySelector('#app-status')?.textContent || ''),
       firstDailyId,
     );
-    page.off('dialog', handleDailyDialog);
     check(
       'confirmed Today restore reuses the original note ID and announces completion',
       await page.evaluate(
@@ -1779,7 +1781,7 @@ export async function runPhase6Smoke(browser, base, runtimeErrors) {
       },
     });
   });
-  page.on('dialog', (dialog) => dialog.accept());
+  await confirmAll(page, 'accept');
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
   const check = (name, condition) => {
@@ -2076,7 +2078,7 @@ export async function runPhase6Smoke(browser, base, runtimeErrors) {
 export async function runPhase7Smoke(browser, base, runtimeErrors) {
   const context = await newAppContext(browser, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const page = await context.newPage();
-  page.on('dialog', (dialog) => dialog.accept());
+  await confirmAll(page, 'accept');
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
   const check = (name, condition) => {

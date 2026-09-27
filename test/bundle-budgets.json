@@ -93,6 +93,13 @@
       ],
       "gzipBudget": 5120
     },
+    "dialogs": {
+      "description": "In-app confirm dialog and toasts (src/ui/dialogs.js), loaded on first use.",
+      "entries": [
+        "src/ui/dialogs.js"
+      ],
+      "gzipBudget": 4096
+    },
     "precache": {
       "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
       "all": true,

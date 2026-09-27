@@ -12,8 +12,8 @@
       "vite.config.js",
       "biome.jsonc",
       "test/**/*.mjs",
-      "!test/golden/render/**",
-      "!test/golden/blocks/**",
+      "!test/golden/render",
+      "!test/golden/blocks",
       "!test/fixtures/**/*.json"
     ]
   },

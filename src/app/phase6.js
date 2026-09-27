@@ -14,7 +14,9 @@ export class Phase6Controller {
     showQuickCapture,
     showStorageError,
     announce,
+    confirm,
   }) {
+    this.confirm = confirm;
     this.db = db;
     this.primaryEditor = primaryEditor;
     this.primaryElement = primaryElement;
@@ -106,7 +108,8 @@ export class Phase6Controller {
       .then(([{ ReconciliationView, createReconciliationElements }, { ReconciliationService }, recovery]) => {
         const service = new ReconciliationService({ db: this.db, recovery });
         this.reconciliation = new ReconciliationView(createReconciliationElements(), this.db, service, {
-          confirmApply: ({ message }) => confirm(message),
+          confirmApply: ({ message }) =>
+            this.confirm({ title: 'Apply the folder changes?', message, confirmLabel: 'Apply' }),
           onApplied: (report) =>
             this.workspace.syncAuthoritative(
               report.items.filter((item) => item.decision === 'apply').map((item) => item.noteId),

@@ -177,14 +177,14 @@ export class ReconciliationView {
 
   async #apply() {
     const decisions = Object.fromEntries([...this.decisions].filter(([, value]) => value));
-    if (
-      typeof this.confirmApply !== 'function' ||
-      this.confirmApply({
+    const approved =
+      typeof this.confirmApply === 'function' &&
+      (await this.confirmApply({
         message:
           'Apply the selected folder changes? NoteForge will first download a verified portable backup, capture pre-change revisions, re-check every source file, and delete nothing.',
         plan: this.plan,
-      }) !== true
-    ) {
+      }));
+    if (approved !== true) {
       this.els.status.textContent = 'Folder reconciliation cancelled. No data was changed.';
       return;
     }

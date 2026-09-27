@@ -46,6 +46,7 @@ over. CI runs it after every build on Node 22 and 24.
 | properties | properties view, YAML parser | 43,344 B | 48,128 B |
 | workspace | tabs and panes, clipper, folder reconciliation | 24,665 B | 27,648 B |
 | settings | settings, Trash | 4,193 B | 5,120 B |
+| dialogs | in-app confirm dialog and toasts, on first use | 3,001 B | 4,096 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
 ### Measurements
@@ -70,6 +71,7 @@ paint belongs in a lazy route, with its CSS loaded alongside it.
 | Date | Route | Old | New | Cause | Approved |
 | --- | --- | ---: | ---: | --- | --- |
 | 2026-09-27 | all | raw 257,180 B shell ceiling | table above | Policy v2 replaces the raw initial-shell ceiling (roadmap Phase 0) | Dave (roadmap Phase 0, "execute the next phase", 2026-09-26) |
+| 2026-09-27 | dialogs (new) | none | 4,096 B | New lazy route for src/ui/dialogs.js (Phase 1 in-app confirm and toasts); measured 3,001 B + 10% | Phase 1 go (2026-09-26) |
 
 ## Build budget history (policy v1, raw initial-shell ceiling, until 2026-09-26)
 
