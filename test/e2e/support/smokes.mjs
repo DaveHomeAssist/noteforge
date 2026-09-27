@@ -8,6 +8,13 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { captureRuntimeErrors, confirmAll, confirmNext, newAppContext, TIMEOUT } from './runtime.mjs';
 
+// The open phone sidebar covers most of the backdrop, including its center,
+// where a plain click lands. Click the strip the backdrop leaves exposed.
+async function clickSidebarBackdrop(page) {
+  const box = await page.locator('#sidebar-backdrop').boundingBox();
+  await page.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+}
+
 export async function warmLazyAppModules(browser, base) {
   const context = await newAppContext(browser);
   const page = await context.newPage();
@@ -1044,7 +1051,7 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
   // sidebar's backdrop would cover it.
   const closeSidebar = async () => {
     if (await page.evaluate(() => document.querySelector('#app')?.classList.contains('sidebar-open'))) {
-      await page.locator('#sidebar-backdrop').click();
+      await clickSidebarBackdrop(page);
       await page.waitForFunction(() => !document.querySelector('#app')?.classList.contains('sidebar-open'));
     }
   };
@@ -1667,7 +1674,7 @@ export async function runPhase5Smoke(browser, base, runtimeErrors) {
     );
 
     stage = 'copying and following block links';
-    await page.locator('#sidebar-backdrop').click();
+    await clickSidebarBackdrop(page);
     await page.locator('.blk-copy-link').click();
     await page.waitForFunction(
       () =>

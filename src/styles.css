@@ -583,6 +583,91 @@ mark {
   flex: 1;
   overflow-y: auto;
   padding: 26px clamp(20px, 6vw, 72px);
+  /* Each editor (including the second workspace pane) lays out by its own
+     width, not the viewport's. */
+  container: editor / inline-size;
+  --context-w: 300px;
+  --context-gap: 48px;
+}
+
+/* Narrow editors: one column, outline above the text, backlinks and mentions
+   after it. */
+.editor__workspace {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--editor-measure);
+  margin-inline: auto;
+}
+.editor__document {
+  min-width: 0;
+}
+.editor__outline {
+  order: -1;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.editor__outline:empty {
+  display: none;
+}
+
+/* Wide editors: the document keeps its measure and a context column holds the
+   outline, backlinks, and unlinked mentions (DOM and reading order unchanged).
+   The title row and tags span both columns. */
+@container editor (min-width: 900px) {
+  .editor__workspace {
+    display: grid;
+    grid-template-columns: minmax(0, var(--editor-measure)) var(--context-w);
+    grid-template-rows: auto auto auto 1fr auto;
+    column-gap: var(--context-gap);
+    align-items: start;
+    max-width: calc(var(--editor-measure) + var(--context-w) + var(--context-gap));
+  }
+  .editor__document {
+    display: contents;
+  }
+  .editor .editor__blocks {
+    grid-column: 1;
+    grid-row: 1 / span 4;
+    max-width: none;
+  }
+  .editor .editor__meta {
+    grid-column: 1;
+    grid-row: 5;
+    max-width: none;
+  }
+  .editor__outline {
+    grid-column: 2;
+    grid-row: 1;
+    margin-bottom: 20px;
+  }
+  .editor__workspace .backlinks,
+  .editor__workspace .mentions {
+    grid-column: 2;
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+  .editor__workspace .backlinks {
+    grid-row: 2;
+    margin-top: 0;
+  }
+  .editor__workspace .mentions {
+    grid-row: 3;
+  }
+  .editor .editor__bar,
+  .editor .editor__tags,
+  .editor .editor__breadcrumb {
+    max-width: calc(var(--editor-measure) + var(--context-w) + var(--context-gap));
+  }
+  html[data-width="full"] .editor__workspace {
+    grid-template-columns: minmax(0, 1fr) var(--context-w);
+    max-width: none;
+  }
+  html[data-width="full"] .editor .editor__bar,
+  html[data-width="full"] .editor .editor__tags,
+  html[data-width="full"] .editor .editor__breadcrumb {
+    max-width: none;
+  }
 }
 
 /* --- banner (note cover) -------------------------------------------------- */

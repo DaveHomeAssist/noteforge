@@ -119,3 +119,39 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
     await context.close();
   }
 });
+
+async function contextBeside(page, root = page) {
+  const blocks = await root.locator('.editor__blocks').first().boundingBox();
+  const backlinks = await root.locator('.backlinks').first().boundingBox();
+  return { beside: backlinks.x >= blocks.x + blocks.width, below: backlinks.y >= blocks.y + blocks.height - 1 };
+}
+
+test('wide editors put outline, backlinks, and mentions in a context column; narrow ones stack them', async ({
+  browser,
+  runtimeErrors,
+}) => {
+  let { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  try {
+    const wide = await contextBeside(page);
+    expect(wide.beside, 'backlinks sit beside the text at 1440 px').toBe(true);
+    const outline = await page.locator('.editor__outline').boundingBox();
+    const backlinks = await page.locator('.backlinks').boundingBox();
+    expect(Math.abs(outline.x - backlinks.x), 'outline and backlinks share the context column').toBeLessThan(2);
+    const mentions = await page.locator('.mentions').boundingBox();
+    expect(Math.abs(mentions.width - backlinks.width), 'mentions fill the column like backlinks').toBeLessThan(2);
+
+    await page.getByRole('button', { name: 'Split view' }).click();
+    await expect(page.locator('.workspace--split')).toBeVisible();
+    const split = await contextBeside(page, page.locator('.workspace__pane[data-pane="primary"]'));
+    expect(split.below, 'a half-width pane stacks its context under the text').toBe(true);
+  } finally {
+    await context.close();
+  }
+  ({ context, page } = await openSurface(browser, { viewport: 390, runtimeErrors }));
+  try {
+    const narrow = await contextBeside(page);
+    expect(narrow.below, 'phones stack backlinks under the text').toBe(true);
+  } finally {
+    await context.close();
+  }
+});
