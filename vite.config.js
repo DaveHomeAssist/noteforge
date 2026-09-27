@@ -213,6 +213,22 @@ export default defineConfig(({ command, isPreview }) => ({
     // No inline modulepreload polyfill, so the production CSP stays at
     // `script-src 'self'` plus one hash (no 'unsafe-inline'). es2020 targets support it.
     modulePreload: { polyfill: false },
+    // Rolldown (Vite 8) otherwise inlines its small namespace-export helper into
+    // the first chunk that needs it, which was the lazy YAML parser, so every
+    // chunk using the helper (local-date, hence the Daily route) statically
+    // imported 103 KB of YAML. The runtime gets its own chunk, which Rolldown
+    // honours only while YAML is its own named group; the budget routes name
+    // that chunk as `chunk:yaml-vendor` (test/bundle-budgets.json).
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'rolldown-runtime', test: /rolldown\/runtime/, priority: 10 },
+            { name: 'yaml-vendor', test: /node_modules[\\/]yaml[\\/]/ },
+          ],
+        },
+      },
+    },
     // Moved to build-meta/manifest.json by buildMetaPlugin (per-route budgets).
     manifest: true,
   },

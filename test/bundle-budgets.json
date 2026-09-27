@@ -69,7 +69,7 @@
       "entries": [
         "src/app/phase5.js",
         "src/components/properties-view.js",
-        "node_modules/yaml/browser/index.js"
+        "chunk:yaml-vendor"
       ],
       "gzipBudget": 48128
     },
