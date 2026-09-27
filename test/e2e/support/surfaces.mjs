@@ -89,6 +89,37 @@ export const SURFACES = {
   },
 };
 
+// The app paints first and then initializes recovery, the knowledge index,
+// navigation, saved views, properties, and the workspace tab bar on idle
+// callbacks. Scans and screenshots wait for all of them, or they race the
+// workspace UI appearing (it adds buttons and a tablist).
+async function settle(page) {
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        window.app?.recovery &&
+          window.app?.navigationReady &&
+          window.app?.savedSearchesReady &&
+          window.app?.phase5Ready &&
+          window.app?.phase6Ready,
+      ),
+    undefined,
+    { timeout: TIMEOUT },
+  );
+  await page.evaluate(() =>
+    Promise.all([
+      window.app.recoveryReady,
+      window.app.navigationReady,
+      window.app.savedSearchesReady,
+      window.app.phase5Ready,
+      window.app.phase6Ready,
+      window.app.db.initializeKnowledgeIndex(),
+      window.app.editor.enableOutline(),
+    ]),
+  );
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /**
  * Boot the production app on a fresh profile at `viewport`, switch to `theme`,
  * and navigate to `surface`. Returns the context (close it) and the page.
@@ -101,6 +132,7 @@ export async function openSurface(browser, { viewport, theme = 'light', surface 
   await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
   await page.evaluate(() => window.app.ready);
   await page.locator('.note-item').first().waitFor({ state: 'visible', timeout: TIMEOUT });
+  await settle(page);
   if (theme === 'dark') {
     await page.locator('#theme-btn:visible, #mobile-theme-btn:visible').first().click();
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');

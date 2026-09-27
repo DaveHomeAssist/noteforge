@@ -7,7 +7,7 @@
     "wcag21aa",
     "wcag22aa"
   ],
-  "totalViolatingNodes": 84,
+  "totalViolatingNodes": 85,
   "surfaces": {
     "archive@1440/dark": {
       "aria-required-children": 1
@@ -90,7 +90,8 @@
       "target-size": 2
     },
     "shell@390/dark": {
-      "aria-required-children": 1
+      "aria-required-children": 1,
+      "color-contrast": 1
     },
     "shell@390/light": {
       "aria-required-children": 1,
