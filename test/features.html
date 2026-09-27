@@ -166,6 +166,52 @@
       !blk.hasAttribute('role') && !blk.hasAttribute('aria-controls') && !blk.hasAttribute('aria-activedescendant'));
   });
 
+  // ============ block action menu (gutter handle, Ctrl/⌘+/) ============
+  section('block action menu', () => {
+    const be = mkBE('one\n\ntwo ^keep\n\nthree');
+    const handleOf = (i) => be.host.querySelectorAll('.blk-row')[i].querySelector('.blk-handle');
+    const menu = () => document.querySelector('.blk-actions');
+    const labels = () => [...menu().querySelectorAll('[role="menuitem"]')].map((b) => b.querySelector('span').textContent + (b.disabled ? ' (off)' : ''));
+    handleOf(0).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('the handle opens a labelled block action menu',
+      menu()?.getAttribute('role') === 'menu' && menu().getAttribute('aria-label') === 'Block actions');
+    check('actions list turn into, duplicate, moves, and delete; Move up is off on the first block',
+      labels().join('|') === 'Turn into…|Duplicate|Move up (off)|Move down|Delete');
+    check('focus starts on the first action', document.activeElement?.dataset.action === 'turn-into');
+    menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    check('ArrowDown moves to the next action', document.activeElement?.dataset.action === 'duplicate');
+    menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    check('disabled actions are skipped', document.activeElement?.dataset.action === 'move-down');
+    menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    check('Escape closes the menu and returns to the block', !menu() && document.activeElement?.closest('.blk-row') === be.host.querySelector('.blk-row'));
+
+    handleOf(1).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    menu().querySelector('[data-action="duplicate"]').click();
+    check('Duplicate copies the block without its ^block-id', be.serialize() === 'one\n\ntwo ^keep\n\ntwo\n\nthree' && !menu());
+    handleOf(2).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    menu().querySelector('[data-action="move-down"]').click();
+    check('Move down swaps the block with the next one', be.serialize() === 'one\n\ntwo ^keep\n\nthree\n\ntwo');
+    handleOf(3).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    menu().querySelector('[data-action="delete"]').click();
+    check('Delete removes the block', be.serialize() === 'one\n\ntwo ^keep\n\nthree');
+    key(document.activeElement, 'z', { ctrlKey: true });
+    check('an action is undoable', be.serialize() === 'one\n\ntwo ^keep\n\nthree\n\ntwo');
+
+    const first = be.host.querySelector('.blk');
+    setCaretEnd(first);
+    key(first, '/', { ctrlKey: true });
+    check('Ctrl+/ opens the menu for the current block', !!menu() && document.activeElement?.dataset.action === 'turn-into');
+    menu().querySelector('[data-action="turn-into"]').click();
+    check('Turn into opens the slash menu on that block', !menu() && !!document.querySelector('.blk-menu'));
+    key(document.activeElement, 'Escape');
+
+    const table = mkBE('a\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
+    table.host.querySelector('.blk-row[data-type="table"] .blk-handle').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    check('a table has no Turn into action', !!menu() && !menu().querySelector('[data-action="turn-into"]'));
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    check('a press outside closes the menu', !menu());
+  });
+
   // ============ Alt+Shift+Arrow moves a block ============
   section('keyboard block moves', () => {
     const status = document.createElement('span');

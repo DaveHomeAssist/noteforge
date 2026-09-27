@@ -121,6 +121,12 @@ export const SURFACES = {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await visible(page, '.blk-menu [role="option"]');
   },
+  // The block action menu, opened from the keyboard on the first block.
+  'block-actions': async (page) => {
+    await page.locator('.editor__blocks .blk:visible').first().click();
+    await page.keyboard.press('Control+/');
+    await visible(page, '.blk-actions [role="menuitem"]');
+  },
   // A notice with an action, as after moving a note to Trash.
   toast: async (page) => {
     await page.evaluate(() => window.app.toast('Moved “Welcome” to Trash.', { action: { label: 'Undo', run() {} } }));

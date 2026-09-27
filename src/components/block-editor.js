@@ -14,6 +14,7 @@ import { fileToBannerDataURL } from '../utils/image.js';
 import { nextHeadingAnchor } from '../utils/headings.js';
 import { splitFrontmatterSource } from '../utils/frontmatter-boundary.js';
 import { icon } from '../ui/icons.js';
+import { moveMenuFocus } from '../ui/menu-nav.js';
 
 const MULTILINE = new Set(['code', 'raw']); // edited as plain multi-line text
 const NONTEXT = new Set(['divider', 'date', 'image']); // not text-editable: select & delete
@@ -274,6 +275,7 @@ export class BlockEditor {
   }
 
   setMarkdown(md) {
+    this.#closeBlockActions();
     this.#loadSource(md || '');
     this.baseline = this.#clone(this.blocks);
     this.undoStack = [];
@@ -416,6 +418,7 @@ export class BlockEditor {
     this.imageBusy = false;
     this.#cleanupImagePicker();
     this.#closeMenu();
+    this.#closeBlockActions();
     window.removeEventListener('resize', this.__onWinChange, true);
     window.removeEventListener('scroll', this.__onWinChange, true);
   }
@@ -902,8 +905,10 @@ export class BlockEditor {
     // Close menus when the window shifts under them — but NOT when the scroll
     // happens inside the menu itself (that would break scrolling a long menu).
     this.__onWinChange = (e) => {
-      if (e && e.type === 'scroll' && this.menu?.el.contains(e.target)) return;
+      if (e && e.type === 'scroll' && (this.menu?.el.contains(e.target) || this.blockActions?.el.contains(e.target)))
+        return;
       this.#closeMenu();
+      this.#closeBlockActions();
     };
     window.addEventListener('resize', this.__onWinChange, true);
     window.addEventListener('scroll', this.__onWinChange, true);
@@ -1078,6 +1083,17 @@ export class BlockEditor {
     if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
       e.preventDefault();
       this.#redo();
+      return;
+    }
+
+    // Ctrl/⌘+/ opens the block action menu for the current or selected block.
+    if (mod && e.key === '/') {
+      const current = e.target.closest?.('.blk[contenteditable="true"]');
+      const block = this.#byId(current ? current.closest('.blk-row').dataset.id : this.selectedId);
+      if (!block) return;
+      e.preventDefault();
+      if (current) this.#commit(block, current);
+      this.#openBlockActions(block);
       return;
     }
 
@@ -1416,13 +1432,8 @@ export class BlockEditor {
     if (handle) {
       const row = handle.closest('.blk-row');
       const block = this.#byId(row.dataset.id);
-      if (NONTEXT.has(block.type) || block.type === 'table') {
-        this.#focusBlock(block.id); // selects it (non-text / table)
-        return;
-      }
-      const content = this.#contentEl(block.id);
-      this.#focusBlock(block.id, 'end');
-      this.#openMenu('slash', block, content, null); // "turn into"
+      if (NONTEXT.has(block.type) || block.type === 'table') this.#focusBlock(block.id); // selects it
+      this.#openBlockActions(block);
       return;
     }
   }
@@ -1718,6 +1729,107 @@ export class BlockEditor {
       if (typeof spec.text === 'string') block.text = spec.text; // callout / table scaffold
       this.#rerenderRowShell(block);
       this.#focusBlock(block.id, spec.text ? 'end' : 'start');
+    }
+    this.#snapshot();
+    this.onChange();
+  }
+
+  // === block action menu (gutter handle, Ctrl/⌘+/) ==========================
+
+  #openBlockActions(block) {
+    this.#closeMenu();
+    this.#closeBlockActions();
+    const row = this.#rowEl(block.id);
+    if (!row) return;
+    const index = this.#indexOf(block.id);
+    const actions = [
+      !NONTEXT.has(block.type) && block.type !== 'table' && { id: 'turn-into', icon: 'repeat', label: 'Turn into…' },
+      { id: 'duplicate', icon: 'copy', label: 'Duplicate' },
+      { id: 'move-up', icon: 'arrow-up', label: 'Move up', hint: 'Alt Shift ↑', disabled: index === 0 },
+      {
+        id: 'move-down',
+        icon: 'arrow-down',
+        label: 'Move down',
+        hint: 'Alt Shift ↓',
+        disabled: index === this.blocks.length - 1,
+      },
+      { id: 'delete', icon: 'trash-2', label: 'Delete', danger: true },
+    ].filter(Boolean);
+    const box = el('div', 'blk-actions');
+    box.setAttribute('role', 'menu');
+    box.setAttribute('aria-label', 'Block actions');
+    box.innerHTML = actions
+      .map(
+        (a) =>
+          `<button type="button" class="blk-actions__item${a.danger ? ' blk-actions__item--danger' : ''}" role="menuitem" tabindex="-1" data-action="${a.id}"${a.disabled ? ' disabled' : ''}>${icon(a.icon)}<span>${a.label}</span>${a.hint ? `<span class="menu__hint">${a.hint}</span>` : ''}</button>`,
+      )
+      .join('');
+    document.body.appendChild(box);
+    const anchor = (row.querySelector('.blk-handle') || row).getBoundingClientRect();
+    box.style.left = `${Math.round(Math.max(8, Math.min(anchor.right + 4, window.innerWidth - box.offsetWidth - 8)))}px`;
+    box.style.top = `${Math.round(Math.max(8, Math.min(anchor.top, window.innerHeight - box.offsetHeight - 8)))}px`;
+    const items = () => [...box.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.#closeBlockActions();
+        this.#focusBlock(block.id, 'end');
+        return;
+      }
+      moveMenuFocus(e, items());
+    });
+    box.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-action]');
+      if (item && !item.disabled) this.#runBlockAction(item.dataset.action, block.id);
+    });
+    const outside = (e) => {
+      if (!box.contains(e.target)) this.#closeBlockActions();
+    };
+    document.addEventListener('pointerdown', outside, true);
+    this.blockActions = { el: box, blockId: block.id, outside };
+    items()[0]?.focus();
+  }
+
+  #closeBlockActions() {
+    const open = this.blockActions;
+    if (!open) return;
+    document.removeEventListener('pointerdown', open.outside, true);
+    open.el.remove();
+    this.blockActions = null;
+  }
+
+  #runBlockAction(action, id) {
+    this.#closeBlockActions();
+    const block = this.#byId(id);
+    if (!block) return;
+    const index = this.#indexOf(id);
+    if (action === 'turn-into') {
+      this.#focusBlock(id, 'end');
+      this.#openMenu('slash', block, this.#contentEl(id), null);
+      return;
+    }
+    if (action === 'delete') {
+      this.#deleteBlock(id, index > 0);
+      announce('Block deleted.');
+      return;
+    }
+    if (action === 'duplicate') {
+      // A copy never takes the original's ^block-id: links must keep one target.
+      const { blockId: _blockId, ...meta } = block.meta || {};
+      const copy = makeBlock(block.type, block.text, structuredClone(meta));
+      this.blocks.splice(index + 1, 0, copy);
+      this.#dropFocusAndRender();
+      this.#focusBlock(copy.id, 'end');
+      announce('Block duplicated.');
+    } else {
+      const to = index + (action === 'move-up' ? -1 : 1);
+      if (to < 0 || to >= this.blocks.length) return;
+      this.blocks.splice(index, 1);
+      this.blocks.splice(to, 0, block);
+      this.#dropFocusAndRender();
+      this.#focusBlock(id, 'end');
+      announce(action === 'move-up' ? 'Block moved up.' : 'Block moved down.');
     }
     this.#snapshot();
     this.onChange();
