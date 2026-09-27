@@ -2,6 +2,7 @@ import './properties-view.css';
 import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { inferPropertyType } from '../utils/frontmatter.js';
+import { icon } from '../ui/icons.js';
 
 export function createPropertiesElements(root = document.body) {
   const overlay = document.createElement('div');
@@ -9,7 +10,7 @@ export function createPropertiesElements(root = document.body) {
   overlay.id = 'properties-overlay';
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel properties-modal" role="dialog" aria-modal="true" aria-labelledby="properties-title" tabindex="-1">
-    <header class="modal__header"><div><h2 class="modal__title" id="properties-title">Note properties</h2><p class="muted">Portable YAML stored in this note’s Markdown.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close note properties">✕</button></header>
+    <header class="modal__header"><div><h2 class="modal__title" id="properties-title">Note properties</h2><p class="muted">Portable YAML stored in this note’s Markdown.</p></div><button type="button" class="btn btn--ghost" data-close aria-label="Close note properties">${icon('x')}</button></header>
     <div class="properties-modal__body">
       <div class="properties-list" role="list" aria-label="Current properties"></div>
       <form class="properties-form" aria-describedby="properties-status">

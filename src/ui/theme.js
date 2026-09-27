@@ -8,6 +8,7 @@
 // the mirror, <meta name="theme-color">, and every toggle button in sync.
 
 import { DEFAULT_SETTINGS, resolveTheme, THEME_MIRROR_KEY, THEME_MODES } from './settings.js';
+import { icon } from './icons.js';
 
 export class Theme {
   /** @param buttons one toggle button or an array of them (desktop header + mobile bar). */
@@ -51,7 +52,7 @@ export class Theme {
     const color = getComputedStyle(root).getPropertyValue('--bg-elev').trim();
     if (meta && color) meta.content = color;
     for (const button of this.buttons) {
-      button.textContent = resolved === 'dark' ? '☀️' : '🌙';
+      button.innerHTML = icon(resolved === 'dark' ? 'sun' : 'moon');
       button.setAttribute('aria-label', `Theme: ${this.mode}`);
       button.setAttribute('title', `Theme: ${this.mode} — click to toggle`);
     }

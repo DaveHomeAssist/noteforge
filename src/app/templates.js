@@ -30,7 +30,7 @@ export const TEMPLATES = [
   {
     id: 'daily',
     label: 'Daily note',
-    icon: '📅',
+    icon: 'calendar-days',
     build({ date = todayISO() } = {}) {
       return buildDailyNote(date);
     },
@@ -38,7 +38,7 @@ export const TEMPLATES = [
   {
     id: 'meeting',
     label: 'Meeting note',
-    icon: '🗓️',
+    icon: 'users',
     build() {
       const day = todayISO();
       return {
@@ -50,7 +50,7 @@ export const TEMPLATES = [
   {
     id: 'project',
     label: 'Project note',
-    icon: '📁',
+    icon: 'folder-kanban',
     build() {
       return {
         title: 'Project — Untitled',

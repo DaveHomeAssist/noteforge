@@ -1,4 +1,5 @@
 import { blockSupportsId } from '../utils/block-links.js';
+import { icon } from '../ui/icons.js';
 
 const element = (tag, className) => {
   const node = document.createElement(tag);
@@ -31,7 +32,7 @@ export function createBlockEditorPhase5Enhancer() {
       button.type = 'button';
       button.title = 'Copy block link';
       button.setAttribute('aria-label', 'Copy block link');
-      button.textContent = '⌁';
+      button.innerHTML = icon('link-2');
       button.addEventListener('click', async (event) => {
         event.preventDefault();
         event.stopPropagation();

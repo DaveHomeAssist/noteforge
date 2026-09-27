@@ -2,6 +2,7 @@ import './link-tools-view.css';
 import { Modal } from './modal.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { LinkOperations } from '../core/link-operations.js';
+import { icon } from '../ui/icons.js';
 
 function ambiguityLabel(kind) {
   if (kind === 'duplicate_title') return 'Duplicate canonical title';
@@ -17,7 +18,7 @@ export function createLinkToolsElements(root = document.body) {
   overlay.hidden = true;
   overlay.innerHTML = `<div class="modal__backdrop" data-close></div>
     <div class="modal__panel link-tools" role="dialog" aria-modal="true" aria-labelledby="link-tools-title" tabindex="-1">
-      <header class="modal__header"><h2 class="modal__title" id="link-tools-title">Link tools</h2><button class="btn btn--ghost" data-close title="Close" aria-label="Close link tools">✕</button></header>
+      <header class="modal__header"><h2 class="modal__title" id="link-tools-title">Link tools</h2><button class="btn btn--ghost" data-close title="Close" aria-label="Close link tools">${icon('x')}</button></header>
       <div id="link-tools-content" class="link-tools__content"></div>
       <footer class="link-tools__footer"><span id="link-tools-status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-close>Close</button><button type="button" class="btn btn--primary" id="link-tools-apply">Apply</button></div></footer>
     </div>`;

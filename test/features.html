@@ -1480,11 +1480,12 @@
       check('the mode is mirrored to localStorage for the pre-paint boot', localStorage.getItem(THEME_MIRROR_KEY) === 'light');
       check('color-scheme follows the light theme', scheme() === 'light');
       check('theme-color meta follows the light surface', /^#/.test(meta.content) && meta.content === surface());
-      check('both toggle buttons show the moon and are labelled', [desktopBtn, mobileBtn].every((b) => b.textContent === '🌙' && b.getAttribute('aria-label') === 'Theme: light'));
+      const iconOf = (b) => b.querySelector('svg.icon use')?.getAttribute('href')?.split('#')[1];
+      check('both toggle buttons show the moon icon and are labelled', [desktopBtn, mobileBtn].every((b) => iconOf(b) === 'i-moon' && b.getAttribute('aria-label') === 'Theme: light'));
       mobileBtn.click();
       check('mobile toggle switches to dark and persists it', theme.mode === 'dark' && db.config.themeMode === 'dark' && root.getAttribute('data-theme') === 'dark');
       check('dark mirror, meta, and color-scheme update together', localStorage.getItem(THEME_MIRROR_KEY) === 'dark' && meta.content === surface() && scheme() === 'dark');
-      check('both toggle buttons now show the sun', [desktopBtn, mobileBtn].every((b) => b.textContent === '☀️' && b.getAttribute('aria-label') === 'Theme: dark'));
+      check('both toggle buttons now show the sun icon', [desktopBtn, mobileBtn].every((b) => iconOf(b) === 'i-sun' && b.getAttribute('aria-label') === 'Theme: dark'));
       desktopBtn.click();
       check('desktop toggle switches back to light', theme.mode === 'light' && db.config.themeMode === 'light' && root.getAttribute('data-theme') === 'light');
       theme.setMode('system', { persist: false });

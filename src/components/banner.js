@@ -5,6 +5,7 @@
 
 import { fileToBannerDataURL } from '../utils/image.js';
 import { escapeAttr } from '../utils/helpers.js';
+import { icon } from '../ui/icons.js';
 
 export const BANNER_GRADIENTS = [
   'linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)',
@@ -65,7 +66,7 @@ export class BannerControl {
       this.host.classList.remove('has-banner');
       const add = el('button', 'banner-add');
       add.type = 'button';
-      add.innerHTML = '🖼 Add banner';
+      add.innerHTML = `${icon('image')} Add banner`;
       add.addEventListener('click', () => this.#addRandomGradient());
       this.host.appendChild(add);
       return;
@@ -166,7 +167,7 @@ export class BannerControl {
       </div>
       <div class="banner-picker__section">
         <div class="banner-picker__label">Image</div>
-        <button type="button" class="banner-picker__upload">⬆ Upload an image…</button>
+        <button type="button" class="banner-picker__upload">${icon('upload')} Upload an image…</button>
         <div class="banner-picker__row">
           <input type="url" class="banner-picker__url" placeholder="Paste an image URL" />
           <button type="button" class="banner-picker__url-apply">Apply</button>

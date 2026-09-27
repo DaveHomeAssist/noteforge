@@ -19,6 +19,7 @@ const CORE = [
   BASE + 'index.html',
   BASE + 'manifest.webmanifest',
   BASE + 'icon.svg',
+  BASE + 'icons.svg',
   ...BUILD_ASSETS.map((asset) => BASE + 'assets/' + asset),
 ];
 

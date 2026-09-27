@@ -2,13 +2,14 @@ import './bulk-actions-view.css';
 import { BulkOperations } from '../core/bulk-operations.js';
 import { downloadText } from '../utils/download.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { icon } from '../ui/icons.js';
 
 export function createBulkActionElements({ anchor = document.getElementById('note-list') } = {}) {
   const bar = document.createElement('section');
   bar.className = 'bulk-actions';
   bar.hidden = true;
   bar.setAttribute('aria-labelledby', 'bulk-actions-title');
-  bar.innerHTML = `<header><strong id="bulk-actions-title">0 selected</strong><button type="button" class="btn btn--ghost" data-bulk-clear aria-label="Clear note selection">✕</button></header><div class="bulk-actions__row"><label><span class="sr-only">Tag to add</span><input data-bulk-tag placeholder="Tag"></label><button type="button" class="btn btn--ghost" data-bulk-action="tag">Add tag</button><button type="button" class="btn btn--ghost" data-bulk-action="archive">Archive</button><button type="button" class="btn btn--ghost" data-bulk-action="unarchive">Unarchive</button></div><div class="bulk-actions__row"><label class="bulk-actions__parent"><span class="sr-only">New parent</span><select data-bulk-parent><option value="">Top level</option></select></label><button type="button" class="btn btn--ghost" data-bulk-action="reparent">Move</button><button type="button" class="btn btn--ghost" data-bulk-export>Export</button><button type="button" class="btn btn--danger-ghost" data-bulk-action="trash">Move to Trash</button></div><span class="bulk-actions__status" role="status" aria-live="polite"></span>`;
+  bar.innerHTML = `<header><strong id="bulk-actions-title">0 selected</strong><button type="button" class="btn btn--ghost" data-bulk-clear aria-label="Clear note selection">${icon('x')}</button></header><div class="bulk-actions__row"><label><span class="sr-only">Tag to add</span><input data-bulk-tag placeholder="Tag"></label><button type="button" class="btn btn--ghost" data-bulk-action="tag">Add tag</button><button type="button" class="btn btn--ghost" data-bulk-action="archive">Archive</button><button type="button" class="btn btn--ghost" data-bulk-action="unarchive">Unarchive</button></div><div class="bulk-actions__row"><label class="bulk-actions__parent"><span class="sr-only">New parent</span><select data-bulk-parent><option value="">Top level</option></select></label><button type="button" class="btn btn--ghost" data-bulk-action="reparent">Move</button><button type="button" class="btn btn--ghost" data-bulk-export>Export</button><button type="button" class="btn btn--danger-ghost" data-bulk-action="trash">Move to Trash</button></div><span class="bulk-actions__status" role="status" aria-live="polite"></span>`;
   const announcer = document.createElement('span');
   announcer.className = 'sr-only';
   announcer.setAttribute('role', 'status');

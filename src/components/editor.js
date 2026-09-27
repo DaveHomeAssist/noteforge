@@ -5,6 +5,7 @@
 import { BlockEditor } from './block-editor.js';
 import { BannerControl } from './banner.js';
 import { escapeHtml, debounce, formatDate } from '../utils/helpers.js';
+import { icon } from '../ui/icons.js';
 
 export class Editor {
   /**
@@ -158,7 +159,7 @@ export class Editor {
     this.currentId = null;
     this.container.innerHTML = `
       <div class="editor__empty">
-        <div class="editor__empty-art">📝</div>
+        <div class="editor__empty-art">${icon('notebook-pen')}</div>
         <p>Select a note, or create a new one.</p>
         <p class="muted">Tip: type <code>/</code> for blocks, link notes with <code>[[Note title]]</code>.</p>
       </div>`;
@@ -181,8 +182,8 @@ export class Editor {
         <div class="editor__tools">
           <button class="btn btn--ghost editor__properties" title="Edit note properties" aria-label="Edit note properties">Properties</button>
           <button class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
-                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">📌</button>
-          <button class="btn btn--danger-ghost editor__delete" title="Delete note" aria-label="Delete note">🗑</button>
+                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">${icon('pin')}</button>
+          <button class="btn btn--danger-ghost editor__delete" title="Delete note" aria-label="Delete note">${icon('trash-2')}</button>
         </div>
       </div>
 
@@ -190,7 +191,7 @@ export class Editor {
         ${note.tags
           .map(
             (t) => `
-          <span class="chip">#${escapeHtml(t)}<button class="chip__x" data-tag="${escapeHtml(t)}" title="Remove tag">×</button></span>
+          <span class="chip">#${escapeHtml(t)}<button class="chip__x" data-tag="${escapeHtml(t)}" title="Remove tag" aria-label="Remove tag ${escapeHtml(t)}">${icon('x')}</button></span>
         `,
           )
           .join('')}
@@ -202,7 +203,7 @@ export class Editor {
           <div class="editor__blocks"></div>
 
           <section class="backlinks" aria-labelledby="backlinks-title">
-            <h3 class="backlinks__title" id="backlinks-title">🔗 Backlinks <span class="muted">(${backlinks.length})</span></h3>
+            <h3 class="backlinks__title" id="backlinks-title">${icon('link')} Backlinks <span class="muted">(${backlinks.length})</span></h3>
             ${
               backlinks.length === 0
                 ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
@@ -221,7 +222,7 @@ export class Editor {
           </section>
 
           <section class="mentions" aria-labelledby="mentions-title">
-            <h3 class="backlinks__title" id="mentions-title">💬 Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
+            <h3 class="backlinks__title" id="mentions-title">${icon('message-square')} Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
             ${
               mentions.length === 0
                 ? `<p class="muted backlinks__empty">No unlinked mentions found.</p>`

@@ -33,6 +33,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Lucide sprite icons (src/ui/icons.js). Geometry comes from public/icons.svg;
+   stroke weight and color come from here, so icons follow the text color. */
+.icon {
+  width: 1.125em;
+  height: 1.125em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.2em;
+}
+
 .muted {
   color: var(--text-muted);
   font-size: 0.85em;
@@ -122,9 +136,16 @@ code {
   border-bottom: 1px solid var(--border);
 }
 .brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 10px;
+}
+.brand .icon,
+.mobile-bar__title .icon {
+  color: var(--color-accent);
 }
 .sidebar__actions {
   display: flex;
@@ -162,7 +183,9 @@ code {
   z-index: 30;
 }
 .menu__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
   text-align: left;
   padding: 8px 10px;
@@ -664,6 +687,7 @@ mark {
 }
 .editor__empty-art {
   font-size: 48px;
+  color: var(--color-text-muted);
 }
 
 .editor__bar {
@@ -1482,6 +1506,9 @@ html[data-font="l"] .editor {
   display: none;
 }
 .mobile-bar__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: 650;
 }
 .sidebar-backdrop {

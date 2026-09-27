@@ -5,6 +5,7 @@
 import { Modal } from './modal.js';
 import { normalizeSettings } from '../ui/settings.js';
 import './settings-view.css';
+import { icon } from '../ui/icons.js';
 
 const field = (id, label, options, value) => `
   <label class="settings__row">
@@ -19,7 +20,7 @@ export function createSettingsElements(root = document.body) {
   overlay.className = 'modal';
   overlay.id = 'settings-overlay';
   overlay.hidden = true;
-  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1"><header class="modal__header"><h2 class="modal__title">⚙ Settings</h2><div class="modal__actions"><button class="btn btn--ghost" data-close title="Close" aria-label="Close settings">✕</button></div></header><div id="settings-form" class="settings"></div></div>`;
+  overlay.innerHTML = `<div class="modal__backdrop" data-close></div><div class="modal__panel" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1"><header class="modal__header"><h2 class="modal__title">${icon('settings')} Settings</h2><div class="modal__actions"><button class="btn btn--ghost" data-close title="Close" aria-label="Close settings">${icon('x')}</button></div></header><div id="settings-form" class="settings"></div></div>`;
   root.appendChild(overlay);
   return { overlay, form: overlay.querySelector('#settings-form') };
 }
