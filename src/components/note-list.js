@@ -151,7 +151,11 @@ export class NoteList {
       created: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
       title: (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }),
     }[this.#sortMode()];
-    return (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || base(a, b);
+    // Equal timestamps (or titles) fall back to title, then id, so the order is
+    // the same on every render instead of following storage load order.
+    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+    const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    return (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || base(a, b) || byTitle(a, b) || byId(a, b);
   }
 
   /** @returns {{ rows:{note,depth,hasChildren,collapsed,titlePositions}[], searching:boolean }} */
