@@ -284,3 +284,56 @@ test('menus and dialogs animate in, and reduced motion removes the animation', a
     }
   }
 });
+
+test('tablets overlay the sidebar on the editor and close it after use', async ({ browser, runtimeErrors }) => {
+  const { context, page } = await openSurface(browser, { viewport: 768, runtimeErrors });
+  try {
+    const sidebar = page.locator('#sidebar');
+    const toggle = page.getByRole('button', { name: 'Notes sidebar' });
+    const editorBox = async () => page.locator('.editor:visible').first().boundingBox();
+    await expect(sidebar, 'the overlay starts closed').toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const closed = await editorBox();
+    expect(closed.width, 'the editor takes the width beside the rail').toBeGreaterThan(700);
+
+    await toggle.click();
+    await expect(sidebar).toBeVisible();
+    const box = await sidebar.boundingBox();
+    expect(Math.round(box.x), 'the overlay opens beside the rail').toBe(52);
+    expect((await editorBox()).width, 'the overlay does not squeeze the editor').toBe(closed.width);
+    await page.keyboard.press('Escape');
+    await expect(sidebar, 'Escape closes the overlay').toBeHidden();
+    await expect(toggle, 'and returns focus to the rail button').toBeFocused();
+
+    await toggle.click();
+    await page.locator('.note-item', { hasText: 'Markdown Cheatsheet' }).locator('[data-open]').click();
+    await expect(page.locator('.editor__title:visible')).toHaveValue('Markdown Cheatsheet');
+    await expect(sidebar, 'picking a note closes the overlay').toBeHidden();
+
+    await toggle.click();
+    await page.mouse.click(740, 700);
+    await expect(sidebar, 'a press in the editor area closes the overlay').toBeHidden();
+
+    await toggle.click();
+    await page.locator('#menu-btn').click();
+    await page.locator('#settings-btn').click();
+    await expect(page.locator('#settings-overlay')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#settings-overlay')).toBeHidden();
+    await expect(
+      page.locator('#menu-btn'),
+      'closing a dialog opened from the overlay returns focus into it',
+    ).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(sidebar).toBeHidden();
+    await expect(toggle).toBeFocused();
+
+    await page.evaluate(() => window.app.db.flush());
+    expect(
+      await page.evaluate(() => window.app.db.config.sidebarCollapsed),
+      'tablet toggles are not persisted',
+    ).not.toBe(true);
+  } finally {
+    await context.close();
+  }
+});

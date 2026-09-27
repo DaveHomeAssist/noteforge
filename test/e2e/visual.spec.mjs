@@ -1,7 +1,7 @@
 // Screenshot baselines of the production build: shell, the open overflow
 // menu, the slash menu, command palette, settings, and Trash, in both themes,
-// at 390, 1440, and 2560 px. Font rasterization differs between operating
-// systems, so baselines are rendered and compared only inside the pinned
+// at 390, 768, 1440, 1920, and 2560 px. Font rasterization differs between
+// operating systems, so baselines are rendered and compared only inside the pinned
 // mcr.microsoft.com/playwright container (CI job `visual`, which sets
 // NOTEFORGE_VISUAL=1). To regenerate after an intended UI change, run the
 // `visual-baselines` workflow on the branch and commit its artifact
@@ -17,7 +17,7 @@ test.skip(
 const SHOTS = ['shell', 'menu', 'slash-menu', 'palette', 'settings', 'trash'];
 
 for (const theme of ['light', 'dark']) {
-  for (const viewport of [390, 1440, 2560]) {
+  for (const viewport of [390, 768, 1440, 1920, 2560]) {
     for (const surface of SHOTS) {
       test(`${surface} · ${theme} · ${viewport}`, async ({ browser, runtimeErrors }) => {
         const { context, page } = await openSurface(browser, { viewport, theme, surface, runtimeErrors });

@@ -127,9 +127,15 @@ export class Modal {
   #restoreFocus() {
     const prev = this._returnFocus;
     this._returnFocus = null;
-    const usable = prev?.isConnected && prev.offsetParent !== null && typeof prev.focus === 'function';
-    if (usable) prev.focus();
-    else document.getElementById('menu-btn')?.focus?.(); // trigger may live in a now-closed menu
+    const shown = (el) =>
+      el &&
+      el !== document.body &&
+      el.isConnected &&
+      typeof el.focus === 'function' &&
+      (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : el.offsetParent !== null);
+    // The trigger may live in a now-closed menu or a closed tablet sidebar.
+    const target = [prev, document.getElementById('menu-btn'), document.getElementById('rail-sidebar-btn')].find(shown);
+    target?.focus();
   }
 
   #trapTab(e) {
