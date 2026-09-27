@@ -15,7 +15,14 @@ import { icon, isIconName } from '../ui/icons.js';
 const RECENT_LIMIT = 6;
 const MAX_RESULTS = 50;
 const PREVIEW_CHARS = 480;
-const GROUP_LABELS = { recent: 'Recent', notes: 'Notes', commands: 'Commands', headings: 'Headings' };
+const GROUP_LABELS = {
+  recent: 'Recent',
+  notes: 'Notes',
+  tags: 'Tags',
+  views: 'Views',
+  commands: 'Commands',
+  headings: 'Headings',
+};
 
 const keyChips = (keys) => keys.map((key) => `<kbd>${escapeHtml(key)}</kbd>`).join('');
 
@@ -70,15 +77,18 @@ export class CommandPalette {
   /**
    * @param {{ overlay:HTMLElement, input:HTMLInputElement, list:HTMLElement, preview?:HTMLElement }} els
    * @param {{ getNotes:()=>object[], getRecentNotes?:()=>object[], getCommands:()=>object[],
-   *   onOpenNote:(id:string)=>void, onOpenHeading?:(id:string,anchor:string)=>void }} opts
+   *   onOpenNote:(id:string)=>void, onOpenHeading?:(id:string,anchor:string)=>void,
+   *   getTags?:()=>Array<[string, number]>, onOpenTag?:(tag:string)=>void }} opts
    */
-  constructor(els, { getNotes, getRecentNotes, getCommands, onOpenNote, onOpenHeading }) {
+  constructor(els, { getNotes, getRecentNotes, getCommands, onOpenNote, onOpenHeading, getTags, onOpenTag }) {
     this.els = els;
     this.getNotes = getNotes;
     this.getCommands = getCommands;
     this.onOpenNote = onOpenNote;
     this.getRecentNotes = getRecentNotes || (() => []);
     this.onOpenHeading = onOpenHeading || ((id) => this.onOpenNote(id));
+    this.getTags = getTags || (() => []);
+    this.onOpenTag = onOpenTag || (() => {});
     this.modal = new Modal(els.overlay, { initialFocus: () => this.els.input });
     this.items = [];
     this.active = 0;
@@ -161,6 +171,10 @@ export class CommandPalette {
       const m = fuzzyMatch(q, c.title);
       if (m) scored.push({ score: m.score, item: this.#cmdItem(c, m.positions) });
     }
+    for (const [tag, count] of this.getTags()) {
+      const m = fuzzyMatch(q.replace(/^#/, ''), tag);
+      if (m) scored.push({ score: m.score - 2, item: this.#tagItem(tag, count, m.positions) }); // below exact notes
+    }
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, MAX_RESULTS).map((s) => s.item);
   }
@@ -213,9 +227,20 @@ export class CommandPalette {
     };
   }
 
+  #tagItem(tag, count, positions) {
+    return {
+      group: 'tags',
+      icon: 'hash',
+      labelHtml: fuzzyHighlight(tag, positions),
+      title: `#${tag}`,
+      sub: `${count} note${count === 1 ? '' : 's'}`,
+      run: () => this.onOpenTag(tag),
+    };
+  }
+
   #cmdItem(cmd, positions) {
     return {
-      group: 'commands',
+      group: cmd.group || 'commands',
       icon: cmd.icon || 'zap',
       labelHtml: fuzzyHighlight(cmd.title, positions),
       title: cmd.title,

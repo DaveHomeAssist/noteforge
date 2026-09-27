@@ -354,3 +354,24 @@ test('tablets overlay the sidebar on the editor and close it after use', async (
     await context.close();
   }
 });
+
+test('the palette finds tags and filters the note list by one, keeping the sort', async ({
+  browser,
+  runtimeErrors,
+}) => {
+  const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  try {
+    await page.locator('#sort-select').selectOption('title');
+    await page.keyboard.press('Control+p');
+    await page.locator('#palette-input').fill('refer');
+    const tag = page.locator('#palette-list [role="group"]', { hasText: 'Tags' }).getByRole('option').first();
+    await expect(tag).toContainText('reference');
+    await tag.click();
+    await expect(page.locator('#palette-overlay')).toBeHidden();
+    await expect(page.locator('.tag-chip--on')).toContainText('reference');
+    await expect(page.locator('.note-item')).toHaveCount(2);
+    await expect(page.locator('#sort-select'), 'choosing a tag keeps the sort').toHaveValue('title');
+  } finally {
+    await context.close();
+  }
+});

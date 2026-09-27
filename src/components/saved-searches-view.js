@@ -77,6 +77,7 @@ export class SavedSearchesView {
   commands() {
     return this.records.map((record) => ({
       id: `saved-search-${record.id}`,
+      group: 'views',
       title: `Run saved view: ${record.name}`,
       hint: record.query || 'All active notes',
       icon: record.icon,

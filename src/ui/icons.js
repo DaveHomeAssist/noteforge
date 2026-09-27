@@ -36,6 +36,7 @@ export const ICON_NAMES = [
   'folder-sync',
   'globe',
   'grip-vertical',
+  'hash',
   'heading-1',
   'heading-2',
   'heading-3',
