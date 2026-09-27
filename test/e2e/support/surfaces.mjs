@@ -87,6 +87,25 @@ export const SURFACES = {
     await openFromMenu(page, '#reconcile-btn');
     await visible(page, '#reconciliation-overlay');
   },
+  // A note without a banner shows the "Add banner" control.
+  'new-note': async (page) => {
+    await page.evaluate(() => window.app.newNote());
+    await visible(page, '.banner-add');
+  },
+  // A destructive confirmation with the pointer on its confirm button, so the
+  // hover colors are what axe measures.
+  'confirm-danger': async (page) => {
+    await page.evaluate(() => {
+      void window.app.confirm({
+        title: 'Delete permanently?',
+        message: 'This cannot be undone.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      });
+    });
+    await visible(page, '#confirm-dialog [data-confirm-accept]');
+    await page.locator('#confirm-dialog [data-confirm-accept]').hover();
+  },
 };
 
 // The app paints first and then initializes recovery, the knowledge index,

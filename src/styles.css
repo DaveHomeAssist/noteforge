@@ -104,8 +104,8 @@ code {
   font-weight: 600;
 }
 .btn--primary:hover {
-  background: var(--accent);
-  filter: brightness(1.08);
+  background: var(--color-accent-hover);
+  color: var(--color-on-accent);
 }
 .btn--ghost {
   padding: 6px 8px;
@@ -513,12 +513,10 @@ mark {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  opacity: 0.65;
 }
 .banner-add:hover {
   background: var(--bg-sunken);
   color: var(--text);
-  opacity: 1;
 }
 
 .banner {

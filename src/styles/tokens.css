@@ -123,7 +123,9 @@
     --color-accent: var(--nf-accent-600);
     --color-accent-weak: var(--nf-accent-50);
     --color-on-accent: #ffffff;
+    --color-accent-hover: #2753cf;
     --color-danger: var(--nf-red-700);
+    --color-danger-hover: #a51919;
     --color-on-danger: #ffffff;
     --color-success: var(--nf-green-700);
     --color-warning: var(--nf-amber-700);
@@ -153,7 +155,9 @@
     --color-accent: var(--nf-accent-300);
     --color-accent-weak: var(--nf-accent-800);
     --color-on-accent: var(--nf-accent-950);
+    --color-accent-hover: #a3bdff;
     --color-danger: var(--nf-red-300);
+    --color-danger-hover: #ffa8a8;
     --color-on-danger: var(--nf-red-950);
     --color-success: var(--nf-green-400);
     --color-warning: var(--nf-amber-400);

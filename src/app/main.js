@@ -353,7 +353,9 @@ class App {
       this.savedSearches?.open ||
       this.phase4?.open ||
       this.phase5?.properties?.open ||
-      this.phase6?.open
+      this.phase6?.open ||
+      // Any other Modal-based dialog, including an in-app confirmation.
+      document.documentElement.hasAttribute('data-modal-open')
     );
   }
 

@@ -33,7 +33,8 @@
   font-weight: 600;
 }
 .btn--danger:hover {
-  filter: brightness(0.95);
+  background: var(--color-danger-hover);
+  color: var(--color-on-danger);
 }
 
 .toasts {

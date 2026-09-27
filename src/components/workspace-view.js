@@ -95,6 +95,8 @@ export class WorkspaceView {
           <button type="button" class="btn btn--ghost" data-pane-visible="secondary">Pane 2</button>
         </div>
         <span class="workspace__status muted" aria-live="polite"></span>
+        <button type="button" class="btn btn--ghost" data-move-active aria-label="Move the active tab to the other pane" title="Move to other pane (Alt+Shift+M)">${icon('arrow-left-right')}</button>
+        <button type="button" class="btn btn--ghost" data-close-active aria-label="Close the active tab" title="Close tab (Delete)">${icon('x')}</button>
         <button type="button" class="btn btn--ghost" data-reopen>Reopen tab</button>
         <button type="button" class="btn btn--ghost" data-split aria-pressed="false">Split view</button>
       </header>
@@ -326,6 +328,10 @@ export class WorkspaceView {
     this.splitter.setAttribute('aria-valuenow', String(Math.round(this.state.split.ratio * 100)));
     this.element.querySelector('[data-split]').setAttribute('aria-pressed', String(this.state.split.enabled));
     this.element.querySelector('[data-reopen]').disabled = this.state.recentlyClosed.length === 0;
+    const activeTab = this.state.panes[this.state.activePane].activeNoteId;
+    for (const selector of ['[data-close-active]', '[data-move-active]']) {
+      this.element.querySelector(selector).disabled = !activeTab;
+    }
     for (const pane of WORKSPACE_PANES) {
       const button = this.element.querySelector(`[data-pane-visible="${pane}"]`);
       button.classList.toggle('btn--active', this.state.activePane === pane);
@@ -346,8 +352,9 @@ export class WorkspaceView {
           const selected = id === active;
           const tabIndex = selected || (!active && this.state.panes[pane].tabs[0] === id) ? '0' : '-1';
           // The tablist may own only tabs, so the per-tab move and close buttons
-          // are pointer affordances outside the accessibility tree; keyboard
-          // users close with Delete and move with Alt+Shift+M (aria-keyshortcuts).
+          // are pointer affordances outside the accessibility tree. Everyone else
+          // uses the labelled toolbar actions for the active tab (touch screen
+          // readers included) or Delete and Alt+Shift+M (aria-keyshortcuts).
           return `<div class="workspace-tab-wrap" role="presentation" data-tab-wrap="${escapeHtml(id)}">
           <button type="button" class="workspace-tab" role="tab" id="workspace-${pane}-tab-${index}"
             data-tab="${escapeHtml(id)}" draggable="true" aria-controls="${panelId}"
@@ -474,6 +481,12 @@ export class WorkspaceView {
       else if (pane) {
         const noteId = this.state.panes[pane.dataset.paneVisible].activeNoteId;
         if (noteId) void this.activate(noteId);
+      } else if (event.target.closest('[data-close-active]')) {
+        const noteId = this.state.panes[this.state.activePane].activeNoteId;
+        if (noteId) void this.closeTab(noteId);
+      } else if (event.target.closest('[data-move-active]')) {
+        const noteId = this.state.panes[this.state.activePane].activeNoteId;
+        if (noteId) void this.moveToOtherPane(noteId);
       } else if (event.target.closest('[data-reopen]')) void this.reopen();
       else if (event.target.closest('[data-split]')) void this.toggleSplit();
     });
