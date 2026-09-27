@@ -65,8 +65,20 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Browser feature tests (headless)
-        run: npm run test:browser
+      # Playwright Test: the in-page feature suite, the eight end-to-end smokes
+      # (dev server and the production build offline), and the axe ratchet
+      # (test/e2e/a11y-baseline.json). Retries once in CI; a retried pass is
+      # reported as flaky. Traces are kept for failures.
+      - name: End-to-end and accessibility (Playwright)
+        run: npx playwright test --project=features --project=a11y
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-node${{ matrix.node }}
+          path: test-results/
+          retention-days: 7
 
       - name: Build
         run: npm run build
@@ -80,16 +92,68 @@ jobs:
         with:
           path: dist
 
+  # Screenshot baselines (test/e2e/visual.spec.mjs) are compared inside the
+  # Playwright image whose version matches the lockfile, so fonts and
+  # rasterization are identical to the image that rendered the baselines.
+  playwright-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.lock.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read @playwright/test from package-lock.json
+        id: lock
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+  visual:
+    name: visual (playwright container)
+    needs: playwright-version
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
+    env:
+      NOTEFORGE_VISUAL: "1"
+      # The container's checkout may lack a usable git; the build stamp takes the SHA from here.
+      NOTEFORGE_BUILD_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A missing baseline is written (and the test still fails), so a new surface
+      # arrives as an artifact to review and commit rather than a silent pass.
+      - name: Compare screenshot baselines
+        run: npx playwright test --project=visual --update-snapshots=missing
+
+      - name: Upload screenshots, diffs, and report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-results
+          path: |
+            test/e2e/__screenshots__/
+            test-results/
+          retention-days: 7
+
   # One job named exactly `verify`. System by Dave's noteforge-sync.yml releases
   # only when a job with this name concluded success, and branch protection can
   # require it; a matrix job cannot carry a fixed name, so this aggregates the
-  # legs (it is skipped, hence not green, when any leg fails).
+  # legs and the visual job (it is skipped, hence not green, when any fails).
   verify:
-    needs: verify-matrix
+    needs: [verify-matrix, visual]
     runs-on: ubuntu-latest
     steps:
       - name: All verify legs succeeded
-        run: echo "verify (node 22) and verify (node 24) are green for $GITHUB_SHA"
+        run: echo "verify (node 22), verify (node 24), and visual are green for $GITHUB_SHA"
 
   deploy:
     if: github.event_name != 'pull_request'

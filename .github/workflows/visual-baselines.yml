@@ -1,0 +1,56 @@
+name: Visual baselines
+
+# Regenerates the screenshot baselines (test/e2e/visual.spec.mjs) on any branch
+# after an intended UI change, in the same Playwright image the `visual` CI job
+# compares in. Download the `visual-baselines` artifact, review the images, copy
+# them into test/e2e/__screenshots__/, and commit:
+#   gh workflow run visual-baselines.yml --ref <branch>
+#   gh run download <run-id> -n visual-baselines -D test/e2e/__screenshots__
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playwright-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.lock.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read @playwright/test from package-lock.json
+        id: lock
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+  render:
+    needs: playwright-version
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
+    env:
+      NOTEFORGE_VISUAL: "1"
+      NOTEFORGE_BUILD_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Render every baseline
+        run: npx playwright test --project=visual --update-snapshots=all
+
+      - name: Upload baselines
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-baselines
+          path: test/e2e/__screenshots__/
+          retention-days: 7

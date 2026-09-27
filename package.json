@@ -11,13 +11,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node test/run-node-tests.mjs",
-    "test:browser": "node test/run-features.mjs",
+    "test:browser": "playwright test --project=features",
     "test:budget": "node test/bundle-budget.mjs",
-    "test:all": "npm run check && npm run typecheck && npm test && node test/run-features.mjs && npm run build && npm run test:budget",
+    "test:all": "npm run check && npm run typecheck && npm test && playwright test --project=features --project=a11y && npm run build && npm run test:budget",
     "lint": "biome lint",
     "typecheck": "node test/typecheck-ratchet.mjs",
     "format": "biome format --write",
-    "check": "biome ci"
+    "check": "biome ci",
+    "test:a11y": "playwright test --project=a11y",
+    "test:visual": "playwright test --project=visual",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
@@ -25,8 +28,10 @@
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@biomejs/biome": "^2.5.14",
-    "playwright": "^1.63.0",
+    "@playwright/test": "1.63.0",
+    "playwright": "1.63.0",
     "typescript": "^7.0.2",
     "vite": "^6.0.7"
   },

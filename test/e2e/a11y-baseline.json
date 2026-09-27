@@ -1,0 +1,107 @@
+{
+  "tool": "axe-core",
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa"
+  ],
+  "totalViolatingNodes": 83,
+  "surfaces": {
+    "archive@1440/dark": {
+      "aria-required-children": 1
+    },
+    "archive@1440/light": {
+      "aria-required-children": 1
+    },
+    "backup@1440/dark": {
+      "color-contrast": 1
+    },
+    "backup@1440/light": {
+      "color-contrast": 1
+    },
+    "calendar@1440/dark": {
+      "color-contrast": 1
+    },
+    "calendar@1440/light": {
+      "color-contrast": 4
+    },
+    "clipper@1440/dark": {
+      "color-contrast": 1
+    },
+    "clipper@1440/light": {
+      "color-contrast": 1
+    },
+    "find-replace@1440/dark": {
+      "aria-required-children": 1,
+      "color-contrast": 2,
+      "target-size": 2
+    },
+    "find-replace@1440/light": {
+      "aria-required-children": 1,
+      "color-contrast": 13,
+      "target-size": 2
+    },
+    "graph@1440/dark": {
+      "color-contrast": 1
+    },
+    "graph@1440/light": {
+      "color-contrast": 7
+    },
+    "link-tools@1440/dark": {
+      "color-contrast": 1
+    },
+    "link-tools@1440/light": {},
+    "palette@1440/dark": {},
+    "palette@1440/light": {
+      "color-contrast": 1
+    },
+    "properties@1440/dark": {
+      "aria-required-children": 1,
+      "color-contrast": 1
+    },
+    "properties@1440/light": {
+      "aria-required-children": 1,
+      "color-contrast": 1
+    },
+    "quick-capture@1440/dark": {
+      "color-contrast": 1
+    },
+    "quick-capture@1440/light": {
+      "color-contrast": 1
+    },
+    "reconciliation@1440/dark": {
+      "color-contrast": 1
+    },
+    "reconciliation@1440/light": {
+      "color-contrast": 1
+    },
+    "settings@1440/dark": {},
+    "settings@1440/light": {},
+    "shell@1440/dark": {
+      "aria-required-children": 1,
+      "color-contrast": 1,
+      "target-size": 2
+    },
+    "shell@1440/light": {
+      "aria-required-children": 1,
+      "color-contrast": 14,
+      "target-size": 2
+    },
+    "shell@390/dark": {
+      "aria-required-children": 1,
+      "color-contrast": 1
+    },
+    "shell@390/light": {
+      "aria-required-children": 1,
+      "color-contrast": 4
+    },
+    "tasks@1440/dark": {},
+    "tasks@1440/light": {
+      "color-contrast": 5
+    },
+    "trash@1440/dark": {},
+    "trash@1440/light": {}
+  }
+}

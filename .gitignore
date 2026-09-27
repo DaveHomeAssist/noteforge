@@ -1,5 +1,5 @@
-node_modules/
-dist/
 *.local
 .DS_Store
+dist/
+node_modules/
 test-results/
