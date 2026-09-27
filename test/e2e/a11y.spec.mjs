@@ -53,11 +53,13 @@ for (const scan of SCANS) {
       }
       measured[scan.key] = counts;
 
-      // Phase 1 exit criterion: no emoji or Unicode pictographs as UI chrome.
-      // User content (note titles, previews, body, tags, saved-view icons) may
-      // hold emoji; keyboard hints may show the Command key symbol.
+      // Phase 1 exit criterion: no emoji or Unicode pictographs as UI chrome
+      // (arrows, ×, ⋮, geometric shapes such as ▸, symbols, emoji). User content
+      // (note titles, previews, body, tags, saved-view icons) may hold emoji;
+      // keyboard hints may show the Command key symbol.
       const pictographs = await page.evaluate(() => {
-        const GLYPH = /[\u2190-\u21FF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF\u{1F300}-\u{1FAFF}]/u;
+        const GLYPH =
+          /[\u00D7\u2190-\u21FF\u22EE\u22EF\u2300-\u23FF\u25A0-\u25FF\u2600-\u27BF\u2B00-\u2BFF\u{1F300}-\u{1FAFF}]/u;
         const USER =
           '.editor__blocks, .editor__title, .note-item, .palette__label, .palette__sub, .workspace-tab, .backlinks, ' +
           '.outline, .breadcrumbs, .chip, .tag-chip, .saved-search-row, .trash-item, .archive-item, .task-card, ' +

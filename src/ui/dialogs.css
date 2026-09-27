@@ -84,6 +84,11 @@
   font: inherit;
   cursor: pointer;
 }
+.toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .toast__action {
   padding: 0 var(--space-2);
   font-weight: 600;

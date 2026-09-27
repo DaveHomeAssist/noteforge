@@ -293,7 +293,7 @@ export class NoteList {
       ? fuzzyHighlight(note.title || 'Untitled', titlePositions)
       : this.#hlSubstring(note.title || 'Untitled', freeText);
     const twist = hasChildren
-      ? `<button class="note-item__twist" data-twist aria-label="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`
+      ? `<button class="note-item__twist" data-twist aria-label="${collapsed ? 'Expand' : 'Collapse'}" aria-expanded="${!collapsed}">${icon(collapsed ? 'chevron-right' : 'chevron-down')}</button>`
       : `<span class="note-item__twist note-item__twist--leaf" aria-hidden="true"></span>`;
     return `
         <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''} ${note.isArchived ? 'note-item--archived' : ''} ${this.selection.ids.has(note.id) ? 'note-item--selected' : ''}"

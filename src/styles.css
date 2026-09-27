@@ -435,9 +435,12 @@ code {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 10px;
   border-radius: var(--radius-sm);
   padding: 0;
+}
+.note-item__twist .icon {
+  width: 14px;
+  height: 14px;
 }
 .note-item__twist:hover {
   background: var(--bg-elev);
@@ -1266,9 +1269,29 @@ mark {
   padding: 10px 14px;
 }
 .blk-callout__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 650;
   font-size: 13px;
   margin-bottom: 4px;
+}
+.blk-callout__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+.blk--callout-tip .blk-callout__icon {
+  color: var(--color-callout-tip);
+}
+.blk--callout-warning .blk-callout__icon {
+  color: var(--color-callout-warning);
+}
+.blk--callout-caution .blk-callout__icon {
+  color: var(--danger);
+}
+.blk--callout-important .blk-callout__icon {
+  color: var(--color-callout-note);
 }
 .blk-callout__body {
   color: var(--text);
