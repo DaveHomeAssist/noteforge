@@ -110,6 +110,13 @@
   text-align: center;
 }
 
+/* Phones rarely have a keyboard, and the chips would crowd out the labels. */
+@media (max-width: 600px) {
+  .palette__keys {
+    display: none;
+  }
+}
+
 /* Wide screens: a preview of the active result beside the list. */
 .palette__preview {
   display: none;
