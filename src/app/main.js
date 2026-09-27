@@ -921,7 +921,7 @@ class App {
           onWorkspaceCreated: (workspace) => {
             this.workspace = workspace;
             this.editor = workspace;
-            workspace.element.hidden = this.view === 'graph';
+            workspace.element.hidden = this.view !== 'editor';
             if (this.phase4) this.phase4.editor = workspace;
             if (this.phase5) this.phase5.editor = workspace;
             if (this.findReplace) this.findReplace.editor = workspace;
@@ -1398,13 +1398,32 @@ class App {
 
   // --- views --------------------------------------------------------------
 
+  /**
+   * What the main area shows: the editor, the graph, or a subject-area view
+   * (Tasks, Calendar) that opens there instead of in a dialog (WEB-2).
+   */
   setView(view) {
+    const leaving = this.view;
+    // Set the view first: a view closing below reports its close, and that
+    // handler must not send the main area back to the editor.
     this.view = view;
-    const showGraph = view === 'graph';
-    this.el.graph.hidden = !showGraph;
-    (this.workspace?.element || this.el.editor).hidden = showGraph;
-    this.el.graphBtn.setAttribute('aria-pressed', String(showGraph));
-    if (showGraph) this.graph?.render(this.currentId);
+    for (const section of this.el.mainEl.querySelectorAll('.main-view:not([hidden])')) {
+      if (section.dataset.view !== view) section.dispatchEvent(new CustomEvent('mainview:request-close'));
+    }
+    const editorArea = this.workspace?.element || this.el.editor;
+    this.el.graph.hidden = view !== 'graph';
+    editorArea.hidden = view !== 'editor';
+    this.el.graphBtn.setAttribute('aria-pressed', String(view === 'graph'));
+    this.el.railTasksBtn?.setAttribute('aria-pressed', String(view === 'tasks'));
+    this.el.railCalendarBtn?.setAttribute('aria-pressed', String(view === 'calendar'));
+    if (view === 'graph') this.graph?.render(this.currentId);
+    // Leaving a view that held focus: continue in the editor, not on <body>.
+    if (
+      view === 'editor' &&
+      leaving !== 'editor' &&
+      (!document.activeElement || document.activeElement === document.body)
+    )
+      editorArea.focus?.({ preventScroll: true });
   }
 
   async toggleGraph() {
@@ -1420,6 +1439,11 @@ class App {
   #wireChrome() {
     this.el.newBtn.addEventListener('click', () => this.newNote());
     this.el.graphBtn.addEventListener('click', () => this.toggleGraph());
+    // Subject-area views announce themselves; the main area follows.
+    this.el.mainEl.addEventListener('mainview:open', (event) => this.setView(event.detail.view));
+    this.el.mainEl.addEventListener('mainview:close', (event) => {
+      if (this.view === event.detail.view) this.setView('editor');
+    });
 
     // Overflow menu: click toggles; ArrowDown/ArrowUp on the button open it at
     // the first/last item.
@@ -1455,8 +1479,13 @@ class App {
     this.el.captureBtn?.addEventListener('click', () => this.#showQuickCapture());
     this.el.tasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
     this.el.calendarBtn?.addEventListener('click', () => this.#showCalendar());
-    this.el.railTasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
-    this.el.railCalendarBtn?.addEventListener('click', () => this.#showCalendar());
+    // Rail toggles: a second press returns to the editor, like Graph.
+    this.el.railTasksBtn?.addEventListener('click', () =>
+      this.view === 'tasks' ? this.setView('editor') : this.#showTaskDashboard(),
+    );
+    this.el.railCalendarBtn?.addEventListener('click', () =>
+      this.view === 'calendar' ? this.setView('editor') : this.#showCalendar(),
+    );
     this.el.railSettingsBtn?.addEventListener('click', () => this.#showSettings());
     this.el.railSearchBtn?.addEventListener('click', () => this.#focusSearch());
     this.el.railSidebarBtn?.addEventListener('click', () => this.#setSidebarCollapsed(!this.#sidebarCollapsed()));
@@ -1683,7 +1712,7 @@ class App {
         else if (this.tabletMql.matches && !this.#sidebarCollapsed()) {
           this.#closeSidebarOverlay();
           this.el.railSidebarBtn?.focus();
-        } else if (this.view === 'graph') this.setView('editor');
+        } else if (this.view !== 'editor') this.setView('editor');
       }
     });
   }

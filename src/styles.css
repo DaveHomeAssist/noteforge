@@ -188,6 +188,42 @@ code {
   flex-direction: column;
 }
 
+/* Subject-area views (Tasks, Calendar) fill the main area in place of the
+   editor; their page keeps the card look it had as a dialog. */
+.main-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 26px clamp(12px, 4vw, 48px);
+}
+.main-view:focus {
+  outline: none;
+}
+.main-view__page {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  margin-inline: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
+  animation: nf-fade-in var(--duration-fast) var(--ease-enter);
+}
+/* The views' dialog-era height caps would clip them inside a scrolling main area. */
+.main-view .main-view__page {
+  max-height: none;
+}
+@media (max-width: 760px) {
+  .main-view {
+    padding: 0;
+  }
+  .main-view__page {
+    border: 0;
+    border-radius: 0;
+  }
+}
+
 /* --- buttons -------------------------------------------------------------- */
 
 .btn {

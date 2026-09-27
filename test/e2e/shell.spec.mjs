@@ -24,19 +24,31 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
       'Notes sidebar',
       'Search notes',
       'Open Quick Capture',
-      'Open tasks',
-      'Open calendar',
+      'Tasks',
+      'Calendar',
       'Toggle graph view',
       'Open settings',
     ]) {
       await expect(rail.getByRole('button', { name }), name).toBeVisible();
     }
-    await rail.getByRole('button', { name: 'Open tasks' }).click();
+    const tasks = rail.getByRole('button', { name: 'Tasks' });
+    await tasks.click();
     await expect(page.locator('#task-dashboard-overlay')).toBeVisible();
+    await expect(tasks).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#editor'), 'Tasks replaces the editor in the main area').toBeHidden();
     await page.keyboard.press('Escape');
-    await rail.getByRole('button', { name: 'Open calendar' }).click();
+    await expect(page.locator('#task-dashboard-overlay')).toBeHidden();
+    await expect(page.locator('#editor'), 'Escape returns to the editor').toBeVisible();
+    const calendar = rail.getByRole('button', { name: 'Calendar' });
+    await calendar.click();
     await expect(page.locator('#calendar-overlay')).toBeVisible();
-    await page.keyboard.press('Escape');
+    await tasks.click();
+    await expect(page.locator('#calendar-overlay'), 'switching views closes the previous one').toBeHidden();
+    await expect(page.locator('#task-dashboard-overlay')).toBeVisible();
+    await expect(calendar).toHaveAttribute('aria-pressed', 'false');
+    await tasks.click();
+    await expect(page.locator('#task-dashboard-overlay'), 'a second press returns to the editor').toBeHidden();
+    await expect(tasks).toHaveAttribute('aria-pressed', 'false');
     await rail.getByRole('button', { name: 'Open settings' }).click();
     await expect(page.locator('#settings-overlay')).toBeVisible();
     await page.keyboard.press('Escape');
