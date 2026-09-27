@@ -102,7 +102,7 @@ Scope:
 - **Command palette v2.** Grouped results (Pages, Commands, Views, Tags, Recent), icons, key chips, inline preview, nested actions.
 - **Slash menu v2** with icons, groups, and listbox ARIA; separate block action menu; Alt+Shift+↑/↓ block moves.
 - **Motion.** Dialog and menu enter/exit (120–180 ms), drawer, list reorder, spring-damped drag and splitter; reduced motion respected.
-- **Overflow menu** grouped (Create / Views / Knowledge / Data / Help) with separators, icons, shortcut hints, arrow keys.
+- **Overflow menu** grouped (Create / Views / Knowledge / Data / Help) with separators, icons, shortcut hints, arrow keys. *Shipped 2026-09-27 with App (Settings) in place of Help; see the [decision log](../architecture/decisions.md).*
 
 Exit criteria: visual baselines approved at 390 / 768 / 1440 / 1920 / 2560 in both themes; axe clean; no emoji in chrome; Lighthouse accessibility and best-practices ≥ 95; WEB-1/2/3 pass; no storage change beyond the additive `icon` field; the Phase 0 count floors hold.
 

@@ -444,10 +444,45 @@ class App {
     this.#syncSidebarInert();
   }
 
-  // Dropdown menu (a disclosure): keep the button's aria-expanded synced with it.
-  #setMenuOpen(open) {
+  // Overflow menu (WAI-ARIA menu button): opening moves focus to the first or
+  // last enabled item; the button's aria-expanded mirrors visibility. The menu
+  // scrolls rather than running past the bottom of a short viewport.
+  #setMenuOpen(open, focus = 'first') {
     this.el.menuDropdown.hidden = !open;
     this.el.menuBtn.setAttribute('aria-expanded', String(open));
+    if (!open) return;
+    const { top } = this.el.menuDropdown.getBoundingClientRect();
+    this.el.menuDropdown.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    const items = this.#menuItems();
+    (focus === 'last' ? items.at(-1) : items[0])?.focus();
+  }
+
+  #menuItems() {
+    return [...this.el.menuDropdown.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+  }
+
+  // Arrows wrap, Home/End jump, a letter jumps to the next item starting with
+  // it, and Tab leaves the menu from its button.
+  #onMenuKeydown(e) {
+    const items = this.#menuItems();
+    const index = items.indexOf(document.activeElement);
+    let next = null;
+    if (e.key === 'ArrowDown') next = items[(index + 1) % items.length];
+    else if (e.key === 'ArrowUp') next = items[index <= 0 ? items.length - 1 : index - 1];
+    else if (e.key === 'Home') next = items[0];
+    else if (e.key === 'End') next = items.at(-1);
+    else if (e.key === 'Tab') {
+      this.#closeMenu();
+      this.el.menuBtn.focus();
+      return;
+    } else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const key = e.key.toLowerCase();
+      const rotated = [...items.slice(index + 1), ...items.slice(0, index + 1)];
+      next = rotated.find((item) => item.textContent.trim().toLowerCase().startsWith(key));
+    }
+    if (!next) return;
+    e.preventDefault();
+    next.focus();
   }
 
   #closeMenu() {
@@ -1373,11 +1408,18 @@ class App {
     this.el.newBtn.addEventListener('click', () => this.newNote());
     this.el.graphBtn.addEventListener('click', () => this.toggleGraph());
 
-    // Dropdown menu (a disclosure: keep aria-expanded in sync with visibility)
+    // Overflow menu: click toggles; ArrowDown/ArrowUp on the button open it at
+    // the first/last item.
     this.el.menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.#setMenuOpen(this.el.menuDropdown.hidden);
     });
+    this.el.menuBtn.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      this.#setMenuOpen(true, e.key === 'ArrowUp' ? 'last' : 'first');
+    });
+    this.el.menuDropdown.addEventListener('keydown', (e) => this.#onMenuKeydown(e));
     document.addEventListener('click', () => this.#closeMenu());
     this.el.menuDropdown.addEventListener('click', (e) => e.stopPropagation());
 

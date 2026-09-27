@@ -1,7 +1,7 @@
 // The Phase 1 app shell: icon rail, collapsible and resizable sidebar, and the
 // phone layout (bottom rail, nothing off-screen), against the production build.
 import { TIMEOUT } from './support/runtime.mjs';
-import { openSurface } from './support/surfaces.mjs';
+import { openMenu, openSurface } from './support/surfaces.mjs';
 import { expect, test } from './support/test.mjs';
 
 // Settings are written to IndexedDB as soon as they change, but a reload in the
@@ -86,6 +86,70 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
   }
 });
 
+test('the overflow menu is a grouped WAI-ARIA menu driven from the keyboard', async ({ browser, runtimeErrors }) => {
+  const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  try {
+    const button = page.locator('#menu-btn');
+    const menu = page.getByRole('menu', { name: 'More actions' });
+    await expect(button).toHaveAttribute('aria-haspopup', 'menu');
+    await button.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    const groups = await menu
+      .getByRole('group')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => document.getElementById(node.getAttribute('aria-labelledby'))?.textContent),
+      );
+    expect(groups).toEqual(['Create', 'Views', 'Knowledge', 'Data', 'App']);
+    await expect(menu.getByRole('menuitem')).toHaveCount(17);
+    await expect(menu.getByRole('separator')).toHaveCount(4);
+
+    const focused = () => page.evaluate(() => document.activeElement?.id);
+    expect(await focused(), 'ArrowDown opens at the first item').toBe('template-btn');
+    await page.keyboard.press('ArrowDown');
+    expect(await focused()).toBe('today-btn');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    expect(await focused(), 'ArrowUp wraps to the last item').toBe('settings-btn');
+    await page.keyboard.press('Home');
+    expect(await focused()).toBe('template-btn');
+    await page.keyboard.press('End');
+    expect(await focused()).toBe('settings-btn');
+    await page.keyboard.press('b');
+    expect(await focused(), 'a letter jumps to the next matching item').toBe('backup-btn');
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(button, 'Escape returns focus to the menu button').toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    expect(await focused(), 'ArrowUp opens at the last item').toBe('settings-btn');
+    await page.keyboard.press('Tab');
+    await expect(menu, 'Tab closes the menu').toBeHidden();
+    expect(await focused()).not.toBe('settings-btn');
+
+    await button.focus();
+    await page.keyboard.press('Enter');
+    expect(await focused(), 'Enter opens at the first item').toBe('template-btn');
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#settings-overlay')).toBeVisible();
+    await expect(menu).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#settings-overlay')).toBeHidden();
+    await expect(button, 'closing a dialog opened from the menu returns focus to its button').toBeFocused();
+
+    await button.click();
+    await expect(menu).toBeVisible();
+    await page.locator('.editor__blocks').click();
+    await expect(menu, 'clicking outside closes the menu').toBeHidden();
+  } finally {
+    await context.close();
+  }
+});
+
 test('phone layout: the rail is a bottom bar of touch targets and nothing overflows', async ({
   browser,
   runtimeErrors,
@@ -116,6 +180,18 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
     }
     expect(Math.max(...centers) - Math.min(...centers), 'workspace toolbar actions fit on one row').toBeLessThan(12);
     await expect(page.getByRole('button', { name: 'Reopen tab' })).toBeVisible();
+
+    await openMenu(page);
+    const dropdown = await page.locator('#menu-dropdown').boundingBox();
+    expect(dropdown.y + dropdown.height, 'the overflow menu ends inside the viewport').toBeLessThanOrEqual(844);
+    await page.keyboard.press('End');
+    const last = await page.locator('#settings-btn').boundingBox();
+    expect(last.y + last.height, 'End scrolls the last menu item into view').toBeLessThanOrEqual(844);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#menu-dropdown')).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#app')).not.toHaveClass(/sidebar-open/);
+
     await page.locator('#capture-btn').click();
     await expect(page.locator('#quick-capture-overlay')).toBeVisible();
   } finally {

@@ -269,8 +269,24 @@ code {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 6px;
-  min-width: 190px;
+  width: max-content;
+  min-width: 220px;
+  max-width: calc(100vw - 24px);
+  overflow-y: auto; /* max-height is set on open from the menu's position */
   z-index: 30;
+}
+.menu__label {
+  padding: 6px 10px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.menu__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 .menu__item {
   display: flex;
@@ -278,7 +294,7 @@ code {
   gap: var(--space-2);
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   color: var(--text);
@@ -286,8 +302,12 @@ code {
   cursor: pointer;
   font: inherit;
 }
-.menu__item:hover {
+.menu__item:hover,
+.menu__item:focus-visible {
   background: var(--bg-sunken);
+}
+.menu__item:focus-visible {
+  outline-offset: -2px;
 }
 .menu__item:disabled {
   cursor: not-allowed;
@@ -1545,8 +1565,8 @@ mark {
 /* --- sort control + menu hint + editor pin ------------------------------- */
 
 .menu__hint {
-  float: right;
-  margin-left: 16px;
+  margin-left: auto;
+  padding-left: 16px;
   color: var(--text-muted);
   font-size: 11px;
 }
