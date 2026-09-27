@@ -11,8 +11,12 @@ export const VIEWPORTS = {
 };
 
 async function openFromMenu(page, buttonSelector) {
-  // Below 760 px the overflow menu lives in the off-canvas sidebar.
-  if (!(await page.locator('#menu-btn').isVisible())) {
+  // Below 760 px the overflow menu lives in the off-canvas sidebar. Its button
+  // still counts as "visible" there (it has a size, just off-screen), so key on
+  // the mobile bar's sidebar toggle instead.
+  const mobile = await page.locator('#sidebar-toggle').isVisible();
+  const open = await page.evaluate(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+  if (mobile && !open) {
     await page.locator('#sidebar-toggle').click();
     await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
   }

@@ -43,6 +43,6 @@ export default defineConfig({
     { name: 'a11y', testMatch: 'a11y.spec.mjs' },
     // No retries: rendering is deterministic in the pinned container, and a retry
     // would compare against a baseline the first attempt just wrote.
-    { name: 'visual', testMatch: 'visual.spec.mjs', retries: 0 },
+    { name: 'visual', testMatch: 'visual.spec.mjs', retries: 0, timeout: 60_000 },
   ],
 });

@@ -110,6 +110,7 @@ jobs:
     name: visual (playwright container)
     needs: playwright-version
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
     env:
