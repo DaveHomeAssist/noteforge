@@ -4,7 +4,10 @@ import { TIMEOUT } from './support/runtime.mjs';
 import { openSurface } from './support/surfaces.mjs';
 import { expect, test } from './support/test.mjs';
 
+// Settings are written to IndexedDB as soon as they change, but a reload in the
+// same few milliseconds can beat the commit. Wait for it, as a person would.
 async function reload(page) {
+  await page.evaluate(() => window.app.db.flush());
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
   await page.evaluate(() => window.app.ready);
@@ -153,5 +156,29 @@ test('wide editors put outline, backlinks, and mentions in a context column; nar
     expect(narrow.below, 'phones stack backlinks under the text').toBe(true);
   } finally {
     await context.close();
+  }
+});
+
+test('the text column keeps its width in empty and short notes', async ({ browser, runtimeErrors }) => {
+  for (const viewport of [1440, 390]) {
+    const { context, page } = await openSurface(browser, { viewport, surface: 'new-note', runtimeErrors });
+    try {
+      const title = await page.locator('.editor__title:visible').boundingBox();
+      const blocks = page.locator('.editor__blocks:visible');
+      const empty = await blocks.boundingBox();
+      expect(Math.abs(empty.x - title.x), `${viewport}: an empty note's body starts under its title`).toBeLessThan(2);
+      expect(empty.width, `${viewport}: an empty note's body spans the text column`).toBeGreaterThan(
+        viewport === 1440 ? 500 : 300,
+      );
+      const first = page.locator('.editor__blocks:visible .blk').first();
+      await first.click();
+      await expect(first, `${viewport}: clicking an empty note's body starts editing`).toBeFocused();
+      await page.keyboard.type('Hi');
+      expect((await blocks.boundingBox()).width, `${viewport}: a one-word note keeps the full column`).toBe(
+        empty.width,
+      );
+    } finally {
+      await context.close();
+    }
   }
 });
