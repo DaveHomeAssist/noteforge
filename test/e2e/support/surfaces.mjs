@@ -100,11 +100,18 @@ export const SURFACES = {
     await page.evaluate(() => window.app.newNote());
     await visible(page, '.banner-add');
   },
-  // The slash menu over a new note's empty first block.
+  // The slash menu over a new note's empty first block. Typing "/" autosaves
+  // after a debounce and the note list then shows "/" as the snippet; wait for
+  // that so screenshots never race it.
   'slash-menu': async (page) => {
     await page.evaluate(() => window.app.newNote());
     await page.locator('.editor__blocks .blk:visible').first().click();
     await page.keyboard.type('/');
+    await visible(page, '.blk-menu [role="option"]');
+    await page.waitForFunction(() => window.app.db.getNote(window.app.currentId)?.content === '/', undefined, {
+      timeout: TIMEOUT,
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await visible(page, '.blk-menu [role="option"]');
   },
   // A destructive confirmation with the pointer on its confirm button, so the

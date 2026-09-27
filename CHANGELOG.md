@@ -19,8 +19,10 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The More actions menu is grouped into Create, Views, Knowledge, Data, and App, with separators and a shortcut hint for Today's note. It works from the keyboard: arrow keys, Home, End, and first letters move between items; Escape closes it and returns focus to its button.
 - The slash menu groups block types under Text, Lists, and Insert, with an icon for each. Screen readers hear it as a list of options controlled by the block being typed in, with the active option announced as it changes.
 - Alt+Shift+↑ and Alt+Shift+↓ move the current block up or down, keeping the caret; the move can be undone.
+- The command palette groups results under Recent, Notes, Commands, and Headings (the best match's group first), shows each command's keyboard shortcut as keys, and on screens 1024 px and wider previews the highlighted note or command beside the list.
 
 ### Changed
+- Heading results in the command palette use heading icons instead of "H1"–"H6" text.
 - The block gutter's insert and drag handles are icons with accessible names instead of "+" and "⋮⋮" characters.
 - Every text and background color pair meets WCAG AA contrast in both themes; the accessibility gate reports zero violations and now fails on any.
 - Moving a note to Trash no longer asks first (it is recoverable); emptying the Trash and permanent deletes still confirm.
