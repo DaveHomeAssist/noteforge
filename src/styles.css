@@ -59,18 +59,108 @@ code {
 /* --- layout --------------------------------------------------------------- */
 
 .app {
+  --rail-w: 52px;
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--rail-w) var(--sidebar-w) 1fr;
   height: 100vh;
   overflow: hidden;
 }
+.app.sidebar-collapsed {
+  grid-template-columns: var(--rail-w) 0 1fr;
+}
 
-.sidebar {
+/* Icon rail: a left column on desktop, the bottom tab bar on phones. */
+.rail {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+  background: var(--color-sunken);
+  border-right: 1px solid var(--color-border);
+  overflow: hidden;
+}
+.rail__btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.rail__btn .icon {
+  width: 20px;
+  height: 20px;
+}
+.rail__btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+.rail__btn[aria-pressed="true"] {
+  background: var(--color-accent-weak);
+  color: var(--color-accent);
+}
+.rail__btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.rail__spacer {
+  flex: 1;
+}
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: var(--bg-elev);
   border-right: 1px solid var(--border);
   overflow: hidden;
+}
+@media (min-width: 761px) {
+  .app.sidebar-collapsed .sidebar {
+    visibility: hidden;
+    border-right: 0;
+  }
+}
+/* Drag or use the arrow keys to resize the sidebar (240-480 px, persisted). */
+.sidebar__resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: var(--z-sticky);
+}
+.sidebar__resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.sidebar__resize:hover::after,
+.sidebar__resize:focus-visible::after,
+.app.sidebar-resizing .sidebar__resize::after {
+  background: var(--color-accent);
+}
+.sidebar__resize:focus-visible {
+  outline: none;
+}
+.app.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .main {
@@ -695,6 +785,7 @@ mark {
 }
 .editor__title {
   flex: 1;
+  min-width: 0;
   font-size: 28px;
   font-weight: 700;
   border: none;
@@ -1533,8 +1624,32 @@ html[data-font="l"] .editor {
   }
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
     margin-top: 48px;
     height: calc(100vh - 48px);
+  }
+  .main {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .rail {
+    grid-row: 2;
+    grid-column: 1;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface);
+    border-right: 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .rail__btn {
+    width: var(--target-touch);
+    height: var(--target-touch);
+  }
+  .rail__btn--desktop,
+  .rail__spacer,
+  .sidebar__resize {
+    display: none;
   }
   .sidebar {
     position: fixed;

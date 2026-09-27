@@ -15,6 +15,11 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
 }
+.workspace__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .workspace__status {
   flex: 1;
   min-width: 0;
@@ -154,6 +159,15 @@
 @media (max-width: 760px) {
   .workspace__toolbar {
     flex-wrap: wrap;
+  }
+  /* Icon-only on phones; the label stays as the accessible name. */
+  .workspace__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .workspace__pane-switch {
     display: flex;

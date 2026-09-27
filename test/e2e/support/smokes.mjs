@@ -1040,6 +1040,14 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
     await page.locator('#menu-btn').click();
     await page.locator(selector).click();
   };
+  // Capture lives in the rail, which is the bottom bar on phones; the open
+  // sidebar's backdrop would cover it.
+  const closeSidebar = async () => {
+    if (await page.evaluate(() => document.querySelector('#app')?.classList.contains('sidebar-open'))) {
+      await page.locator('#sidebar-backdrop').click();
+      await page.waitForFunction(() => !document.querySelector('#app')?.classList.contains('sidebar-open'));
+    }
+  };
   let stage = 'booting the app';
   let dates = null;
   let firstDailyId = null;
@@ -1175,7 +1183,7 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
     );
 
     stage = 'capturing text, URL, and clipboard content to the default Inbox';
-    await openSidebar();
+    await closeSidebar();
     await page.locator('#capture-btn').click();
     await page.locator('#quick-capture-overlay').waitFor({ state: 'visible' });
     check(
@@ -1210,7 +1218,7 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
     await page.keyboard.press('Escape');
 
     stage = 'capturing a local image to an arbitrary existing note';
-    await openSidebar();
+    await closeSidebar();
     await page.locator('#capture-btn').click();
     await page.locator('#capture-destination').selectOption('existing:phase4-task-source');
     await page.locator('#capture-text').fill('Local image capture');
@@ -1234,7 +1242,7 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
     await page.keyboard.press('Escape');
 
     stage = 'capturing to a new destination and handling clipboard denial';
-    await openSidebar();
+    await closeSidebar();
     await page.locator('#capture-btn').click();
     await page.evaluate(() => {
       window.__phase4Clipboard.fail = true;

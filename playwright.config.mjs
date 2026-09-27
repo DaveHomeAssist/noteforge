@@ -39,7 +39,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'features', testMatch: ['features.spec.mjs', 'smokes.spec.mjs', 'dialogs.spec.mjs'] },
+    { name: 'features', testMatch: ['features.spec.mjs', 'smokes.spec.mjs', 'dialogs.spec.mjs', 'shell.spec.mjs'] },
     { name: 'a11y', testMatch: 'a11y.spec.mjs' },
     // No retries: rendering is deterministic in the pinned container, and a retry
     // would compare against a baseline the first attempt just wrote.

@@ -36,6 +36,12 @@ class App {
       themeBtn: document.getElementById('theme-btn'),
       mobileThemeBtn: document.getElementById('mobile-theme-btn'),
       graphBtn: document.getElementById('graph-btn'),
+      railSidebarBtn: document.getElementById('rail-sidebar-btn'),
+      railSearchBtn: document.getElementById('rail-search-btn'),
+      railTasksBtn: document.getElementById('rail-tasks-btn'),
+      railCalendarBtn: document.getElementById('rail-calendar-btn'),
+      railSettingsBtn: document.getElementById('rail-settings-btn'),
+      sidebarResize: document.getElementById('sidebar-resize'),
       menuBtn: document.getElementById('menu-btn'),
       menuDropdown: document.getElementById('menu-dropdown'),
       exportBtn: document.getElementById('export-btn'),
@@ -147,6 +153,7 @@ class App {
     this.backup = null;
     // Apply persisted font/width/autosave on load (Theme already applied the theme).
     this.#applySettings(normalizeSettings(this.db.config));
+    this.#applySidebarLayout();
 
     // Re-render list/graph whenever the store changes; editor refreshes itself.
     this.db.subscribe(() => {
@@ -364,6 +371,69 @@ class App {
     this.el.sidebarBackdrop.hidden = !open;
     this.el.sidebarToggle?.setAttribute('aria-expanded', String(open));
     this.#syncSidebarInert();
+  }
+
+  // --- desktop sidebar: collapse + resize (persisted in the vault config) ----
+
+  static SIDEBAR_MIN = 240;
+  static SIDEBAR_MAX = 480;
+
+  #sidebarCollapsed() {
+    return this.el.app.classList.contains('sidebar-collapsed');
+  }
+
+  #applySidebarLayout() {
+    const width = Number(this.db.config?.sidebarWidth);
+    if (Number.isFinite(width)) this.#setSidebarWidth(width, { persist: false });
+    this.#setSidebarCollapsed(this.db.config?.sidebarCollapsed === true, { persist: false });
+  }
+
+  #setSidebarCollapsed(collapsed, { persist = true } = {}) {
+    this.el.app.classList.toggle('sidebar-collapsed', collapsed);
+    this.el.railSidebarBtn?.setAttribute('aria-expanded', String(!collapsed));
+    if (persist) this.db.setConfig({ sidebarCollapsed: collapsed });
+  }
+
+  #setSidebarWidth(width, { persist = true } = {}) {
+    const clamped = Math.round(Math.min(App.SIDEBAR_MAX, Math.max(App.SIDEBAR_MIN, width)));
+    this.el.app.style.setProperty('--sidebar-w', `${clamped}px`);
+    this.el.sidebarResize?.setAttribute('aria-valuenow', String(clamped));
+    if (persist) this.db.setConfig({ sidebarWidth: clamped });
+    return clamped;
+  }
+
+  #bindSidebarResize() {
+    const handle = this.el.sidebarResize;
+    if (!handle) return;
+    const current = () => Number(handle.getAttribute('aria-valuenow')) || 320;
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      const left = this.el.sidebar.getBoundingClientRect().left;
+      this.el.app.classList.add('sidebar-resizing');
+      const onMove = (move) => this.#setSidebarWidth(move.clientX - left, { persist: false });
+      const onUp = () => {
+        handle.removeEventListener('pointermove', onMove);
+        this.el.app.classList.remove('sidebar-resizing');
+        this.#setSidebarWidth(current());
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp, { once: true });
+      handle.addEventListener('pointercancel', onUp, { once: true });
+    });
+    handle.addEventListener('keydown', (event) => {
+      const step = event.shiftKey ? 64 : 16;
+      const next = {
+        ArrowLeft: current() - step,
+        ArrowRight: current() + step,
+        Home: App.SIDEBAR_MIN,
+        End: App.SIDEBAR_MAX,
+      }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      this.#setSidebarWidth(next);
+    });
   }
 
   #closeSidebar() {
@@ -981,6 +1051,7 @@ class App {
    *  where it would otherwise be inert and swallow the focus silently. */
   #focusSearch() {
     if (this.mobileMql.matches && !this.el.app.classList.contains('sidebar-open')) this.#toggleSidebar();
+    if (!this.mobileMql.matches && this.#sidebarCollapsed()) this.#setSidebarCollapsed(false);
     this.noteList.focusSearch();
   }
 
@@ -1284,7 +1355,7 @@ class App {
     const showGraph = view === 'graph';
     this.el.graph.hidden = !showGraph;
     (this.workspace?.element || this.el.editor).hidden = showGraph;
-    this.el.graphBtn.classList.toggle('btn--active', showGraph);
+    this.el.graphBtn.setAttribute('aria-pressed', String(showGraph));
     if (showGraph) this.graph?.render(this.currentId);
   }
 
@@ -1329,6 +1400,12 @@ class App {
     this.el.captureBtn?.addEventListener('click', () => this.#showQuickCapture());
     this.el.tasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
     this.el.calendarBtn?.addEventListener('click', () => this.#showCalendar());
+    this.el.railTasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
+    this.el.railCalendarBtn?.addEventListener('click', () => this.#showCalendar());
+    this.el.railSettingsBtn?.addEventListener('click', () => this.#showSettings());
+    this.el.railSearchBtn?.addEventListener('click', () => this.#focusSearch());
+    this.el.railSidebarBtn?.addEventListener('click', () => this.#setSidebarCollapsed(!this.#sidebarCollapsed()));
+    this.#bindSidebarResize();
     for (const button of [this.el.navBack, this.el.mobileNavBack])
       button?.addEventListener('click', () => this.goBack());
     for (const button of [this.el.navForward, this.el.mobileNavForward])
@@ -1521,6 +1598,9 @@ class App {
       } else if (mod && e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
         void this.#showQuickCapture();
+      } else if (mod && e.key === '\\' && !this.mobileMql.matches) {
+        e.preventDefault();
+        this.#setSidebarCollapsed(!this.#sidebarCollapsed());
       } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.#focusSearch();
