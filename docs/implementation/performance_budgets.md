@@ -14,14 +14,62 @@ These budgets apply to every feature phase. Measurements use Node 22 and the CI 
 
 Search baseline on 2026-08-19: pure `rankNotes()` over 1,000 notes measured 0.098 ms median and 0.179 ms p95 on Node `v22.22.1`. This diagnostic leaves nearly all of the 150 ms interaction budget available for event handling, rendering, and accessibility state updates.
 
-## Build budget
+## Build budget (policy v2, from 2026-09-27)
 
-The initial shell is the uncompressed `index.html` plus the CSS and JavaScript files it references directly. Hashes and source maps do not affect the calculation.
+Every route has a gzip budget in `test/bundle-budgets.json`. `npm run test:budget`
+(`test/bundle-budget.mjs`) measures a finished `dist/` with Vite's build manifest
+(moved to `build-meta/manifest.json`, never deployed) and fails when any route is
+over. CI runs it after every build on Node 22 and 24.
+
+- **What a route counts.** `shell` is `index.html` plus every CSS and JavaScript
+  file the entry loads before the app is usable. Every other route counts only
+  what it adds on top of the shell: its lazy chunks, their static imports, and
+  their stylesheets. `precache` is every file the service worker stores for
+  offline use. Each file is gzipped at level 9 and the sizes are summed.
+- **Why gzip.** Users download compressed bytes; raw bytes over-penalize
+  repetitive code and under-penalize dense code. Raw sizes are still printed.
+- **Initial budgets.** Measured gzip plus 10%, rounded up to the next KiB, on
+  2026-09-27 at `main` plus the Playwright suite (Node 22.22.1, Vite 6.4.3).
+  `collections` joins the table when Phase 3 builds it.
+- **Adding a lazy feature.** Add its entry modules to an existing route or a new
+  one in the same PR. A route entry the build does not contain fails the gate
+  (exit 2), so a renamed module cannot silently drop out of a budget.
+
+| Route | Loads | Measured gzip | Budget |
+| --- | --- | ---: | ---: |
+| shell | first paint | 75,571 B | 83,968 B (82 KiB) |
+| editor | outline, backlink index, navigation | 5,389 B | 6,144 B |
+| graph | graph view | 3,092 B | 4,096 B |
+| recovery | history, backup center, recovery, backup core | 26,160 B | 29,696 B |
+| retrieval | palette, find/replace, saved views, archive, bulk actions, link tools | 24,139 B | 26,624 B |
+| daily | daily notes, capture, tasks, calendar | 19,629 B | 22,528 B |
+| properties | properties view, YAML parser | 43,344 B | 48,128 B |
+| workspace | tabs and panes, clipper, folder reconciliation | 24,665 B | 27,648 B |
+| settings | settings, Trash | 4,193 B | 5,120 B |
+| precache | everything offline | 220,873 B | 243,712 B |
+
+### Raising a budget
+
+A budget rises only in a pull request that edits `test/bundle-budgets.json` and
+appends a row to the log below with the measured size, the cause, what was tried
+first (deferring code to a lazy route, dropping a dependency), and who approved
+it. Prefer moving code out of `shell`: a feature that is not needed for first
+paint belongs in a lazy route, with its CSS loaded alongside it.
+
+### Budget log
+
+| Date | Route | Old | New | Cause | Approved |
+| --- | --- | ---: | ---: | --- | --- |
+| 2026-09-27 | all | raw 257,180 B shell ceiling | table above | Policy v2 replaces the raw initial-shell ceiling (roadmap Phase 0) | Dave (roadmap Phase 0, "execute the next phase", 2026-09-26) |
+
+## Build budget history (policy v1, raw initial-shell ceiling, until 2026-09-26)
+
+The initial shell was the uncompressed `index.html` plus the CSS and JavaScript files it references directly. Hashes and source maps do not affect the calculation.
 
 - Baseline: 214,316 bytes.
 - Hard ceiling without an approved exception: 257,180 bytes (+20%, rounded up).
 - Diagnostic per-artifact ceilings: HTML 8,500 bytes, CSS 31,493 bytes, JavaScript 217,187 bytes. The total ceiling is authoritative; a justified shift between CSS and JavaScript is allowed.
-- Every phase records exact `wc -c` values after `npm run build` and compares the total with this baseline. `npm run test:budget` (`test/bundle-budget.mjs`) computes the same total from `dist/` and fails above the hard ceiling; CI runs it after every build.
+- Every phase recorded exact `wc -c` values after `npm run build` and compared the total with this baseline; from Sprint 2 until policy v2, `test/bundle-budget.mjs` computed the total from `dist/` and failed above the hard ceiling.
 - A dependency addition must also record license, installed version, audit result, CSP impact, and its contribution to production output.
 
 Phase 1 measurement on 2026-08-20 (Node 22.22.1, Vite 6.4.3): `index.html`

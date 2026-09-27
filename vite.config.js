@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -89,6 +89,24 @@ function swVersionPlugin() {
 // exactly as it is emitted (the minifier may touch surrounding whitespace). The
 // meta is spliced in as a string rather than via `tags`, which would HTML-escape
 // every quote in the policy to `&#39;` (correct, but ~70 wasted shell bytes).
+// The per-route size budgets (test/bundle-budget.mjs) read Vite's build manifest
+// to know which chunks and stylesheets each lazy feature loads. The manifest is
+// build metadata, not a site file: move it to build-meta/ so it is never deployed
+// to GitHub Pages or synced to systembydave.com.
+function buildMetaPlugin() {
+  return {
+    name: 'build-meta',
+    apply: 'build',
+    closeBundle() {
+      const source = resolve('dist', '.vite', 'manifest.json');
+      if (!existsSync(source)) return;
+      mkdirSync(resolve('build-meta'), { recursive: true });
+      renameSync(source, resolve('build-meta', 'manifest.json'));
+      rmSync(resolve('dist', '.vite'), { recursive: true, force: true });
+    },
+  };
+}
+
 function cspPlugin() {
   return {
     name: 'inject-csp',
@@ -178,7 +196,7 @@ export default defineConfig(({ command, isPreview }) => ({
   base: command === 'build' || isPreview ? '/noteforge/' : '/',
   // Order matters: the CSP plugin runs `post`, after the build stamp and the
   // minifier, so its hash covers the inline theme script exactly as emitted.
-  plugins: [buildStampPlugin(), minifyHtmlPlugin(), cspPlugin(), swVersionPlugin()],
+  plugins: [buildStampPlugin(), minifyHtmlPlugin(), cspPlugin(), swVersionPlugin(), buildMetaPlugin()],
   server: {
     port: 5175,
     open: true,
@@ -195,5 +213,7 @@ export default defineConfig(({ command, isPreview }) => ({
     // No inline modulepreload polyfill, so the production CSP stays at
     // `script-src 'self'` plus one hash (no 'unsafe-inline'). es2020 targets support it.
     modulePreload: { polyfill: false },
+    // Moved to build-meta/manifest.json by buildMetaPlugin (per-route budgets).
+    manifest: true,
   },
 }));

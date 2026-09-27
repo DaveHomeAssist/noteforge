@@ -62,7 +62,7 @@ rg -n "noteforge-build content=$(git rev-parse --short=12 HEAD)" dist/index.html
 find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 ```
 
-- Initial HTML/CSS/JS shell is at most 257,180 uncompressed bytes unless an approved exception is recorded.
+- `npm run test:budget` passes: every route in `test/bundle-budgets.json` is within its gzip budget, or the PR raises it with a budget-log row in `performance_budgets.md`.
 - The effective production CSP is meta-delivered by Vite; do not falsely require a Pages response header or `frame-ancestors` from the meta policy.
 - Service-worker activation deletes stale `noteforge-*` caches only. The executable sentinel-cache regression must pass.
 

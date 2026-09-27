@@ -1,5 +1,5 @@
 /* Command palette styles. Deferred with the lazily imported palette module so
-   they stay out of the initial-shell budget (test/bundle-budget.mjs). */
+   they stay out of the shell route budget (test/bundle-budgets.json). */
 
 /* --- command palette ------------------------------------------------------ */
 

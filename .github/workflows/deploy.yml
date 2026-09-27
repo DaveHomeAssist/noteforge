@@ -83,7 +83,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Initial shell budget (docs/implementation/performance_budgets.md)
+      - name: Per-route gzip budgets (test/bundle-budgets.json, policy in docs/implementation/performance_budgets.md)
         run: npm run test:budget
 
       - name: Upload Pages artifact

@@ -1,5 +1,6 @@
 *.local
 .DS_Store
+build-meta/
 dist/
 node_modules/
 test-results/
