@@ -64,7 +64,7 @@
 }
 .calendar-day__number[aria-current="date"] {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-on-accent);
   font-weight: 700;
 }
 .calendar-day__number:focus-visible {

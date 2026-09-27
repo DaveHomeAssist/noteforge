@@ -126,11 +126,13 @@
 }
 .workspace-tab__move,
 .workspace-tab__close {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
   border: 0;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  padding: 5px 4px;
+  padding: 0 4px;
   cursor: pointer;
 }
 .workspace-tab__close {

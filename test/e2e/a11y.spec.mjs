@@ -1,9 +1,10 @@
 // axe-core scans of the production build, held to a ratchet: a surface may never
 // report more violating nodes for a rule than test/e2e/a11y-baseline.json allows,
-// and a rule absent from its entry is allowed zero. Fixing violations is Phase 1
-// work (exit criterion: axe clean); when a count drops, lower the baseline with
+// and a rule absent from its entry is allowed zero. Since Phase 1 sprint 1 the
+// baseline is empty, so any violation on any scanned surface fails. The
+// mechanism stays for new surfaces: scan them, fix them, and never raise it.
+// Regenerate (only ever downward) with
 //   UPDATE_A11Y_BASELINE=1 npm run test:a11y
-// and commit it, so the count can only go down.
 import { readFileSync, writeFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { SURFACES, openSurface } from './support/surfaces.mjs';
@@ -44,7 +45,11 @@ for (const scan of SCANS) {
       for (const violation of results.violations) {
         counts[violation.id] = violation.nodes.length;
         detail.push(`${violation.id} (${violation.impact}) × ${violation.nodes.length}: ${violation.help}`);
-        for (const node of violation.nodes.slice(0, 5)) detail.push(`    ${node.target.join(' ')}`);
+        for (const node of violation.nodes.slice(0, 5)) {
+          detail.push(`    ${node.target.join(' ')}`);
+          const summary = (node.failureSummary || '').split('\n').slice(1).join(' ').trim();
+          if (summary) detail.push(`      ${summary}`);
+        }
       }
       measured[scan.key] = counts;
       if (detail.length)

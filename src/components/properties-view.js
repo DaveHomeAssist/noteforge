@@ -92,7 +92,7 @@ export class PropertiesView {
             return `<div class="properties-row" role="listitem"><div><strong>${escapeHtml(key)}</strong><span class="properties-row__type">${escapeHtml(type)}</span><code>${escapeHtml(displayValue(value))}</code></div><div class="properties-row__actions">${type === 'unsupported' || immutable ? '' : `<button type="button" class="btn btn--ghost" data-property-edit="${escapeHtml(key)}">Edit</button>`}<button type="button" class="btn btn--danger-ghost" data-property-delete="${escapeHtml(key)}" ${immutable ? 'disabled title="noteforge_id is immutable"' : ''}>Remove</button></div></div>`;
           })
           .join('')
-      : '<p class="muted">No editable properties.</p>';
+      : '<p class="muted" role="listitem">No editable properties.</p>';
   }
 
   async #save(event) {

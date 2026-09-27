@@ -1,0 +1,186 @@
+/* ===========================================================================
+   NoteForge design tokens (NoteForge 2, Phase 1).
+
+   Three tiers, all CSS custom properties:
+   1. Primitives: raw scales (neutral with a slight blue bias, accent, status
+      hues), spacing, type, radius, elevation, motion, layers. Never used by
+      components directly.
+   2. Semantic tokens (--color-*): what a color is for, defined separately for
+      light and dark. Every text/background pair used by the UI meets WCAG AA
+      (4.5:1) in both themes; `--on-accent` / `--on-danger` are the text colors
+      for filled accent and danger surfaces.
+   3. Legacy aliases (--bg, --text, --accent, ...): the names the pre-Phase-1
+      component CSS uses, mapped onto semantic tokens. Components move to the
+      --color-* names as Phase 1 rebuilds them.
+
+   theme-color, the manifest, and the pre-paint boot script use --color-surface
+   and --color-bg; test/roundtrip.test.mjs keeps them in step with this file.
+   ========================================================================= */
+
+@layer tokens {
+  :root {
+    /* --- 1. Primitives -------------------------------------------------- */
+    --nf-neutral-0: #ffffff;
+    --nf-neutral-50: #f6f7f9;
+    --nf-neutral-100: #eef0f3;
+    --nf-neutral-150: #e5e8ed;
+    --nf-neutral-200: #e2e5ea;
+    --nf-neutral-300: #cfd4dc;
+    --nf-neutral-500: #6f7887;
+    --nf-neutral-600: #565f6d;
+    --nf-neutral-700: #3d4451;
+    --nf-neutral-800: #2b2f37;
+    --nf-neutral-850: #2a2e36;
+    --nf-neutral-870: #3a3f49;
+    --nf-neutral-900: #1f2430;
+    --nf-neutral-925: #1e2127;
+    --nf-neutral-950: #16181d;
+    --nf-neutral-975: #14161a;
+    --nf-neutral-dark-text: #e6e8ec;
+    --nf-neutral-dark-muted: #a2a9b4;
+
+    --nf-accent-50: #e7eeff;
+    --nf-accent-300: #86a8ff;
+    --nf-accent-600: #2f5fe6;
+    --nf-accent-800: #243052;
+    --nf-accent-950: #0b1330;
+
+    --nf-red-300: #ff8a8a;
+    --nf-red-700: #c81e1e;
+    --nf-red-950: #2a0707;
+    --nf-green-400: #4ade80;
+    --nf-green-700: #15803d;
+    --nf-amber-400: #fbbf24;
+    --nf-amber-700: #b45309;
+    --nf-amber-800: #92400e;
+    --nf-violet-500: #a855f7;
+    --nf-emerald-500: #10b981;
+    --nf-yellow-200: #fff3a3;
+    --nf-yellow-900: #6b5d1f;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-md: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 22px;
+    --text-2xl: 28px;
+    --text-3xl: 36px;
+    --text-4xl: 44px;
+    --leading-tight: 1.25;
+    --leading-normal: 1.55;
+    --leading-relaxed: 1.7;
+
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-full: 999px;
+
+    --duration-fast: 120ms;
+    --duration-base: 180ms;
+    --duration-slow: 260ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+    --z-sticky: 10;
+    --z-dropdown: 100;
+    --z-overlay: 1000;
+    --z-modal: 1100;
+    --z-toast: 1200;
+    --z-skip-link: 1300;
+
+    /* Minimum interactive sizes: WCAG 2.2 target size (24 px) everywhere,
+       comfortable 44 px targets on touch layouts. */
+    --target-min: 24px;
+    --target-touch: 44px;
+    --control-h: 32px;
+
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* --- 2. Semantic tokens, light -------------------------------------- */
+    color-scheme: light;
+    --color-bg: var(--nf-neutral-50);
+    --color-surface: var(--nf-neutral-0);
+    --color-sunken: var(--nf-neutral-100);
+    --color-hover: var(--nf-neutral-150);
+    --color-border: var(--nf-neutral-200);
+    --color-border-strong: var(--nf-neutral-300);
+    --color-text: var(--nf-neutral-900);
+    --color-text-muted: var(--nf-neutral-600);
+    --color-accent: var(--nf-accent-600);
+    --color-accent-weak: var(--nf-accent-50);
+    --color-on-accent: #ffffff;
+    --color-danger: var(--nf-red-700);
+    --color-on-danger: #ffffff;
+    --color-success: var(--nf-green-700);
+    --color-warning: var(--nf-amber-700);
+    --color-warning-strong: var(--nf-amber-800);
+    --color-callout-tip: var(--nf-emerald-500);
+    --color-callout-warning: var(--nf-amber-400);
+    --color-callout-note: var(--nf-violet-500);
+    --color-mark: var(--nf-yellow-200);
+    --color-scrim: rgba(16, 24, 40, 0.45);
+    --focus-ring: var(--nf-accent-600);
+    --elevation-1: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+    --elevation-2: 0 4px 12px rgba(16, 24, 40, 0.1);
+    --elevation-3: 0 12px 32px rgba(16, 24, 40, 0.25);
+  }
+
+  :root[data-theme="dark"] {
+    /* --- 2. Semantic tokens, dark --------------------------------------- */
+    color-scheme: dark;
+    --color-bg: var(--nf-neutral-950);
+    --color-surface: var(--nf-neutral-925);
+    --color-sunken: var(--nf-neutral-975);
+    --color-hover: var(--nf-neutral-850);
+    --color-border: var(--nf-neutral-800);
+    --color-border-strong: var(--nf-neutral-870);
+    --color-text: var(--nf-neutral-dark-text);
+    --color-text-muted: var(--nf-neutral-dark-muted);
+    --color-accent: var(--nf-accent-300);
+    --color-accent-weak: var(--nf-accent-800);
+    --color-on-accent: var(--nf-accent-950);
+    --color-danger: var(--nf-red-300);
+    --color-on-danger: var(--nf-red-950);
+    --color-success: var(--nf-green-400);
+    --color-warning: var(--nf-amber-400);
+    --color-warning-strong: var(--nf-amber-800);
+    --color-mark: var(--nf-yellow-900);
+    --color-scrim: rgba(0, 0, 0, 0.55);
+    --focus-ring: var(--nf-accent-300);
+    --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.55);
+  }
+
+  :root {
+    /* --- 3. Legacy aliases ------------------------------------------------ */
+    --bg: var(--color-bg);
+    --bg-elev: var(--color-surface);
+    --bg-sunken: var(--color-sunken);
+    --border: var(--color-border);
+    --border-strong: var(--color-border-strong);
+    --text: var(--color-text);
+    --text-muted: var(--color-text-muted);
+    --accent: var(--color-accent);
+    --accent-weak: var(--color-accent-weak);
+    --danger: var(--color-danger);
+    --mark: var(--color-mark);
+    --shadow: var(--elevation-1);
+    --radius: var(--radius-md);
+    --sidebar-w: 320px;
+  }
+}

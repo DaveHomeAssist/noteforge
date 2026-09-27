@@ -139,5 +139,14 @@ export async function openSurface(browser, { viewport, theme = 'light', surface 
   }
   await SURFACES[surface](page);
   await page.evaluate(() => document.fonts.ready);
+  // A theme switch or an opening dialog starts CSS transitions; axe and
+  // screenshots must see the end state, not a blend of both themes.
+  await page.waitForFunction(
+    () => document.getAnimations().every((animation) => animation.playState !== 'running'),
+    undefined,
+    {
+      timeout: TIMEOUT,
+    },
+  );
   return { context, page };
 }

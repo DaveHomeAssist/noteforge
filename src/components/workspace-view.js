@@ -344,15 +344,18 @@ export class WorkspaceView {
           if (!note || note.isTrashed) return '';
           const selected = id === active;
           const tabIndex = selected || (!active && this.state.panes[pane].tabs[0] === id) ? '0' : '-1';
-          return `<div class="workspace-tab-wrap" data-tab-wrap="${escapeHtml(id)}">
+          // The tablist may own only tabs, so the per-tab move and close buttons
+          // are pointer affordances outside the accessibility tree; keyboard
+          // users close with Delete and move with Alt+Shift+M (aria-keyshortcuts).
+          return `<div class="workspace-tab-wrap" role="presentation" data-tab-wrap="${escapeHtml(id)}">
           <button type="button" class="workspace-tab" role="tab" id="workspace-${pane}-tab-${index}"
             data-tab="${escapeHtml(id)}" draggable="true" aria-controls="${panelId}"
-            aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
+            aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+M Delete"
             aria-selected="${selected}" tabindex="${tabIndex}" title="${escapeHtml(note.title)}${note.isArchived ? ' — archived' : ''}">
             <span>${escapeHtml(note.title || 'Untitled')}</span>${note.isArchived ? '<span class="workspace-tab__state">Archived</span>' : ''}
           </button>
-          <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-label="Move ${escapeHtml(note.title)} to other pane">⇄</button>
-          <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-label="Close ${escapeHtml(note.title)} tab">×</button>
+          <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Move to other pane (Alt+Shift+M)">⇄</button>
+          <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Close tab (Delete)">×</button>
         </div>`;
         })
         .join('');
@@ -508,6 +511,9 @@ export class WorkspaceView {
       } else if (tab && event.key === 'Delete') {
         event.preventDefault();
         void this.closeTab(tab.dataset.tab);
+      } else if (tab && event.altKey && event.shiftKey && event.code === 'KeyM') {
+        event.preventDefault();
+        void this.moveToOtherPane(tab.dataset.tab);
       } else if (event.target === this.splitter && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
         const next =
