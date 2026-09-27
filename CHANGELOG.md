@@ -22,6 +22,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The command palette groups results under Recent, Notes, Commands, and Headings (the best match's group first), shows each command's keyboard shortcut as keys, and on screens 1024 px and wider previews the highlighted note or command beside the list.
 
 ### Changed
+- Dialogs, the command palette, the More actions menu, and the slash menu fade in over 120–180 ms, and the phone sidebar slides on the same motion tokens; with reduced motion requested, they appear at once.
 - Callout headers, the note tree's expand/collapse buttons, and the notice close button use icons instead of emoji and "▸", "▾", and "×" characters. The accessibility gate now also rejects those characters in controls, and it scans notices.
 - Heading results in the command palette use heading icons instead of "H1"–"H6" text.
 - The block gutter's insert and drag handles are icons with accessible names instead of "+" and "⋮⋮" characters.

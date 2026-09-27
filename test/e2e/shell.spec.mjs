@@ -258,3 +258,29 @@ test('the text column keeps its width in empty and short notes', async ({ browse
     }
   }
 });
+
+test('menus and dialogs animate in, and reduced motion removes the animation', async ({ browser, runtimeErrors }) => {
+  const animation = (locator) =>
+    locator.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { name: style.animationName, seconds: Number.parseFloat(style.animationDuration) };
+    });
+  for (const reducedMotion of ['no-preference', 'reduce']) {
+    const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+    try {
+      await page.emulateMedia({ reducedMotion });
+      await page.locator('#menu-btn').click();
+      const menu = await animation(page.locator('#menu-dropdown'));
+      await page.locator('#settings-btn').click();
+      const dialog = await animation(page.locator('#settings-overlay .modal__panel'));
+      expect([menu.name, dialog.name]).toEqual(['nf-drop-in', 'nf-rise-in']);
+      if (reducedMotion === 'reduce') {
+        expect(Math.max(menu.seconds, dialog.seconds), 'reduced motion shortens enter animations').toBeLessThan(0.001);
+      } else {
+        expect([menu.seconds, dialog.seconds], 'enter animations use the motion tokens').toEqual([0.12, 0.18]);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
