@@ -17,8 +17,11 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The notes sidebar collapses (rail button or Ctrl/⌘+\\) and resizes from 240 to 480 px by dragging or with the arrow keys; both are remembered.
 - Wide editors show a context column beside the text with the outline, backlinks, and unlinked mentions; each editor decides by its own width, so split panes and phones keep one column.
 - The More actions menu is grouped into Create, Views, Knowledge, Data, and App, with separators and a shortcut hint for Today's note. It works from the keyboard: arrow keys, Home, End, and first letters move between items; Escape closes it and returns focus to its button.
+- The slash menu groups block types under Text, Lists, and Insert, with an icon for each. Screen readers hear it as a list of options controlled by the block being typed in, with the active option announced as it changes.
+- Alt+Shift+↑ and Alt+Shift+↓ move the current block up or down, keeping the caret; the move can be undone.
 
 ### Changed
+- The block gutter's insert and drag handles are icons with accessible names instead of "+" and "⋮⋮" characters.
 - Every text and background color pair meets WCAG AA contrast in both themes; the accessibility gate reports zero violations and now fails on any.
 - Moving a note to Trash no longer asks first (it is recoverable); emptying the Trash and permanent deletes still confirm.
 - Workspace tab close and move buttons are 24 px targets and pointer-only; keyboard users close with Delete and move with Alt+Shift+M.
@@ -31,6 +34,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - On phones the workspace toolbar fits on one row and the note title row keeps Properties, Pin, and Delete on screen.
 - The More actions menu scrolls instead of running past the bottom of short screens, and its shortcut hints align to the right edge.
 - In wide editors an empty note's body was 41 px wide and could not be clicked, and short notes were centered; the text column now fills its width.
+- Arrowing through the slash menu past its visible height now scrolls the active option into view.
 
 ## [1.2.0] - 2026-09-27
 

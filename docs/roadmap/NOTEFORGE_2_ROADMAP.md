@@ -100,7 +100,7 @@ Scope:
 - **Breakpoints.** 390 (single column, bottom tab rail: Notes / Search / Capture / Tasks / More; one top bar; banner collapses to 96 px; block gutter visible on touch), 768 (sidebar overlay), 1024 (sidebar + main), 1440 (sidebar + main + context), 1920 (context open by default, two panes comfortable), 2560+ (three panes or main plus two context columns; measure preserved; full-bleed graph with zoom and pan). `min-width` and container queries; `dvh` (WEB-3).
 - **Page chrome.** Page icon (new note field, additive migration) and cover, breadcrumbs, title, property strip, last-edited, empty states, skeletons for lazy chunks.
 - **Command palette v2.** Grouped results (Pages, Commands, Views, Tags, Recent), icons, key chips, inline preview, nested actions.
-- **Slash menu v2** with icons, groups, and listbox ARIA; separate block action menu; Alt+Shift+↑/↓ block moves.
+- **Slash menu v2** with icons, groups, and listbox ARIA; separate block action menu; Alt+Shift+↑/↓ block moves. *Icons, groups, combobox + listbox ARIA, and block moves shipped 2026-09-27; the separate block action menu is open.*
 - **Motion.** Dialog and menu enter/exit (120–180 ms), drawer, list reorder, spring-damped drag and splitter; reduced motion respected.
 - **Overflow menu** grouped (Create / Views / Knowledge / Data / Help) with separators, icons, shortcut hints, arrow keys. *Shipped 2026-09-27 with App (Settings) in place of Help; see the [decision log](../architecture/decisions.md).*
 

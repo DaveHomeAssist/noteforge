@@ -134,6 +134,61 @@
     check('Escape closes menu leaving text', !document.querySelector('.blk-menu'));
   });
 
+  // ============ slash menu v2: listbox, groups, icons, announcements ============
+  section('slash menu v2', () => {
+    const be = mkBE('');
+    const blk = be.host.querySelector('.blk'); blk.focus();
+    type(blk, '/');
+    const menu = document.querySelector('.blk-menu');
+    const options = [...menu.querySelectorAll('[role="option"]')];
+    const selected = () => [...menu.querySelectorAll('[aria-selected="true"]')].map((o) => o.querySelector('.blk-menu__label').textContent).join();
+    check('slash menu is a labelled listbox', menu.getAttribute('role') === 'listbox' && menu.getAttribute('aria-label') === 'Block types');
+    check('the block is a named combobox that controls the open listbox',
+      blk.getAttribute('role') === 'combobox' && blk.getAttribute('aria-expanded') === 'true' &&
+      blk.getAttribute('aria-controls') === menu.id && !!blk.getAttribute('aria-label'));
+    check('slash options are grouped as Text, Lists, Insert',
+      [...menu.querySelectorAll('[role="group"]')].map((g) => document.getElementById(g.getAttribute('aria-labelledby'))?.textContent).join() === 'Text,Lists,Insert');
+    check('every slash option has an icon', options.length === 15 && options.every((o) => o.querySelector('svg.icon use')));
+    check('exactly one option is selected', selected() === 'Text');
+    key(blk, 'ArrowDown');
+    check('ArrowDown selects the next option without rebuilding the list', selected() === 'Heading 1' && menu.querySelector('[role="option"]') === options[0]);
+    check('aria-activedescendant follows the active option', blk.getAttribute('aria-activedescendant') === options[1].id);
+    key(blk, 'ArrowUp'); key(blk, 'ArrowUp');
+    const last = menu.querySelector('[aria-selected="true"]');
+    check('ArrowUp wraps to the last option', selected() === 'Image');
+    check('the active option is scrolled into view',
+      menu.scrollTop > 0 && last.offsetTop >= menu.scrollTop && last.offsetTop + last.offsetHeight <= menu.scrollTop + menu.clientHeight);
+    key(blk, 'ArrowDown'); key(blk, 'ArrowDown');
+    type(blk, '/he');
+    check('a new filter selects its first match', selected() === 'Heading 1');
+    key(blk, 'Escape');
+    check('closing the menu removes the combobox semantics',
+      !blk.hasAttribute('role') && !blk.hasAttribute('aria-controls') && !blk.hasAttribute('aria-activedescendant'));
+  });
+
+  // ============ Alt+Shift+Arrow moves a block ============
+  section('keyboard block moves', () => {
+    const status = document.createElement('span');
+    status.id = 'app-status';
+    document.body.appendChild(status);
+    const be = mkBE('one\n\ntwo\n\nthree');
+    const first = be.host.querySelector('.blk');
+    setCaretEnd(first);
+    key(first, 'ArrowDown', { altKey: true, shiftKey: true });
+    check('Alt+Shift+ArrowDown moves the block down', be.serialize() === 'two\n\none\n\nthree');
+    const moved = document.activeElement;
+    check('the moved block keeps focus and caret', moved?.textContent === 'one' && getSelection().anchorOffset === 3);
+    check('a block move is announced', status.textContent === 'Block moved down.');
+    key(moved, 'ArrowUp', { altKey: true, shiftKey: true });
+    check('Alt+Shift+ArrowUp moves it back', be.serialize() === 'one\n\ntwo\n\nthree');
+    key(document.activeElement, 'ArrowUp', { altKey: true, shiftKey: true });
+    check('the first block does not move up', be.serialize() === 'one\n\ntwo\n\nthree');
+    key(document.activeElement, 'ArrowDown', { altKey: true, shiftKey: true });
+    key(document.activeElement, 'z', { ctrlKey: true });
+    check('a block move is undoable', be.serialize() === 'one\n\ntwo\n\nthree');
+    status.remove();
+  });
+
   // ============ menu scroll fix ============
   section('menu scroll does not close menu', () => {
     const be = mkBE('');
@@ -588,6 +643,10 @@
     add.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('"+" inserts a new block', be.host.querySelectorAll('.blk-row').length === 2);
     check('"+" opens the slash menu', !!document.querySelector('.blk-menu'));
+    const gutter = be.host.querySelector('.blk-gutter');
+    check('gutter controls are icons with names, not glyphs',
+      !!gutter.querySelector('.blk-add svg.icon') && !!gutter.querySelector('.blk-handle svg.icon') && gutter.textContent.trim() === '' &&
+      !!gutter.querySelector('.blk-add').getAttribute('aria-label') && !!gutter.querySelector('.blk-handle').getAttribute('aria-label'));
     document.querySelector('.blk-menu') && key(be.host.querySelector('.blk'), 'Escape');
   });
 

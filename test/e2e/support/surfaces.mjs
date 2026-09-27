@@ -100,6 +100,13 @@ export const SURFACES = {
     await page.evaluate(() => window.app.newNote());
     await visible(page, '.banner-add');
   },
+  // The slash menu over a new note's empty first block.
+  'slash-menu': async (page) => {
+    await page.evaluate(() => window.app.newNote());
+    await page.locator('.editor__blocks .blk:visible').first().click();
+    await page.keyboard.type('/');
+    await visible(page, '.blk-menu [role="option"]');
+  },
   // A destructive confirmation with the pointer on its confirm button, so the
   // hover colors are what axe measures.
   'confirm-danger': async (page) => {
