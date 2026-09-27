@@ -1,0 +1,102 @@
+{
+  "$comment": "Budget policy v2 (docs/implementation/performance_budgets.md). Each route is the gzip size of the files a user downloads for it: the shell always, every other route only what it adds on top of the shell. Raising a budget needs a PR that edits this file and appends a row to the budget log in performance_budgets.md.",
+  "compression": "gzip level 9 per file, summed",
+  "routes": {
+    "shell": {
+      "description": "First paint: index.html plus every CSS and JavaScript file it loads before the app is usable.",
+      "entries": [
+        "index.html"
+      ],
+      "gzipBudget": 83968
+    },
+    "editor": {
+      "description": "Loaded with the first open note: outline, backlink and unlinked-mention index, back/forward navigation.",
+      "entries": [
+        "src/components/outline-view.js",
+        "src/core/knowledge-index.js",
+        "src/core/knowledge-index.css",
+        "src/utils/navigation.js"
+      ],
+      "gzipBudget": 6144
+    },
+    "graph": {
+      "description": "Graph view.",
+      "entries": [
+        "src/components/graph.js"
+      ],
+      "gzipBudget": 4096
+    },
+    "recovery": {
+      "description": "Revision history, backup center, recovery service, and backup verification.",
+      "entries": [
+        "src/components/history-view.js",
+        "src/components/backup-view.js",
+        "src/core/revision-store.js",
+        "src/core/recovery-service.js",
+        "src/core/backup.js"
+      ],
+      "gzipBudget": 29696
+    },
+    "retrieval": {
+      "description": "Command palette, find and replace, saved views, archive, bulk actions, link tools.",
+      "entries": [
+        "src/components/command-palette.js",
+        "src/components/find-replace-view.js",
+        "src/components/saved-searches-view.js",
+        "src/components/archive-view.js",
+        "src/components/bulk-actions-view.js",
+        "src/components/link-tools-view.js"
+      ],
+      "gzipBudget": 26624
+    },
+    "daily": {
+      "description": "Daily notes, quick capture, task dashboard, calendar.",
+      "entries": [
+        "src/app/phase4.js",
+        "src/components/quick-capture-view.js",
+        "src/components/task-dashboard-view.js",
+        "src/components/calendar-view.js",
+        "src/core/capture-service.js",
+        "src/core/task-service.js",
+        "src/utils/daily-workflow.js",
+        "src/utils/local-date.js",
+        "src/utils/capture.js"
+      ],
+      "gzipBudget": 22528
+    },
+    "properties": {
+      "description": "Properties view and the YAML frontmatter parser.",
+      "entries": [
+        "src/app/phase5.js",
+        "src/components/properties-view.js",
+        "node_modules/yaml/browser/index.js"
+      ],
+      "gzipBudget": 48128
+    },
+    "workspace": {
+      "description": "Tabs and split panes, web clipper, Markdown-folder reconciliation.",
+      "entries": [
+        "src/app/phase6.js",
+        "src/components/workspace-view.js",
+        "src/components/clipper-view.js",
+        "src/components/reconciliation-view.js",
+        "src/core/reconciliation-service.js",
+        "src/utils/vault-import.js"
+      ],
+      "gzipBudget": 27648
+    },
+    "settings": {
+      "description": "Settings and Trash dialogs.",
+      "entries": [
+        "src/components/settings-view.js",
+        "src/components/trash-view.js"
+      ],
+      "gzipBudget": 5120
+    },
+    "precache": {
+      "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
+      "all": true,
+      "gzipBudget": 243712
+    }
+  }
+}
