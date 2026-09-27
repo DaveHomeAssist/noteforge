@@ -15,7 +15,8 @@ import {
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const signatureOf = (note) => ({ content: note.content, aliases: [...(note.aliases || [])] });
-const sameSignature = (left, note) => Boolean(left) && left.content === note.content && same(left.aliases, note.aliases);
+const sameSignature = (left, note) =>
+  Boolean(left) && left.content === note.content && same(left.aliases, note.aliases);
 
 /**
  * Decide which alias store is authoritative for one reconcile pass.
@@ -67,15 +68,20 @@ export class Phase5Controller {
   async #ensureProperties() {
     if (this.properties) return this.properties;
     if (this.propertiesReady) return this.propertiesReady;
-    this.propertiesReady = import('../components/properties-view.js').then(({ PropertiesView, createPropertiesElements }) => {
-      this.properties = new PropertiesView(createPropertiesElements(), {
-        read: (id) => this.read(id),
-        set: (id, key, value, type) => this.set(id, key, value, type),
-        remove: (id, key) => this.remove(id, key),
-        replaceRaw: (id, raw) => this.replaceRaw(id, raw),
+    this.propertiesReady = import('../components/properties-view.js')
+      .then(({ PropertiesView, createPropertiesElements }) => {
+        this.properties = new PropertiesView(createPropertiesElements(), {
+          read: (id) => this.read(id),
+          set: (id, key, value, type) => this.set(id, key, value, type),
+          remove: (id, key) => this.remove(id, key),
+          replaceRaw: (id, raw) => this.replaceRaw(id, raw),
+        });
+        return this.properties;
+      })
+      .catch((error) => {
+        this.propertiesReady = null;
+        throw error;
       });
-      return this.properties;
-    }).catch((error) => { this.propertiesReady = null; throw error; });
     return this.propertiesReady;
   }
 
@@ -95,9 +101,8 @@ export class Phase5Controller {
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const nextContent = await setFrontmatterProperty(note.content, key, value, { type });
     const parsed = await parseFrontmatter(nextContent);
-    const aliases = key === 'aliases'
-      ? normalizeAliases(aliasesFromProperties(parsed.properties).aliases, note.title)
-      : note.aliases;
+    const aliases =
+      key === 'aliases' ? normalizeAliases(aliasesFromProperties(parsed.properties).aliases, note.title) : note.aliases;
     await this.#commit(note, nextContent, aliases, 'pre_property_edit');
   }
 
@@ -120,14 +125,18 @@ export class Phase5Controller {
       const separator = current.separator || current.newline || '\n';
       nextContent = `${raw}${separator}${current.body}`;
       if (!splitFrontmatterSource(nextContent).hasFrontmatter) {
-        throw new FrontmatterError('invalid_boundary', 'Raw frontmatter must begin and end with an exact --- or ... delimiter line.');
+        throw new FrontmatterError(
+          'invalid_boundary',
+          'Raw frontmatter must begin and end with an exact --- or ... delimiter line.',
+        );
       }
     }
     const parsed = await parseFrontmatter(nextContent);
     const aliasProperty = parsed.status === 'valid' ? aliasesFromProperties(parsed.properties) : null;
-    const aliases = aliasProperty?.valid && aliasProperty.present
-      ? normalizeAliases(aliasProperty.aliases, note.title)
-      : note.aliases;
+    const aliases =
+      aliasProperty?.valid && aliasProperty.present
+        ? normalizeAliases(aliasProperty.aliases, note.title)
+        : note.aliases;
     await this.#commit(note, nextContent, aliases, 'pre_frontmatter_source_edit');
   }
 
@@ -137,7 +146,10 @@ export class Phase5Controller {
     await this.db.flush();
     const fresh = this.db.getNote(note.id);
     if (!fresh || fresh.content !== note.content || !same(fresh.aliases, note.aliases)) {
-      throw new FrontmatterError('stale_note', 'The note changed while properties were open. Review the latest source and try again.');
+      throw new FrontmatterError(
+        'stale_note',
+        'The note changed while properties were open. Review the latest source and try again.',
+      );
     }
     await this.ensureRecovery();
     const before = fresh.toJSON();
@@ -189,7 +201,7 @@ export class Phase5Controller {
   }
 
   async #indexNote(note, parsed = null) {
-    const result = parsed || await parseFrontmatter(note.content);
+    const result = parsed || (await parseFrontmatter(note.content));
     Object.defineProperty(note, '_propertySearchIndex', {
       value: result.status === 'valid' ? propertySearchIndex(result.properties) : new Map(),
       writable: true,
@@ -202,7 +214,9 @@ export class Phase5Controller {
 
   reconcileAliases({ changedOnly = false, noteIds = null } = {}) {
     if (this.reconcileReady) return this.reconcileReady;
-    this.reconcileReady = this.#reconcileAliases(changedOnly, noteIds).finally(() => { this.reconcileReady = null; });
+    this.reconcileReady = this.#reconcileAliases(changedOnly, noteIds).finally(() => {
+      this.reconcileReady = null;
+    });
     return this.reconcileReady;
   }
 
@@ -212,9 +226,9 @@ export class Phase5Controller {
     const requested = Array.isArray(noteIds) ? new Set(noteIds) : null;
     const notes = requested ? allNotes.filter((note) => requested.has(note.id)) : allNotes;
     if (requested) for (const id of requested) if (!liveIds.has(id)) this.signatures.delete(id);
-    const blockedById = new Map((changedOnly ? this.repairReport : [])
-      .filter((entry) => liveIds.has(entry.id))
-      .map((entry) => [entry.id, entry]));
+    const blockedById = new Map(
+      (changedOnly ? this.repairReport : []).filter((entry) => liveIds.has(entry.id)).map((entry) => [entry.id, entry]),
+    );
     const replacements = [];
     const captures = [];
     for (const note of notes) {
@@ -224,12 +238,21 @@ export class Phase5Controller {
       const before = note.toJSON();
       const parsed = await this.#indexNote(note);
       if (parsed.status === 'invalid') {
-        if (note.aliases.length) blockedById.set(note.id, { id: note.id, title: note.title, message: parsed.diagnostics[0]?.message || 'Invalid YAML' });
+        if (note.aliases.length)
+          blockedById.set(note.id, {
+            id: note.id,
+            title: note.title,
+            message: parsed.diagnostics[0]?.message || 'Invalid YAML',
+          });
         continue;
       }
       const property = aliasesFromProperties(parsed.properties);
       if (!property.valid) {
-        blockedById.set(note.id, { id: note.id, title: note.title, message: 'aliases must be a YAML list of text values.' });
+        blockedById.set(note.id, {
+          id: note.id,
+          title: note.title,
+          message: 'aliases must be a YAML list of text values.',
+        });
         continue;
       }
       const canonical = canonicalAliasesFor(note, property, previous);
@@ -255,7 +278,11 @@ export class Phase5Controller {
       });
       if (current.length) {
         await this.ensureRecovery();
-        await this.db.commitPlannedNotes(current, captures.filter((capture) => current.some((entry) => entry.id === capture.id)), 'pre_frontmatter_alias_migration');
+        await this.db.commitPlannedNotes(
+          current,
+          captures.filter((capture) => current.some((entry) => entry.id === capture.id)),
+          'pre_frontmatter_alias_migration',
+        );
       }
     }
 
@@ -263,7 +290,11 @@ export class Phase5Controller {
     this.repairReport = blocked;
     const previousMarker = this.db.config.frontmatterAliasMigration;
     const markerStatus = blocked.length ? 'repair_required' : 'complete';
-    if (previousMarker?.version !== FRONTMATTER_MIGRATION_VERSION || previousMarker?.status !== markerStatus || !same(previousMarker?.blocked || [], blocked)) {
+    if (
+      previousMarker?.version !== FRONTMATTER_MIGRATION_VERSION ||
+      previousMarker?.status !== markerStatus ||
+      !same(previousMarker?.blocked || [], blocked)
+    ) {
       this.db.setConfig({
         frontmatterAliasMigration: {
           version: FRONTMATTER_MIGRATION_VERSION,
@@ -279,7 +310,10 @@ export class Phase5Controller {
       if (note) await this.#indexNote(note);
     }
     this.refreshSearch();
-    if (blocked.length) this.announce(`${blocked.length} note${blocked.length === 1 ? '' : 's'} need YAML repair before aliases can move to frontmatter.`);
+    if (blocked.length)
+      this.announce(
+        `${blocked.length} note${blocked.length === 1 ? '' : 's'} need YAML repair before aliases can move to frontmatter.`,
+      );
     return { migrated: replacements.length, blocked };
   }
 }

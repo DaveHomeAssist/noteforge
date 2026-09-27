@@ -43,8 +43,15 @@ async function rejectsCode(run, code) {
 const makeBackup = (state = fixture, options = {}) => createBackup(state, { createdAt: CREATED_AT, ...options });
 const asCurrentState = (state) => ({
   schemaVersion: CURRENT_SCHEMA_VERSION,
-  notes: state.notes.map((note) => ({ ...structuredClone(note), aliases: [...(note.aliases || [])], archivedAt: note.archivedAt || null })),
-  config: { ...structuredClone(state.config), frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] } },
+  notes: state.notes.map((note) => ({
+    ...structuredClone(note),
+    aliases: [...(note.aliases || [])],
+    archivedAt: note.archivedAt || null,
+  })),
+  config: {
+    ...structuredClone(state.config),
+    frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] },
+  },
 });
 
 await test('creates a versioned NoteForge portable-backup envelope', async () => {
@@ -165,7 +172,13 @@ await test('rejects non-object config and non-JSON config values', async () => {
 
 await test('reports unavailable and failing SHA-256 providers explicitly', async () => {
   await rejectsCode(() => makeBackup(fixture, { cryptoProvider: null }), 'CRYPTO_UNAVAILABLE');
-  const failingProvider = { subtle: { async digest() { throw new Error('provider failed'); } } };
+  const failingProvider = {
+    subtle: {
+      async digest() {
+        throw new Error('provider failed');
+      },
+    },
+  };
   const error = await rejectsCode(() => makeBackup(fixture, { cryptoProvider: failingProvider }), 'CRYPTO_FAILED');
   assert(error.cause?.message === 'provider failed');
 });
@@ -255,4 +268,3 @@ await test('prototype-shaped config keys remain data and do not pollute prototyp
   assert(Object.prototype.polluted === undefined);
   equal(verified.config.constructor, { kept: 'yes' });
 });
-

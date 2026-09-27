@@ -71,7 +71,8 @@ export function normalizeRetention(settings = {}) {
 function canonicalValue(value, ancestors) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new RevisionStoreError('malformed_metadata', 'Revision metadata contains a non-finite number');
+    if (!Number.isFinite(value))
+      throw new RevisionStoreError('malformed_metadata', 'Revision metadata contains a non-finite number');
     return JSON.stringify(value);
   }
   if (typeof value !== 'object') {
@@ -89,9 +90,10 @@ function canonicalValue(value, ancestors) {
       ancestors.delete(value);
       throw new RevisionStoreError('malformed_metadata', 'Revision metadata must contain plain JSON objects');
     }
-    serialized = `{${Object.keys(value).sort().map((key) => (
-      `${JSON.stringify(key)}:${canonicalValue(value[key], ancestors)}`
-    )).join(',')}}`;
+    serialized = `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalValue(value[key], ancestors)}`)
+      .join(',')}}`;
   }
   ancestors.delete(value);
   return serialized;
@@ -169,7 +171,10 @@ function validateRecord(raw, expectedId) {
     throw new RevisionStoreError('malformed_revision', 'Revision record is missing or malformed');
   }
   if (Number.isInteger(raw.schemaVersion) && raw.schemaVersion > REVISION_SCHEMA_VERSION) {
-    throw new RevisionStoreError('future_revision_schema', `Revision schema ${raw.schemaVersion} is newer than supported schema ${REVISION_SCHEMA_VERSION}`);
+    throw new RevisionStoreError(
+      'future_revision_schema',
+      `Revision schema ${raw.schemaVersion} is newer than supported schema ${REVISION_SCHEMA_VERSION}`,
+    );
   }
   if (raw.schemaVersion !== REVISION_SCHEMA_VERSION) {
     throw new RevisionStoreError('malformed_revision', 'Revision schema version is missing or invalid');
@@ -188,7 +193,10 @@ function validateRecord(raw, expectedId) {
   if (!isHash(raw.contentHash) || !isHash(raw.metadataHash)) {
     throw new RevisionStoreError('malformed_revision', 'Revision content hashes are invalid');
   }
-  if (raw.parentRevisionId !== null && (typeof raw.parentRevisionId !== 'string' || raw.parentRevisionId.length === 0)) {
+  if (
+    raw.parentRevisionId !== null &&
+    (typeof raw.parentRevisionId !== 'string' || raw.parentRevisionId.length === 0)
+  ) {
     throw new RevisionStoreError('malformed_revision', 'Revision parentRevisionId is invalid');
   }
   return Object.freeze({
@@ -206,7 +214,8 @@ function validateRecord(raw, expectedId) {
 function newestFirstByChain(records) {
   const byId = new Map(records.map((record) => [record.id, record]));
   const referencedParents = new Set(records.map((record) => record.parentRevisionId).filter((id) => byId.has(id)));
-  const compare = (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id);
+  const compare = (left, right) =>
+    Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id);
   const heads = records.filter((record) => !referencedParents.has(record.id)).sort(compare);
   const ordered = [];
   const seen = new Set();
@@ -227,7 +236,10 @@ function validateSnapshotRecord(raw, expectedId) {
     throw new RevisionStoreError('malformed_snapshot', 'Local snapshot record is missing or malformed');
   }
   if (Number.isInteger(raw.schemaVersion) && raw.schemaVersion > REVISION_SCHEMA_VERSION) {
-    throw new RevisionStoreError('future_revision_schema', `Snapshot schema ${raw.schemaVersion} is newer than supported schema ${REVISION_SCHEMA_VERSION}`);
+    throw new RevisionStoreError(
+      'future_revision_schema',
+      `Snapshot schema ${raw.schemaVersion} is newer than supported schema ${REVISION_SCHEMA_VERSION}`,
+    );
   }
   if (raw.schemaVersion !== REVISION_SCHEMA_VERSION) {
     throw new RevisionStoreError('malformed_snapshot', 'Local snapshot schema version is missing or invalid');
@@ -260,7 +272,8 @@ function validateSnapshotRecord(raw, expectedId) {
       throw new RevisionStoreError('malformed_snapshot', 'Local snapshot contains a malformed note reference');
     }
     assertString(entry.noteId, 'snapshot noteId');
-    if (seen.has(entry.noteId)) throw new RevisionStoreError('malformed_snapshot', 'Local snapshot contains duplicate note IDs');
+    if (seen.has(entry.noteId))
+      throw new RevisionStoreError('malformed_snapshot', 'Local snapshot contains duplicate note IDs');
     seen.add(entry.noteId);
     if (!isHash(entry.contentHash) || !isHash(entry.metadataHash)) {
       throw new RevisionStoreError('malformed_snapshot', 'Local snapshot contains invalid content hashes');
@@ -314,7 +327,8 @@ function normalizeNoteInput(note, options) {
 function normalizedTimestamp(value, fallback) {
   const timestamp = value ?? fallback;
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (!Number.isFinite(date.getTime())) throw new RevisionStoreError('malformed_timestamp', 'Revision timestamp is invalid');
+  if (!Number.isFinite(date.getTime()))
+    throw new RevisionStoreError('malformed_timestamp', 'Revision timestamp is invalid');
   return date.toISOString();
 }
 
@@ -355,7 +369,13 @@ export function restoredCopyTitle(title, existingTitles = []) {
 }
 
 function materializedPayload(revision) {
-  if (!revision || typeof revision !== 'object' || typeof revision.content !== 'string' || !revision.metadata || typeof revision.metadata !== 'object') {
+  if (
+    !revision ||
+    typeof revision !== 'object' ||
+    typeof revision.content !== 'string' ||
+    !revision.metadata ||
+    typeof revision.metadata !== 'object'
+  ) {
     throw new RevisionStoreError('malformed_revision', 'A materialized revision is required');
   }
   return revision;
@@ -385,11 +405,10 @@ export function createRestorePayload(currentNote, materializedRevision, restored
   return payload;
 }
 
-export function createRestoreCopyPayload(materializedRevision, {
-  id,
-  createdAt = new Date().toISOString(),
-  existingTitles = [],
-} = {}) {
+export function createRestoreCopyPayload(
+  materializedRevision,
+  { id, createdAt = new Date().toISOString(), existingTitles = [] } = {},
+) {
   const revision = materializedPayload(materializedRevision);
   assertString(id, 'copy id');
   if (id === revision.noteId) throw new RevisionStoreError('malformed_note', 'Restore as Copy requires a new note ID');
@@ -416,9 +435,12 @@ export class RevisionStore {
     this.storage = storage;
     this.retention = normalizeRetention(options.retention ?? options);
     this.gcBatchSize = normalizeBoundedInteger(options.gcBatchSize, 1, 1000, 25);
-    this.quotaReserveRatio = typeof options.quotaReserveRatio === 'number' && options.quotaReserveRatio >= 0 && options.quotaReserveRatio <= 0.5
-      ? options.quotaReserveRatio
-      : 0.05;
+    this.quotaReserveRatio =
+      typeof options.quotaReserveRatio === 'number' &&
+      options.quotaReserveRatio >= 0 &&
+      options.quotaReserveRatio <= 0.5
+        ? options.quotaReserveRatio
+        : 0.05;
     this.now = typeof options.now === 'function' ? options.now : () => new Date();
     this.idFactory = typeof options.idFactory === 'function' ? options.idFactory : defaultIdFactory;
     this.state = {
@@ -456,13 +478,10 @@ export class RevisionStore {
   async getStatus() {
     const backend = await this.backendStatus();
     const persisted = await this.storage.load(STATUS_KEY, {});
-    const lastRevisionCapture = this.state.lastRevisionCapture
-      ?? validStoredTimestamp(persisted?.lastRevisionCapture);
-    const lastLocalSnapshot = this.state.lastLocalSnapshot
-      ?? validStoredTimestamp(persisted?.lastLocalSnapshot);
-    const historyAvailable = backend.capabilities?.revisionHistory
-      ?? backend.historyAvailable
-      ?? backend.backend === 'indexeddb';
+    const lastRevisionCapture = this.state.lastRevisionCapture ?? validStoredTimestamp(persisted?.lastRevisionCapture);
+    const lastLocalSnapshot = this.state.lastLocalSnapshot ?? validStoredTimestamp(persisted?.lastLocalSnapshot);
+    const historyAvailable =
+      backend.capabilities?.revisionHistory ?? backend.historyAvailable ?? backend.backend === 'indexeddb';
     const atomicBatch = backend.capabilities?.atomicBatch ?? typeof this.storage.saveMany === 'function';
     const available = Boolean(historyAvailable && atomicBatch);
     return {
@@ -492,10 +511,14 @@ export class RevisionStore {
   async ensureAvailable() {
     const status = await this.getStatus();
     if (!status.available) {
-      throw new RevisionStoreError('history_unavailable', 'Revision history requires durable IndexedDB storage', { details: status });
+      throw new RevisionStoreError('history_unavailable', 'Revision history requires durable IndexedDB storage', {
+        details: status,
+      });
     }
     if (status.paused) {
-      throw new RevisionStoreError('history_paused', 'Revision history is paused to protect current-note persistence', { details: status });
+      throw new RevisionStoreError('history_paused', 'Revision history is paused to protect current-note persistence', {
+        details: status,
+      });
     }
     return status;
   }
@@ -519,8 +542,11 @@ export class RevisionStore {
       }
     } catch (error) {
       if (error instanceof RevisionStoreError) throw error;
-      if (isQuotaError(error)) throw new RevisionStoreError('quota_exceeded', 'Revision storage quota was exceeded', { cause: error });
-      throw new RevisionStoreError('revision_write_failed', 'Revision batch could not be durably saved', { cause: error });
+      if (isQuotaError(error))
+        throw new RevisionStoreError('quota_exceeded', 'Revision storage quota was exceeded', { cause: error });
+      throw new RevisionStoreError('revision_write_failed', 'Revision batch could not be durably saved', {
+        cause: error,
+      });
     }
   }
 
@@ -546,9 +572,8 @@ export class RevisionStore {
   }
 
   enqueueMutation(operation) {
-    const run = () => typeof this.storage.withLock === 'function'
-      ? this.storage.withLock('revision-store', operation)
-      : operation();
+    const run = () =>
+      typeof this.storage.withLock === 'function' ? this.storage.withLock('revision-store', operation) : operation();
     const result = this.mutationQueue.then(run, run);
     this.mutationQueue = result.catch(() => {});
     return result;
@@ -572,15 +597,19 @@ export class RevisionStore {
     const indexedIds = await this.storage.load(indexKey(noteId), null);
     let records = null;
     let usedIndexOrder = false;
-    if (Array.isArray(indexedIds)
-      && indexedIds.every((id) => typeof id === 'string' && id.length > 0)
-      && new Set(indexedIds).size === indexedIds.length) {
+    if (
+      Array.isArray(indexedIds) &&
+      indexedIds.every((id) => typeof id === 'string' && id.length > 0) &&
+      new Set(indexedIds).size === indexedIds.length
+    ) {
       const indexedRecords = await this.readMany(indexedIds.map(recordKey), null);
       try {
         records = indexedRecords.map((raw, index) => {
-          if (isMissing(raw)) throw new RevisionStoreError('incomplete_revision', 'Revision index references a missing record');
+          if (isMissing(raw))
+            throw new RevisionStoreError('incomplete_revision', 'Revision index references a missing record');
           const record = validateRecord(raw, indexedIds[index]);
-          if (record.noteId !== noteId) throw new RevisionStoreError('malformed_revision', 'Revision index references another note');
+          if (record.noteId !== noteId)
+            throw new RevisionStoreError('malformed_revision', 'Revision index references another note');
           return record;
         });
         usedIndexOrder = true;
@@ -617,11 +646,12 @@ export class RevisionStore {
   }
 
   async materialize(recordOrId) {
-    const record = typeof recordOrId === 'string' ? await this.get(recordOrId) : validateRecord(recordOrId, recordOrId?.id);
-    const [content, canonicalMetadata] = await this.readMany([
-      contentKey(record.contentHash),
-      metadataKey(record.metadataHash),
-    ], null);
+    const record =
+      typeof recordOrId === 'string' ? await this.get(recordOrId) : validateRecord(recordOrId, recordOrId?.id);
+    const [content, canonicalMetadata] = await this.readMany(
+      [contentKey(record.contentHash), metadataKey(record.metadataHash)],
+      null,
+    );
     if (typeof content !== 'string' || typeof canonicalMetadata !== 'string') {
       throw new RevisionStoreError('incomplete_revision', 'Revision content or metadata blob is missing');
     }
@@ -654,10 +684,7 @@ export class RevisionStore {
     }
     const input = normalizeNoteInput(note, options);
     const createdAt = normalizedTimestamp(options.createdAt, this.now());
-    const [contentHash, metadataHash] = await Promise.all([
-      sha256(input.content),
-      sha256(input.canonicalMetadata),
-    ]);
+    const [contentHash, metadataHash] = await Promise.all([sha256(input.content), sha256(input.canonicalMetadata)]);
     const existing = await this.list(input.noteId);
     const parent = existing[0] ?? null;
     if (!options.force && parent?.contentHash === contentHash && parent.metadataHash === metadataHash) {
@@ -675,7 +702,10 @@ export class RevisionStore {
     assertString(id, 'id');
     if (id.length > 512) throw new RevisionStoreError('invalid_revision_id', 'Revision ID is too long');
     if (!isMissing(await this.storage.load(recordKey(id), null))) {
-      throw new RevisionStoreError('revision_id_collision', 'Revision ID already exists and immutable records cannot be overwritten');
+      throw new RevisionStoreError(
+        'revision_id_collision',
+        'Revision ID already exists and immutable records cannot be overwritten',
+      );
     }
 
     const record = Object.freeze({
@@ -688,10 +718,10 @@ export class RevisionStore {
       parentRevisionId: parent?.id ?? null,
       schemaVersion: REVISION_SCHEMA_VERSION,
     });
-    const [storedContent, storedMetadata] = await this.readMany([
-      contentKey(contentHash),
-      metadataKey(metadataHash),
-    ], null);
+    const [storedContent, storedMetadata] = await this.readMany(
+      [contentKey(contentHash), metadataKey(metadataHash)],
+      null,
+    );
     if (!isMissing(storedContent) && storedContent !== input.content) {
       throw new RevisionStoreError('hash_collision', 'Stored revision content does not match its SHA-256 key');
     }
@@ -707,17 +737,23 @@ export class RevisionStore {
     entries.push(
       [recordKey(record.id), record],
       [indexKey(input.noteId), index],
-      [STATUS_KEY, {
-        lastRevisionCapture: createdAt,
-        lastLocalSnapshot: validStoredTimestamp(storedStatus?.lastLocalSnapshot),
-      }],
+      [
+        STATUS_KEY,
+        {
+          lastRevisionCapture: createdAt,
+          lastLocalSnapshot: validStoredTimestamp(storedStatus?.lastLocalSnapshot),
+        },
+      ],
     );
 
     const quota = status.quota;
     if (Number.isFinite(quota?.usage) && Number.isFinite(quota?.quota) && quota.quota > 0) {
       const remainingAfterWrite = quota.quota - quota.usage - estimatedBatchBytes(entries);
       if (remainingAfterWrite < quota.quota * this.quotaReserveRatio) {
-        const error = new RevisionStoreError('quota_exceeded', 'Revision capture paused before consuming the current-note storage reserve');
+        const error = new RevisionStoreError(
+          'quota_exceeded',
+          'Revision capture paused before consuming the current-note storage reserve',
+        );
         this.pauseFor(error);
         throw error;
       }
@@ -865,7 +901,9 @@ export class RevisionStore {
       const record = validateSnapshotRecord(raw, id);
       return kind === undefined || record.kind === kind ? [record] : [];
     });
-    records.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id));
+    records.sort(
+      (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id),
+    );
     if (order === 'oldest') records.reverse();
     if (!materialize) return records;
     return Promise.all(records.map((record) => this.materializeSnapshot(record)));
@@ -879,13 +917,11 @@ export class RevisionStore {
   }
 
   async materializeSnapshot(recordOrId) {
-    const record = typeof recordOrId === 'string'
-      ? await this.getSnapshot(recordOrId)
-      : validateSnapshotRecord(recordOrId, recordOrId?.id);
-    const keys = record.notes.flatMap((entry) => [
-      contentKey(entry.contentHash),
-      metadataKey(entry.metadataHash),
-    ]);
+    const record =
+      typeof recordOrId === 'string'
+        ? await this.getSnapshot(recordOrId)
+        : validateSnapshotRecord(recordOrId, recordOrId?.id);
+    const keys = record.notes.flatMap((entry) => [contentKey(entry.contentHash), metadataKey(entry.metadataHash)]);
     keys.push(metadataKey(record.configHash));
     const blobs = await this.readMany(keys, null);
     const notes = [];
@@ -894,20 +930,30 @@ export class RevisionStore {
       const content = blobs[index * 2];
       const canonicalMetadata = blobs[index * 2 + 1];
       if (typeof content !== 'string' || typeof canonicalMetadata !== 'string') {
-        throw new RevisionStoreError('incomplete_snapshot', `Local snapshot is missing data for note ${reference.noteId}`);
+        throw new RevisionStoreError(
+          'incomplete_snapshot',
+          `Local snapshot is missing data for note ${reference.noteId}`,
+        );
       }
       let metadata;
       try {
         metadata = JSON.parse(canonicalMetadata);
       } catch (error) {
-        throw new RevisionStoreError('malformed_snapshot', `Local snapshot metadata is malformed for note ${reference.noteId}`, { cause: error });
+        throw new RevisionStoreError(
+          'malformed_snapshot',
+          `Local snapshot metadata is malformed for note ${reference.noteId}`,
+          { cause: error },
+        );
       }
       const [actualContentHash, actualMetadataHash] = await Promise.all([
         sha256(content),
         sha256(canonicalJson(metadata)),
       ]);
       if (actualContentHash !== reference.contentHash || actualMetadataHash !== reference.metadataHash) {
-        throw new RevisionStoreError('snapshot_integrity_failed', `Local snapshot integrity check failed for note ${reference.noteId}`);
+        throw new RevisionStoreError(
+          'snapshot_integrity_failed',
+          `Local snapshot integrity check failed for note ${reference.noteId}`,
+        );
       }
       notes.push(Object.freeze({ ...metadata, id: metadata.id ?? reference.noteId, content }));
     }
@@ -921,7 +967,12 @@ export class RevisionStore {
     } catch (error) {
       throw new RevisionStoreError('malformed_snapshot', 'Local snapshot config data is malformed', { cause: error });
     }
-    if (!config || typeof config !== 'object' || Array.isArray(config) || await sha256(canonicalJson(config)) !== record.configHash) {
+    if (
+      !config ||
+      typeof config !== 'object' ||
+      Array.isArray(config) ||
+      (await sha256(canonicalJson(config))) !== record.configHash
+    ) {
       throw new RevisionStoreError('snapshot_integrity_failed', 'Local snapshot config integrity check failed');
     }
     return Object.freeze({
@@ -968,19 +1019,25 @@ export class RevisionStore {
     const configHash = await sha256(canonicalConfig);
     const seen = new Set();
     for (const input of inputs) {
-      if (seen.has(input.noteId)) throw new RevisionStoreError('malformed_snapshot', 'A local snapshot cannot contain duplicate note IDs');
+      if (seen.has(input.noteId))
+        throw new RevisionStoreError('malformed_snapshot', 'A local snapshot cannot contain duplicate note IDs');
       seen.add(input.noteId);
     }
-    const references = await Promise.all(inputs.map(async (input) => ({
-      noteId: input.noteId,
-      contentHash: await sha256(input.content),
-      metadataHash: await sha256(input.canonicalMetadata),
-    })));
+    const references = await Promise.all(
+      inputs.map(async (input) => ({
+        noteId: input.noteId,
+        contentHash: await sha256(input.content),
+        metadataHash: await sha256(input.canonicalMetadata),
+      })),
+    );
     const id = this.idFactory();
     assertString(id, 'snapshot id');
     if (id.length > 512) throw new RevisionStoreError('invalid_revision_id', 'Snapshot ID is too long');
     if (!isMissing(await this.storage.load(snapshotRecordKey(id), null))) {
-      throw new RevisionStoreError('revision_id_collision', 'Snapshot ID already exists and immutable records cannot be overwritten');
+      throw new RevisionStoreError(
+        'revision_id_collision',
+        'Snapshot ID already exists and immutable records cannot be overwritten',
+      );
     }
     const record = Object.freeze({
       id,
@@ -1012,17 +1069,23 @@ export class RevisionStore {
     const storedStatus = await this.storage.load(STATUS_KEY, {});
     entries.push(
       [snapshotRecordKey(id), record],
-      [STATUS_KEY, {
-        lastRevisionCapture: validStoredTimestamp(storedStatus?.lastRevisionCapture),
-        lastLocalSnapshot: timestamp,
-      }],
+      [
+        STATUS_KEY,
+        {
+          lastRevisionCapture: validStoredTimestamp(storedStatus?.lastRevisionCapture),
+          lastLocalSnapshot: timestamp,
+        },
+      ],
     );
 
     const quota = status.quota;
     if (Number.isFinite(quota?.usage) && Number.isFinite(quota?.quota) && quota.quota > 0) {
       const remainingAfterWrite = quota.quota - quota.usage - estimatedBatchBytes(entries);
       if (remainingAfterWrite < quota.quota * this.quotaReserveRatio) {
-        const error = new RevisionStoreError('quota_exceeded', 'Local snapshot paused before consuming the current-note storage reserve');
+        const error = new RevisionStoreError(
+          'quota_exceeded',
+          'Local snapshot paused before consuming the current-note storage reserve',
+        );
         this.pauseFor(error);
         throw error;
       }
@@ -1086,9 +1149,9 @@ export class RevisionStore {
     }
     const purgedSet = new Set(ids);
     const snapshots = await this.listSnapshots();
-    const removedSnapshots = snapshots.filter((snapshot) => (
-      snapshot.notes.some((reference) => purgedSet.has(reference.noteId))
-    ));
+    const removedSnapshots = snapshots.filter((snapshot) =>
+      snapshot.notes.some((reference) => purgedSet.has(reference.noteId)),
+    );
     const keys = [
       ...recordIds.map(recordKey),
       ...ids.map(indexKey),
@@ -1163,11 +1226,10 @@ export class RevisionStore {
     return createRestorePayload(currentNote, revision, restoredAt);
   }
 
-  async buildRestoreCopyPayload(recordOrId, {
-    id = this.idFactory(),
-    createdAt = this.now(),
-    existingTitles = [],
-  } = {}) {
+  async buildRestoreCopyPayload(
+    recordOrId,
+    { id = this.idFactory(), createdAt = this.now(), existingTitles = [] } = {},
+  ) {
     const revision = await this.materialize(recordOrId);
     return createRestoreCopyPayload(revision, { id, createdAt, existingTitles });
   }

@@ -40,23 +40,26 @@ function ordinal(value) {
 export function compareCalendarDates(left, right) {
   const a = ordinal(left);
   const b = ordinal(right);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) throw new TypeError('Calendar comparison requires valid YYYY-MM-DD dates.');
+  if (!Number.isFinite(a) || !Number.isFinite(b))
+    throw new TypeError('Calendar comparison requires valid YYYY-MM-DD dates.');
   return Math.sign(a - b);
 }
 
 export function addCalendarDays(value, amount) {
   const date = parseCalendarDate(value);
-  if (!date || !Number.isInteger(amount)) throw new TypeError('Calendar-day arithmetic requires a valid date and integer amount.');
+  if (!date || !Number.isInteger(amount))
+    throw new TypeError('Calendar-day arithmetic requires a valid date and integer amount.');
   const probe = new Date(Date.UTC(date.year, date.month - 1, date.day + amount));
   return formatCalendarDate({ year: probe.getUTCFullYear(), month: probe.getUTCMonth() + 1, day: probe.getUTCDate() });
 }
 
 export function addCalendarMonths(value, amount) {
   const date = parseCalendarDate(value);
-  if (!date || !Number.isInteger(amount)) throw new TypeError('Calendar-month arithmetic requires a valid date and integer amount.');
+  if (!date || !Number.isInteger(amount))
+    throw new TypeError('Calendar-month arithmetic requires a valid date and integer amount.');
   const monthIndex = date.year * 12 + date.month - 1 + amount;
   const year = Math.floor(monthIndex / 12);
-  const month = ((monthIndex % 12) + 12) % 12 + 1;
+  const month = (((monthIndex % 12) + 12) % 12) + 1;
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return formatCalendarDate({ year, month, day: Math.min(date.day, daysInMonth) });
 }
@@ -73,7 +76,8 @@ export function startOfWeek(value, weekStartsOn = 0) {
 }
 
 export function calendarRange(start, count) {
-  if (!isCalendarDate(start) || !Number.isInteger(count) || count < 0) throw new TypeError('Calendar range requires a valid start and non-negative count.');
+  if (!isCalendarDate(start) || !Number.isInteger(count) || count < 0)
+    throw new TypeError('Calendar range requires a valid start and non-negative count.');
   return Array.from({ length: count }, (_, index) => addCalendarDays(start, index));
 }
 

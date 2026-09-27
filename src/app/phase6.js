@@ -60,13 +60,18 @@ export class Phase6Controller {
   async #ensureClipper() {
     if (this.clipper) return this.clipper;
     if (this.clipperReady) return this.clipperReady;
-    this.clipperReady = import('../components/clipper-view.js').then(({ ClipperView, createClipperElements }) => {
-      const appUrl = new URL(window.location.href);
-      appUrl.search = '';
-      appUrl.hash = '';
-      this.clipper = new ClipperView(createClipperElements(), { appUrl: appUrl.href });
-      return this.clipper;
-    }).catch((error) => { this.clipperReady = null; throw error; });
+    this.clipperReady = import('../components/clipper-view.js')
+      .then(({ ClipperView, createClipperElements }) => {
+        const appUrl = new URL(window.location.href);
+        appUrl.search = '';
+        appUrl.hash = '';
+        this.clipper = new ClipperView(createClipperElements(), { appUrl: appUrl.href });
+        return this.clipper;
+      })
+      .catch((error) => {
+        this.clipperReady = null;
+        throw error;
+      });
     return this.clipperReady;
   }
 
@@ -84,7 +89,8 @@ export class Phase6Controller {
     }
     if (!intake?.matched) return false;
     await this.showQuickCapture({ payload: intake.payload });
-    if (intake.clipboardFallback) this.announce('Paste the clipboard handoff into Quick Capture, review it, then choose Save capture.');
+    if (intake.clipboardFallback)
+      this.announce('Paste the clipboard handoff into Quick Capture, review it, then choose Save capture.');
     else this.announce('Clipped page content is ready to review. Nothing is saved until you choose Save capture.');
     return true;
   }
@@ -96,16 +102,22 @@ export class Phase6Controller {
       import('../components/reconciliation-view.js'),
       import('../core/reconciliation-service.js'),
       this.ensureRecovery(),
-    ]).then(([{ ReconciliationView, createReconciliationElements }, { ReconciliationService }, recovery]) => {
-      const service = new ReconciliationService({ db: this.db, recovery });
-      this.reconciliation = new ReconciliationView(createReconciliationElements(), this.db, service, {
-        confirmApply: ({ message }) => confirm(message),
-        onApplied: (report) => this.workspace.syncAuthoritative(
-          report.items.filter((item) => item.decision === 'apply').map((item) => item.noteId),
-        ),
+    ])
+      .then(([{ ReconciliationView, createReconciliationElements }, { ReconciliationService }, recovery]) => {
+        const service = new ReconciliationService({ db: this.db, recovery });
+        this.reconciliation = new ReconciliationView(createReconciliationElements(), this.db, service, {
+          confirmApply: ({ message }) => confirm(message),
+          onApplied: (report) =>
+            this.workspace.syncAuthoritative(
+              report.items.filter((item) => item.decision === 'apply').map((item) => item.noteId),
+            ),
+        });
+        return this.reconciliation;
+      })
+      .catch((error) => {
+        this.reconciliationReady = null;
+        throw error;
       });
-      return this.reconciliation;
-    }).catch((error) => { this.reconciliationReady = null; throw error; });
     return this.reconciliationReady;
   }
 
@@ -113,7 +125,7 @@ export class Phase6Controller {
     await this.ready;
     const view = await this.#ensureReconciliation();
     this.workspace.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show();
   }
 }

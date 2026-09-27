@@ -15,7 +15,7 @@ import {
 } from '../utils/workspace.js';
 import { escapeHtml } from '../utils/helpers.js';
 
-const otherPane = (name) => name === 'primary' ? 'secondary' : 'primary';
+const otherPane = (name) => (name === 'primary' ? 'secondary' : 'primary');
 
 export class WorkspaceView {
   constructor({
@@ -61,7 +61,7 @@ export class WorkspaceView {
     const outgoingId = this.primaryEditor.currentId;
     const activeId = this.state.panes[this.state.activePane].activeNoteId || primaryId || secondaryId;
     const transfersOwner = Boolean(outgoingId && (primaryId !== outgoingId || activeId !== outgoingId));
-    if (transfersOwner && !await this.#durableHandoff()) {
+    if (transfersOwner && !(await this.#durableHandoff())) {
       this.#preservePrimaryOwner(outgoingId);
       this.#render();
       this.#restoreScroll('primary');
@@ -72,7 +72,10 @@ export class WorkspaceView {
     if (activeId && activeId !== outgoingId) {
       this.state.activePane = this.#locate(activeId)?.pane || this.state.activePane;
       await this.onCommitOpen(activeId, {
-        origin: 'reload', replay: true, workspaceCommitted: true, preserveEditor: true,
+        origin: 'reload',
+        replay: true,
+        workspaceCommitted: true,
+        preserveEditor: true,
       });
     }
     this.#restoreScroll();
@@ -112,10 +115,18 @@ export class WorkspaceView {
     this.splitter = this.element.querySelector('.workspace__splitter');
   }
 
-  get currentId() { return this.editors?.[this.state.activePane]?.currentId || null; }
-  get blockEditor() { return this.editors?.[this.state.activePane]?.blockEditor || null; }
-  get container() { return this.editors?.[this.state.activePane]?.container || this.primaryEditor.container; }
-  get activeEditor() { return this.editors[this.state.activePane]; }
+  get currentId() {
+    return this.editors?.[this.state.activePane]?.currentId || null;
+  }
+  get blockEditor() {
+    return this.editors?.[this.state.activePane]?.blockEditor || null;
+  }
+  get container() {
+    return this.editors?.[this.state.activePane]?.container || this.primaryEditor.container;
+  }
+  get activeEditor() {
+    return this.editors[this.state.activePane];
+  }
 
   open(id, options = {}) {
     const located = this.#locate(id);
@@ -131,7 +142,7 @@ export class WorkspaceView {
     if (!note) return false;
     const located = this.#locate(id);
     if (!located || located.pane !== this.state.activePane || this.state.panes[located.pane].activeNoteId !== id) {
-      if (!await this.#durableHandoff()) return false;
+      if (!(await this.#durableHandoff())) return false;
       this.state = openWorkspaceNote(this.state, id, located?.pane || this.state.activePane);
       this.#persist();
     }
@@ -149,7 +160,7 @@ export class WorkspaceView {
       return false;
     }
     if (!note || note.isTrashed) return false;
-    if (!await this.#durableHandoff()) return false;
+    if (!(await this.#durableHandoff())) return false;
     this.state = activateWorkspacePane(this.state, located.pane);
     this.state.panes[located.pane].activeNoteId = noteId;
     this.#persist();
@@ -160,9 +171,9 @@ export class WorkspaceView {
 
   async closeTab(noteId) {
     const located = this.#locate(noteId);
-    if (!located || !await this.#durableHandoff()) return false;
-    const wasGlobalActive = this.state.activePane === located.pane
-      && this.state.panes[located.pane].activeNoteId === noteId;
+    if (!located || !(await this.#durableHandoff())) return false;
+    const wasGlobalActive =
+      this.state.activePane === located.pane && this.state.panes[located.pane].activeNoteId === noteId;
     this.state = closeWorkspaceTab(this.state, noteId);
     this.#persist();
     this.#syncPaneEditor(located.pane);
@@ -172,8 +183,7 @@ export class WorkspaceView {
       if (nextId) await this.onCommitOpen(nextId, { workspaceCommitted: true });
       else this.onEmpty();
     }
-    const focusId = this.state.panes[located.pane].activeNoteId
-      || this.state.panes[this.state.activePane].activeNoteId;
+    const focusId = this.state.panes[located.pane].activeNoteId || this.state.panes[this.state.activePane].activeNoteId;
     this.#tab(focusId)?.focus();
     this.announce(`Closed ${this.db.notes.get(noteId)?.title || 'note'} tab.`);
     return true;
@@ -184,7 +194,7 @@ export class WorkspaceView {
     const note = noteId ? this.db.notes.get(noteId) : null;
     if (!noteId || !note || note.isTrashed) return this.announce('There is no available tab to reopen.');
     if (note.isArchived) return this.onArchived?.(noteId);
-    if (!await this.#durableHandoff()) return false;
+    if (!(await this.#durableHandoff())) return false;
     this.state = reopenWorkspaceTab(this.state);
     this.#persist();
     await this.onCommitOpen(noteId, { workspaceCommitted: true });
@@ -195,14 +205,16 @@ export class WorkspaceView {
 
   async moveToOtherPane(noteId) {
     const located = this.#locate(noteId);
-    if (!located || !await this.#durableHandoff()) return false;
+    if (!located || !(await this.#durableHandoff())) return false;
     const target = otherPane(located.pane);
     this.state = moveWorkspaceTab(this.state, noteId, target);
     this.#syncPaneEditor(located.pane);
     this.#persist();
     await this.onCommitOpen(noteId, { workspaceCommitted: true });
     this.#tab(noteId)?.focus();
-    this.announce(`Moved ${this.db.notes.get(noteId)?.title || 'note'} to ${target === 'primary' ? 'pane 1' : 'pane 2'}.`);
+    this.announce(
+      `Moved ${this.db.notes.get(noteId)?.title || 'note'} to ${target === 'primary' ? 'pane 1' : 'pane 2'}.`,
+    );
     return true;
   }
 
@@ -215,7 +227,7 @@ export class WorkspaceView {
   }
 
   async toggleSplit() {
-    if (!await this.#durableHandoff()) return false;
+    if (!(await this.#durableHandoff())) return false;
     this.state = setWorkspaceSplit(this.state, !this.state.split.enabled);
     this.#persist();
     this.#render();
@@ -223,8 +235,12 @@ export class WorkspaceView {
     return true;
   }
 
-  setAutosaveInterval(ms) { for (const editor of Object.values(this.editors)) editor.setAutosaveInterval(ms); }
-  flushPending() { for (const editor of Object.values(this.editors)) editor.flushPending(); }
+  setAutosaveInterval(ms) {
+    for (const editor of Object.values(this.editors)) editor.setAutosaveInterval(ms);
+  }
+  flushPending() {
+    for (const editor of Object.values(this.editors)) editor.flushPending();
+  }
   refresh() {
     const normalized = normalizeWorkspaceState(this.state, [...this.db.notes.values()]);
     const changed = JSON.stringify(normalized) !== JSON.stringify(this.state);
@@ -243,15 +259,34 @@ export class WorkspaceView {
       if (id && ids.has(id)) this.editors[pane].open(id, { discardPending: true });
     }
   }
-  reflectPin(id) { for (const editor of Object.values(this.editors)) editor.reflectPin(id); }
-  reflectTitle(id) { for (const editor of Object.values(this.editors)) editor.reflectTitle(id); this.#renderTabs(); }
-  focusTask(occurrence) { return this.activeEditor.focusTask(occurrence); }
-  findEntries() { return this.activeEditor.findEntries(); }
-  getSourceMarkdown() { return this.activeEditor.getSourceMarkdown(); }
-  selectFindRange(...args) { return this.activeEditor.selectFindRange(...args); }
-  applyFindReplacement(...args) { return this.activeEditor.applyFindReplacement(...args); }
-  enablePhase5(enhancer) { for (const editor of Object.values(this.editors)) editor.enablePhase5(enhancer); }
-  async enableOutline() { return Promise.all(Object.values(this.editors).map((editor) => editor.enableOutline())); }
+  reflectPin(id) {
+    for (const editor of Object.values(this.editors)) editor.reflectPin(id);
+  }
+  reflectTitle(id) {
+    for (const editor of Object.values(this.editors)) editor.reflectTitle(id);
+    this.#renderTabs();
+  }
+  focusTask(occurrence) {
+    return this.activeEditor.focusTask(occurrence);
+  }
+  findEntries() {
+    return this.activeEditor.findEntries();
+  }
+  getSourceMarkdown() {
+    return this.activeEditor.getSourceMarkdown();
+  }
+  selectFindRange(...args) {
+    return this.activeEditor.selectFindRange(...args);
+  }
+  applyFindReplacement(...args) {
+    return this.activeEditor.applyFindReplacement(...args);
+  }
+  enablePhase5(enhancer) {
+    for (const editor of Object.values(this.editors)) editor.enablePhase5(enhancer);
+  }
+  async enableOutline() {
+    return Promise.all(Object.values(this.editors).map((editor) => editor.enableOutline()));
+  }
 
   destroy() {
     for (const timer of this.scrollTimers.values()) clearTimeout(timer);
@@ -303,12 +338,13 @@ export class WorkspaceView {
       const tablist = this.element.querySelector(`[data-pane="${pane}"] .workspace-tabs`);
       const active = this.state.panes[pane].activeNoteId;
       const panelId = pane === 'primary' ? 'editor' : 'workspace-secondary-panel';
-      tablist.innerHTML = this.state.panes[pane].tabs.map((id, index) => {
-        const note = this.db.notes.get(id);
-        if (!note || note.isTrashed) return '';
-        const selected = id === active;
-        const tabIndex = selected || (!active && this.state.panes[pane].tabs[0] === id) ? '0' : '-1';
-        return `<div class="workspace-tab-wrap" data-tab-wrap="${escapeHtml(id)}">
+      tablist.innerHTML = this.state.panes[pane].tabs
+        .map((id, index) => {
+          const note = this.db.notes.get(id);
+          if (!note || note.isTrashed) return '';
+          const selected = id === active;
+          const tabIndex = selected || (!active && this.state.panes[pane].tabs[0] === id) ? '0' : '-1';
+          return `<div class="workspace-tab-wrap" data-tab-wrap="${escapeHtml(id)}">
           <button type="button" class="workspace-tab" role="tab" id="workspace-${pane}-tab-${index}"
             data-tab="${escapeHtml(id)}" draggable="true" aria-controls="${panelId}"
             aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
@@ -318,7 +354,8 @@ export class WorkspaceView {
           <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-label="Move ${escapeHtml(note.title)} to other pane">⇄</button>
           <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-label="Close ${escapeHtml(note.title)} tab">×</button>
         </div>`;
-      }).join('');
+        })
+        .join('');
       const panel = this.editors[pane].container;
       const activeIndex = this.state.panes[pane].tabs.indexOf(active);
       panel.id = panelId;
@@ -333,7 +370,9 @@ export class WorkspaceView {
     }
   }
 
-  #tab(noteId) { return this.element.querySelector(`[data-tab="${CSS.escape(noteId)}"]`); }
+  #tab(noteId) {
+    return this.element.querySelector(`[data-tab="${CSS.escape(noteId)}"]`);
+  }
 
   #restoreScroll(paneName = null) {
     const panes = paneName ? [paneName] : WORKSPACE_PANES;
@@ -370,11 +409,14 @@ export class WorkspaceView {
 
   #scheduleScrollSave(pane) {
     clearTimeout(this.scrollTimers.get(pane));
-    this.scrollTimers.set(pane, setTimeout(() => {
-      this.scrollTimers.delete(pane);
-      this.state = setWorkspaceScroll(this.state, pane, this.editors[pane].container.scrollTop);
-      this.#persist();
-    }, 160));
+    this.scrollTimers.set(
+      pane,
+      setTimeout(() => {
+        this.scrollTimers.delete(pane);
+        this.state = setWorkspaceScroll(this.state, pane, this.editors[pane].container.scrollTop);
+        this.#persist();
+      }, 160),
+    );
   }
 
   #activatePaneFromEditor(pane) {
@@ -382,10 +424,12 @@ export class WorkspaceView {
     if (this.paneActivations.has(pane)) return this.paneActivations.get(pane);
     const noteId = this.state.panes[pane].activeNoteId;
     if (!noteId) return Promise.resolve(false);
-    const activation = this.activate(noteId, { preserveEditor: true }).then((activated) => {
-      if (!activated) this.#tab(this.state.panes[this.state.activePane].activeNoteId)?.focus();
-      return activated;
-    }).finally(() => this.paneActivations.delete(pane));
+    const activation = this.activate(noteId, { preserveEditor: true })
+      .then((activated) => {
+        if (!activated) this.#tab(this.state.panes[this.state.activePane].activeNoteId)?.focus();
+        return activated;
+      })
+      .finally(() => this.paneActivations.delete(pane));
     this.paneActivations.set(pane, activation);
     return activation;
   }
@@ -393,19 +437,27 @@ export class WorkspaceView {
   #wire() {
     for (const pane of WORKSPACE_PANES) {
       const container = this.editors[pane].container;
-      container.addEventListener('pointerdown', () => {
-        if (this.state.activePane !== pane) void this.#activatePaneFromEditor(pane);
-      }, { capture: true });
-      container.addEventListener('click', (event) => {
-        if (this.state.activePane === pane) return;
-        const control = event.target.closest('button, a[href]');
-        if (!control) return;
-        event.preventDefault();
-        event.stopPropagation();
-        void this.#activatePaneFromEditor(pane).then((activated) => {
-          if (activated && control.isConnected) control.click();
-        });
-      }, { capture: true });
+      container.addEventListener(
+        'pointerdown',
+        () => {
+          if (this.state.activePane !== pane) void this.#activatePaneFromEditor(pane);
+        },
+        { capture: true },
+      );
+      container.addEventListener(
+        'click',
+        (event) => {
+          if (this.state.activePane === pane) return;
+          const control = event.target.closest('button, a[href]');
+          if (!control) return;
+          event.preventDefault();
+          event.stopPropagation();
+          void this.#activatePaneFromEditor(pane).then((activated) => {
+            if (activated && control.isConnected) control.click();
+          });
+        },
+        { capture: true },
+      );
     }
     this.element.addEventListener('click', (event) => {
       const tab = event.target.closest('[data-tab]');
@@ -427,10 +479,13 @@ export class WorkspaceView {
         event.preventDefault();
         const located = this.#locate(tab.dataset.tab);
         if (!located) return;
-        const nextIndex = Math.max(0, Math.min(
-          this.state.panes[located.pane].tabs.length - 1,
-          located.index + (event.key === 'ArrowRight' ? 1 : -1),
-        ));
+        const nextIndex = Math.max(
+          0,
+          Math.min(
+            this.state.panes[located.pane].tabs.length - 1,
+            located.index + (event.key === 'ArrowRight' ? 1 : -1),
+          ),
+        );
         this.state = reorderWorkspaceTab(this.state, located.pane, tab.dataset.tab, nextIndex);
         this.#persist();
         this.#render();
@@ -440,7 +495,12 @@ export class WorkspaceView {
         event.preventDefault();
         const buttons = [...tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
         const current = buttons.indexOf(tab);
-        const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+        const index =
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
         buttons[index]?.focus();
       } else if (tab && ['Enter', ' '].includes(event.key)) {
         event.preventDefault();
@@ -450,7 +510,12 @@ export class WorkspaceView {
         void this.closeTab(tab.dataset.tab);
       } else if (event.target === this.splitter && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
-        const next = event.key === 'Home' ? 0.25 : event.key === 'End' ? 0.75 : this.state.split.ratio + (event.key === 'ArrowRight' ? 0.05 : -0.05);
+        const next =
+          event.key === 'Home'
+            ? 0.25
+            : event.key === 'End'
+              ? 0.75
+              : this.state.split.ratio + (event.key === 'ArrowRight' ? 0.05 : -0.05);
         this.state = setWorkspaceRatio(this.state, next);
         this.#persist();
         this.#render();
@@ -466,17 +531,22 @@ export class WorkspaceView {
     this.element.addEventListener('dragover', (event) => {
       if (event.target.closest('[data-tab], .workspace-tabs')) event.preventDefault();
     });
-    this.element.addEventListener('dragend', () => { this.dragged = null; });
+    this.element.addEventListener('dragend', () => {
+      this.dragged = null;
+    });
     this.element.addEventListener('drop', (event) => {
       const targetTab = event.target.closest('[data-tab]');
       const tablist = event.target.closest('.workspace-tabs');
       if (!this.dragged || (!targetTab && !tablist)) return;
       event.preventDefault();
       const targetPane = (targetTab || tablist).closest('[data-pane]').dataset.pane;
-      const targetIndex = targetTab ? this.state.panes[targetPane].tabs.indexOf(targetTab.dataset.tab) : this.state.panes[targetPane].tabs.length;
+      const targetIndex = targetTab
+        ? this.state.panes[targetPane].tabs.indexOf(targetTab.dataset.tab)
+        : this.state.panes[targetPane].tabs.length;
       void this.#dropTab(targetPane, targetIndex);
     });
-    for (const pane of WORKSPACE_PANES) this.editors[pane].container.addEventListener('scroll', () => this.#scheduleScrollSave(pane), { passive: true });
+    for (const pane of WORKSPACE_PANES)
+      this.editors[pane].container.addEventListener('scroll', () => this.#scheduleScrollSave(pane), { passive: true });
     this.splitter.addEventListener('pointerdown', (event) => {
       if (!this.state.split.enabled) return;
       event.preventDefault();
@@ -507,7 +577,7 @@ export class WorkspaceView {
       this.#tab(dragged.noteId)?.focus();
       return;
     }
-    if (!await this.#durableHandoff()) return;
+    if (!(await this.#durableHandoff())) return;
     this.state = moveWorkspaceTab(this.state, dragged.noteId, targetPane, targetIndex);
     this.#syncPaneEditor(dragged.pane);
     this.#persist();

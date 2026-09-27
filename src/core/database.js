@@ -25,15 +25,19 @@ function jsonEquivalent(left, right) {
   if (left === right) return true;
   if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return false;
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left)
-      && Array.isArray(right)
-      && left.length === right.length
-      && left.every((value, index) => jsonEquivalent(value, right[index]));
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => jsonEquivalent(value, right[index]))
+    );
   }
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length
-    && leftKeys.every((key, index) => key === rightKeys[index] && jsonEquivalent(left[key], right[key]));
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] && jsonEquivalent(left[key], right[key]))
+  );
 }
 
 export class Database {
@@ -91,7 +95,7 @@ export class Database {
 
     const { data, version, migrated } = runMigrations(
       { notes: Array.isArray(rawNotes) ? rawNotes : [], config: rawConfig || {} },
-      storedVersion
+      storedVersion,
     );
 
     this.notes.clear();
@@ -100,10 +104,11 @@ export class Database {
       this.notes.set(note.id, note);
     }
     this.config = { showGraph: false, ...(data.config || {}) };
-    this.lastPersistedAt = typeof storedPersistence?.lastPersistedAt === 'string'
-      && Number.isFinite(Date.parse(storedPersistence.lastPersistedAt))
-      ? storedPersistence.lastPersistedAt
-      : null;
+    this.lastPersistedAt =
+      typeof storedPersistence?.lastPersistedAt === 'string' &&
+      Number.isFinite(Date.parse(storedPersistence.lastPersistedAt))
+        ? storedPersistence.lastPersistedAt
+        : null;
     this.#rebuildResolutionIndexes();
 
     // Persist the upgrade exactly once (and stamp the version), avoiding a
@@ -149,8 +154,9 @@ export class Database {
       for (const capture of [...(pending?.captures || []), ...(noteCommit.captures || [])]) {
         if (liveIds.has(capture.note?.id)) capturesById.set(capture.note.id, capture);
       }
-      const purgedIds = [...new Set([...(pending?.purgedIds || []), ...(noteCommit.purgedIds || [])])]
-        .filter((id) => !liveIds.has(id));
+      const purgedIds = [...new Set([...(pending?.purgedIds || []), ...(noteCommit.purgedIds || [])])].filter(
+        (id) => !liveIds.has(id),
+      );
       mergedCommit = { captures: [...capturesById.values()], purgedIds };
     }
     this._writeQueue.set(key, { value, afterPersist, noteCommit: mergedCommit, inFlight: false }); // latest queued snapshot wins
@@ -168,48 +174,50 @@ export class Database {
     let draining;
     // Start on the next microtask so `this._draining` is assigned before even
     // an empty/synchronous path can settle and run its finalizer.
-    draining = Promise.resolve().then(async () => {
-      while (this._writeQueue.size) {
-        const [key, entry] = this._writeQueue.entries().next().value;
-        entry.inFlight = true;
-        let okSave = false;
-        try {
-          okSave = await this.storage.save(key, entry.value);
-        } catch (error) {
-          console.error(`[database] storage threw while persisting "${key}":`, error);
-        }
-        if (okSave) {
-          if (key === NOTES_KEY) {
-            this.lastPersistedAt = new Date().toISOString();
-            this.#queueWrite(PERSISTENCE_KEY, { lastPersistedAt: this.lastPersistedAt });
+    draining = Promise.resolve()
+      .then(async () => {
+        while (this._writeQueue.size) {
+          const [key, entry] = this._writeQueue.entries().next().value;
+          entry.inFlight = true;
+          let okSave = false;
+          try {
+            okSave = await this.storage.save(key, entry.value);
+          } catch (error) {
+            console.error(`[database] storage threw while persisting "${key}":`, error);
           }
-          // Delete only if a newer snapshot for this key wasn't queued while
-          // we awaited — otherwise loop again and persist the newer value.
-          if (this._writeQueue.get(key) === entry) this._writeQueue.delete(key);
-          entry.afterPersist?.();
-          if (entry.noteCommit) {
-            if (entry.noteCommit.captures.length) this.#capturePersistedNotes(entry.noteCommit.captures);
-            if (entry.noteCommit.purgedIds.length) this.#removePurgedHistory(entry.noteCommit.purgedIds);
+          if (okSave) {
+            if (key === NOTES_KEY) {
+              this.lastPersistedAt = new Date().toISOString();
+              this.#queueWrite(PERSISTENCE_KEY, { lastPersistedAt: this.lastPersistedAt });
+            }
+            // Delete only if a newer snapshot for this key wasn't queued while
+            // we awaited — otherwise loop again and persist the newer value.
+            if (this._writeQueue.get(key) === entry) this._writeQueue.delete(key);
+            entry.afterPersist?.();
+            if (entry.noteCommit) {
+              if (entry.noteCommit.captures.length) this.#capturePersistedNotes(entry.noteCommit.captures);
+              if (entry.noteCommit.purgedIds.length) this.#removePurgedHistory(entry.noteCommit.purgedIds);
+            }
+          } else {
+            // Persist failed on every backend (e.g. IndexedDB error AND
+            // localStorage over quota). Never silently drop it: keep the
+            // snapshot queued, surface the failure, and stop this drain to
+            // avoid a hot spin. The in-memory Map is still the source of truth
+            // for the session, and the next save (or flush) retries.
+            this.#reportPersistError(key);
+            entry.inFlight = false;
+            failed = true;
+            break;
           }
-        } else {
-          // Persist failed on every backend (e.g. IndexedDB error AND
-          // localStorage over quota). Never silently drop it: keep the
-          // snapshot queued, surface the failure, and stop this drain to
-          // avoid a hot spin. The in-memory Map is still the source of truth
-          // for the session, and the next save (or flush) retries.
-          this.#reportPersistError(key);
-          entry.inFlight = false;
-          failed = true;
-          break;
         }
-      }
-    }).finally(() => {
-      if (this._draining === draining) this._draining = null;
-      // A write can be queued after the loop observes an empty Map but before
-      // this promise settles. Hand it to a successor drain so it cannot remain
-      // stranded until an unrelated future edit. Do not hot-retry a failure.
-      if (!failed && this._writeQueue.size) void this.#flushWrites();
-    });
+      })
+      .finally(() => {
+        if (this._draining === draining) this._draining = null;
+        // A write can be queued after the loop observes an empty Map but before
+        // this promise settles. Hand it to a successor drain so it cannot remain
+        // stranded until an unrelated future edit. Do not hot-retry a failure.
+        if (!failed && this._writeQueue.size) void this.#flushWrites();
+      });
     this._draining = draining;
     return draining;
   }
@@ -223,10 +231,16 @@ export class Database {
     // committed. It never holds up a newer current-note write.
     const task = Promise.resolve()
       .then(() => this.onNotesPersisted(captures))
-      .then(() => { this.lastRevisionAt = new Date().toISOString(); })
+      .then(() => {
+        this.lastRevisionAt = new Date().toISOString();
+      })
       .catch((err) => {
         console.warn('[database] note persisted, but revision capture failed:', err);
-        try { this.onHistoryError?.(err); } catch { /* ignore hook errors */ }
+        try {
+          this.onHistoryError?.(err);
+        } catch {
+          /* ignore hook errors */
+        }
       })
       .finally(() => this._historyTasks.delete(task));
     this._historyTasks.add(task);
@@ -235,14 +249,20 @@ export class Database {
   #removePurgedHistory(noteIds) {
     if (typeof this.onNotesPurged !== 'function') {
       for (const id of noteIds) this._pendingHistoryPurges.add(id);
-      this._pendingHistoryCaptures = this._pendingHistoryCaptures.filter((capture) => !this._pendingHistoryPurges.has(capture.note?.id));
+      this._pendingHistoryCaptures = this._pendingHistoryCaptures.filter(
+        (capture) => !this._pendingHistoryPurges.has(capture.note?.id),
+      );
       return;
     }
     const task = Promise.resolve()
       .then(() => this.onNotesPurged([...noteIds]))
       .catch((err) => {
         console.warn('[database] note purge persisted, but revision cleanup failed:', err);
-        try { this.onHistoryError?.(err); } catch { /* ignore hook errors */ }
+        try {
+          this.onHistoryError?.(err);
+        } catch {
+          /* ignore hook errors */
+        }
       })
       .finally(() => this._historyTasks.delete(task));
     this._historyTasks.add(task);
@@ -263,7 +283,11 @@ export class Database {
 
   #reportPersistError(key) {
     console.error(`[database] could not persist "${key}" — kept in memory; will retry on the next save`);
-    try { if (this.onPersistError) this.onPersistError(key); } catch { /* ignore hook errors */ }
+    try {
+      if (this.onPersistError) this.onPersistError(key);
+    } catch {
+      /* ignore hook errors */
+    }
   }
 
   /** Await the in-flight write drain — call before unload for best-effort durability. */
@@ -328,20 +352,24 @@ export class Database {
     this._vaultReplacing = true;
     try {
       if (typeof this.storage.saveMany === 'function') {
-        const backend = typeof this.storage.getStatus === 'function'
-          ? await this.storage.getStatus()
-          : typeof this.storage.status === 'function'
-            ? await this.storage.status()
-            : null;
+        const backend =
+          typeof this.storage.getStatus === 'function'
+            ? await this.storage.getStatus()
+            : typeof this.storage.status === 'function'
+              ? await this.storage.status()
+              : null;
         // Once IndexedDB is authoritative, a failed IDB transaction must not be
         // reported as a successful restore written only to stale fallback data.
         const allowFallback = backend?.backend !== 'indexeddb';
-        saved = await this.storage.saveMany([
-          [NOTES_KEY, rawNotes],
-          [CONFIG_KEY, rawConfig],
-          [SCHEMA_KEY, CURRENT_SCHEMA_VERSION],
-          [PERSISTENCE_KEY, { lastPersistedAt: persistenceAt }],
-        ], { allowFallback });
+        saved = await this.storage.saveMany(
+          [
+            [NOTES_KEY, rawNotes],
+            [CONFIG_KEY, rawConfig],
+            [SCHEMA_KEY, CURRENT_SCHEMA_VERSION],
+            [PERSISTENCE_KEY, { lastPersistedAt: persistenceAt }],
+          ],
+          { allowFallback },
+        );
       } else {
         const results = await Promise.all([
           this.storage.save(NOTES_KEY, rawNotes),
@@ -426,7 +454,6 @@ export class Database {
       for (const alias of note.aliases || []) this.#pushIndex(this._aliasIndex, normalizeTitle(alias), note);
       this._identitySignatures.set(note.id, this.#identitySignature(note));
     }
-
   }
 
   #rebuildLinkState() {
@@ -438,7 +465,8 @@ export class Database {
     const key = normalizeTitle(title);
     if (!key) return { status: 'missing', key, note: null, via: null, candidates: [] };
     const canonical = [...new Map((this._titleIndex.get(key) || []).map((note) => [note.id, note])).values()];
-    if (canonical.length === 1) return { status: 'resolved', key, note: canonical[0], via: 'title', candidates: canonical };
+    if (canonical.length === 1)
+      return { status: 'resolved', key, note: canonical[0], via: 'title', candidates: canonical };
     if (canonical.length > 1) return { status: 'ambiguous', key, note: null, via: 'title', candidates: canonical };
     const aliases = [...new Map((this._aliasIndex.get(key) || []).map((note) => [note.id, note])).values()];
     if (aliases.length === 1) return { status: 'resolved', key, note: aliases[0], via: 'alias', candidates: aliases };
@@ -451,7 +479,8 @@ export class Database {
     const candidates = [];
     for (const [key, notes] of this._titleIndex) {
       const unique = [...new Map(notes.map((note) => [note.id, note])).values()];
-      if (unique.length === 1) candidates.push({ name: unique[0].title, targetId: unique[0].id, targetTitle: unique[0].title, key });
+      if (unique.length === 1)
+        candidates.push({ name: unique[0].title, targetId: unique[0].id, targetTitle: unique[0].title, key });
     }
     for (const [key, notes] of this._aliasIndex) {
       if (this._titleIndex.has(key)) continue; // canonical title always outranks aliases
@@ -686,9 +715,7 @@ export class Database {
 
   /** Live notes sorted most-recently-updated first. */
   getNotesSorted() {
-    return this.getAllNotes().sort(
-      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-    );
+    return this.getAllNotes().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   }
 
   // --- resolution & search ------------------------------------------------
@@ -769,9 +796,11 @@ export class Database {
   /** Atomic persistence boundary used by previewed, lazily loaded link tools. */
   async commitPlannedNotes(replacements, captures, reason) {
     await this.flush();
-    if (this._writeQueue.size || this._draining) throw new Error('Current note changes are still pending; try again after they save.');
+    if (this._writeQueue.size || this._draining)
+      throw new Error('Current note changes are still pending; try again after they save.');
     const historyAvailable = await this.captureRevisionBoundary(captures, reason);
-    if (!historyAvailable) throw new Error('Browser-local revision history is unavailable, so this source rewrite was not applied.');
+    if (!historyAvailable)
+      throw new Error('Browser-local revision history is unavailable, so this source rewrite was not applied.');
 
     const replacementById = new Map(replacements.map((raw) => [raw.id, Note.fromJSON(raw)]));
     const nextNotes = this.#rawNotes().map((note) => replacementById.get(note.id) || note);
@@ -779,15 +808,19 @@ export class Database {
     const persistenceAt = new Date().toISOString();
     let saved = false;
     if (typeof this.storage.saveMany === 'function') {
-      const backend = typeof this.storage.getStatus === 'function'
-        ? await this.storage.getStatus()
-        : typeof this.storage.status === 'function'
-          ? await this.storage.status()
-          : null;
-      saved = await this.storage.saveMany([
-        [NOTES_KEY, rawNotes],
-        [PERSISTENCE_KEY, { lastPersistedAt: persistenceAt }],
-      ], { allowFallback: backend?.backend !== 'indexeddb' });
+      const backend =
+        typeof this.storage.getStatus === 'function'
+          ? await this.storage.getStatus()
+          : typeof this.storage.status === 'function'
+            ? await this.storage.status()
+            : null;
+      saved = await this.storage.saveMany(
+        [
+          [NOTES_KEY, rawNotes],
+          [PERSISTENCE_KEY, { lastPersistedAt: persistenceAt }],
+        ],
+        { allowFallback: backend?.backend !== 'indexeddb' },
+      );
     } else {
       saved = await this.storage.save(NOTES_KEY, rawNotes);
       if (saved) await this.storage.save(PERSISTENCE_KEY, { lastPersistedAt: persistenceAt });
@@ -825,7 +858,7 @@ export class Database {
       (n) =>
         n.title.toLowerCase().includes(q) ||
         n.content.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q))
+        n.tags.some((t) => t.toLowerCase().includes(q)),
     );
   }
 
@@ -851,7 +884,9 @@ export class Database {
   /** Unique live source notes that link to the given note. */
   backlinksFor(id) {
     if (!this._knowledgeIndex) {
-      return this.getAllNotes().filter((source) => source.id !== id && source.outgoingLinks().some((target) => this.resolveTitle(target)?.id === id));
+      return this.getAllNotes().filter(
+        (source) => source.id !== id && source.outgoingLinks().some((target) => this.resolveTitle(target)?.id === id),
+      );
     }
     const ids = new Set(this.backlinkOccurrencesFor(id).map((occurrence) => occurrence.sourceId));
     return [...ids].map((sourceId) => this.getNote(sourceId)).filter(Boolean);
@@ -866,7 +901,12 @@ export class Database {
     if (this._knowledgeIndex) return { nodes, edges: this._knowledgeIndex.graphEdges() };
     const edges = [];
     for (const source of nodes) {
-      const targets = new Set(source.outgoingLinks().map((target) => this.resolveTitle(target)?.id).filter(Boolean));
+      const targets = new Set(
+        source
+          .outgoingLinks()
+          .map((target) => this.resolveTitle(target)?.id)
+          .filter(Boolean),
+      );
       for (const target of targets) if (target !== source.id) edges.push({ source: source.id, target });
     }
     return { nodes, edges };

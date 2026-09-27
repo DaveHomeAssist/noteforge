@@ -10,7 +10,12 @@ import { readFileSync } from 'node:fs';
 import { parseWikilinks, extractWikilinks } from '../src/utils/wikilinks.js';
 import { parse, serialize } from '../src/utils/blocks.js';
 import { splitFrontmatterSource } from '../src/utils/frontmatter-boundary.js';
-import { parseFrontmatter, setFrontmatterProperty, removeFrontmatterProperty, inferPropertyType } from '../src/utils/frontmatter.js';
+import {
+  parseFrontmatter,
+  setFrontmatterProperty,
+  removeFrontmatterProperty,
+  inferPropertyType,
+} from '../src/utils/frontmatter.js';
 import { extractHeadings, resolveHeadingAnchor } from '../src/utils/headings.js';
 import { parseTaskDueText, extractTasks } from '../src/utils/tasks.js';
 import { resolveBlockId, inspectBlockIds } from '../src/utils/block-links.js';
@@ -58,7 +63,12 @@ async function runCheck(name, source, arg) {
       const results = [];
       for (const step of arg) {
         try {
-          const result = await setFrontmatterProperty(source, step.key, step.value, step.type ? { type: step.type } : {});
+          const result = await setFrontmatterProperty(
+            source,
+            step.key,
+            step.value,
+            step.type ? { type: step.type } : {},
+          );
           results.push({ key: step.key, result });
         } catch (error) {
           results.push({ key: step.key, error: error.code });
@@ -86,25 +96,33 @@ async function runCheck(name, source, arg) {
     case 'dueText':
       return plain(parseTaskDueText(source));
     case 'tasks':
-      return plain(extractTasks(source, { noteId: 'n' }).map((task) => ({
-        occurrence: task.occurrence,
-        sourceStart: task.sourceStart,
-        sourceEnd: task.sourceEnd,
-        sourceLine: task.sourceLine,
-        checked: task.checked,
-        text: task.text,
-        dueDate: task.dueDate,
-        dueSeparator: task.dueSeparator,
-        trailingWhitespace: task.trailingWhitespace,
-        heading: task.heading,
-      })));
+      return plain(
+        extractTasks(source, { noteId: 'n' }).map((task) => ({
+          occurrence: task.occurrence,
+          sourceStart: task.sourceStart,
+          sourceEnd: task.sourceEnd,
+          sourceLine: task.sourceLine,
+          checked: task.checked,
+          text: task.text,
+          dueDate: task.dueDate,
+          dueSeparator: task.dueSeparator,
+          trailingWhitespace: task.trailingWhitespace,
+          heading: task.heading,
+        })),
+      );
     case 'blockIds':
       return plain(inspectBlockIds(source));
     case 'resolveBlockIds':
-      return plain(arg.map((id) => {
-        const resolved = resolveBlockId(source, id);
-        return { id, status: resolved.status, block: resolved.block ? { type: resolved.block.type, text: resolved.block.text } : null };
-      }));
+      return plain(
+        arg.map((id) => {
+          const resolved = resolveBlockId(source, id);
+          return {
+            id,
+            status: resolved.status,
+            block: resolved.block ? { type: resolved.block.type, text: resolved.block.text } : null,
+          };
+        }),
+      );
     default:
       throw new Error(`Unknown check: ${name}`);
   }
@@ -120,7 +138,11 @@ test('corpus is well-formed', () => {
     assert.ok(!ids.has(c.id), `duplicate case id ${c.id}`);
     ids.add(c.id);
     assert.equal(typeof c.source, 'string', `${c.id}: source must be a string`);
-    assert.deepEqual(Object.keys(c.checks).sort(), Object.keys(c.expect).sort(), `${c.id}: checks and expect keys must match`);
+    assert.deepEqual(
+      Object.keys(c.checks).sort(),
+      Object.keys(c.expect).sort(),
+      `${c.id}: checks and expect keys must match`,
+    );
   }
 });
 

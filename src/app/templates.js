@@ -11,7 +11,11 @@ function isCalendarDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
   if (!match) return false;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
+  return (
+    date.getUTCFullYear() === Number(match[1]) &&
+    date.getUTCMonth() + 1 === Number(match[2]) &&
+    date.getUTCDate() === Number(match[3])
+  );
 }
 
 export function buildDailyNote(date = todayISO()) {
@@ -27,7 +31,9 @@ export const TEMPLATES = [
     id: 'daily',
     label: 'Daily note',
     icon: '📅',
-    build({ date = todayISO() } = {}) { return buildDailyNote(date); },
+    build({ date = todayISO() } = {}) {
+      return buildDailyNote(date);
+    },
   },
   {
     id: 'meeting',

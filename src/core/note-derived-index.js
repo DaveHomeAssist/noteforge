@@ -4,7 +4,8 @@
 
 export class NoteDerivedIndex {
   constructor(db, derive) {
-    if (!db || typeof derive !== 'function') throw new TypeError('A note-derived index requires a database and derivation function.');
+    if (!db || typeof derive !== 'function')
+      throw new TypeError('A note-derived index requires a database and derivation function.');
     this.db = db;
     this.derive = derive;
     this.records = new Map();

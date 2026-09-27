@@ -16,7 +16,14 @@ export class BulkOperations {
     this.db = db;
   }
 
-  planVaultReplace({ query, replacement = '', caseSensitive = false, wholeWord = false, includeArchived = false, includeTrash = false }) {
+  planVaultReplace({
+    query,
+    replacement = '',
+    caseSensitive = false,
+    wholeWord = false,
+    includeArchived = false,
+    includeTrash = false,
+  }) {
     if (!String(query ?? '')) return { valid: false, code: 'blank_query', message: 'Enter text to find.' };
     const options = { caseSensitive: Boolean(caseSensitive), wholeWord: Boolean(wholeWord) };
     const changed = [];
@@ -26,10 +33,19 @@ export class BulkOperations {
     const expected = [];
     const changedAt = new Date().toISOString();
     for (const note of storedNotes(this.db)) {
-      if (note.isTrashed && !includeTrash) { skipped.push({ id: note.id, title: note.title, reason: 'trash' }); continue; }
-      if (note.isArchived && !note.isTrashed && !includeArchived) { skipped.push({ id: note.id, title: note.title, reason: 'archive' }); continue; }
+      if (note.isTrashed && !includeTrash) {
+        skipped.push({ id: note.id, title: note.title, reason: 'trash' });
+        continue;
+      }
+      if (note.isArchived && !note.isTrashed && !includeArchived) {
+        skipped.push({ id: note.id, title: note.title, reason: 'archive' });
+        continue;
+      }
       const result = replaceLiteral(note.content, query, replacement, options);
-      if (!result.changed) { unchanged.push({ id: note.id, title: note.title }); continue; }
+      if (!result.changed) {
+        unchanged.push({ id: note.id, title: note.title });
+        continue;
+      }
       const next = note.toJSON();
       next.content = result.result;
       next.updatedAt = changedAt;
@@ -57,10 +73,14 @@ export class BulkOperations {
   }
 
   async applyVaultReplace(plan) {
-    if (!plan?.valid || plan.kind !== 'vault_replace') throw new TypeError('A valid vault replacement preview is required.');
+    if (!plan?.valid || plan.kind !== 'vault_replace')
+      throw new TypeError('A valid vault replacement preview is required.');
     const current = plan.expected.map((raw) => this.db.notes.get(raw.id)).filter(Boolean);
-    if (fingerprint(storedNotes(this.db)) !== plan.vaultFingerprint
-      || current.length !== plan.expected.length || fingerprint(current) !== plan.fingerprint) {
+    if (
+      fingerprint(storedNotes(this.db)) !== plan.vaultFingerprint ||
+      current.length !== plan.expected.length ||
+      fingerprint(current) !== plan.fingerprint
+    ) {
       throw new Error('Notes changed after this preview. Review the updated replacement plan before applying it.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
@@ -77,7 +97,8 @@ export class BulkOperations {
     const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string'))];
     if (!uniqueIds.length) return { valid: false, code: 'empty_selection', message: 'Select at least one note.' };
     const selected = uniqueIds.map((id) => this.db.notes.get(id));
-    if (selected.some((note) => !note || note.isTrashed)) return { valid: false, code: 'invalid_selection', message: 'The selection contains a missing or trashed note.' };
+    if (selected.some((note) => !note || note.isTrashed))
+      return { valid: false, code: 'invalid_selection', message: 'The selection contains a missing or trashed note.' };
     const changedAt = new Date().toISOString();
     const replacements = [];
     const unchanged = [];
@@ -89,7 +110,12 @@ export class BulkOperations {
         if (!identity.valid) return { ...identity, valid: false };
         for (const value of [note.title, ...(note.aliases || [])]) {
           const key = normalizeTitle(value);
-          if (futureKeys.has(key)) return { valid: false, code: 'identity_collision', message: 'Selected archived notes contain conflicting titles or aliases.' };
+          if (futureKeys.has(key))
+            return {
+              valid: false,
+              code: 'identity_collision',
+              message: 'Selected archived notes contain conflicting titles or aliases.',
+            };
           futureKeys.add(key);
         }
       }
@@ -115,20 +141,31 @@ export class BulkOperations {
     for (const source of selected) {
       const note = Note.fromJSON(source.toJSON());
       if (action === 'tag') {
-        if (note.tags.includes(tag)) { unchanged.push({ id: note.id, title: note.title }); continue; }
+        if (note.tags.includes(tag)) {
+          unchanged.push({ id: note.id, title: note.title });
+          continue;
+        }
         note.addTag(tag);
-      }
-      else if (action === 'archive') {
-        if (note.isArchived) { unchanged.push({ id: note.id, title: note.title }); continue; }
+      } else if (action === 'archive') {
+        if (note.isArchived) {
+          unchanged.push({ id: note.id, title: note.title });
+          continue;
+        }
         note.archivedAt = changedAt;
         note.updatedAt = changedAt;
       } else if (action === 'unarchive') {
-        if (!note.isArchived) { unchanged.push({ id: note.id, title: note.title }); continue; }
+        if (!note.isArchived) {
+          unchanged.push({ id: note.id, title: note.title });
+          continue;
+        }
         note.archivedAt = null;
         note.updatedAt = changedAt;
       } else if (action === 'reparent') {
         const parentId = payload.parentId || null;
-        if (note.parentId === parentId) { unchanged.push({ id: note.id, title: note.title }); continue; }
+        if (note.parentId === parentId) {
+          unchanged.push({ id: note.id, title: note.title });
+          continue;
+        }
         note.parentId = parentId;
       } else if (action === 'trash') {
         note.deletedAt = changedAt;
@@ -155,14 +192,21 @@ export class BulkOperations {
   async applyNoteBatch(plan) {
     if (!plan?.valid || plan.kind !== 'note_batch') throw new TypeError('A valid note-batch preview is required.');
     const current = plan.expected.map((raw) => this.db.notes.get(raw.id)).filter(Boolean);
-    if (fingerprint(storedNotes(this.db)) !== plan.vaultFingerprint
-      || current.length !== plan.expected.length || fingerprint(current) !== plan.fingerprint) {
+    if (
+      fingerprint(storedNotes(this.db)) !== plan.vaultFingerprint ||
+      current.length !== plan.expected.length ||
+      fingerprint(current) !== plan.fingerprint
+    ) {
       throw new Error('Notes changed after this batch preview. Review the action again.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, failed: [] };
     try {
       const changedIds = new Set(plan.replacements.map((note) => note.id));
-      await this.db.commitPlannedNotes(plan.replacements, current.filter((note) => changedIds.has(note.id)), 'pre_bulk_action');
+      await this.db.commitPlannedNotes(
+        plan.replacements,
+        current.filter((note) => changedIds.has(note.id)),
+        'pre_bulk_action',
+      );
       return { changed: plan.changed, unchanged: plan.unchanged, failed: [] };
     } catch (error) {
       error.report = { changed: [], unchanged: plan.unchanged, failed: plan.changed };

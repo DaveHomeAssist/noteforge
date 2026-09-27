@@ -57,9 +57,13 @@ export class ReconciliationView {
     this.scanVersion = 0;
     this.page = 0;
     this.decisions = new Map();
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.els.directory.disabled ? this.els.file : this.els.directory });
+    this.modal = new Modal(els.overlay, {
+      initialFocus: () => (this.els.directory.disabled ? this.els.file : this.els.directory),
+    });
     this.els.directory.disabled = typeof this.pickDirectory !== 'function';
-    this.els.directory.title = this.els.directory.disabled ? 'Direct folder access is unavailable in this browser. Use Select Markdown files.' : '';
+    this.els.directory.title = this.els.directory.disabled
+      ? 'Direct folder access is unavailable in this browser. Use Select Markdown files.'
+      : '';
     this.els.directory.addEventListener('click', () => void this.#chooseDirectory());
     this.els.folderFile.addEventListener('change', () => void this.#chooseFiles(this.els.folderFile));
     this.els.file.addEventListener('change', () => void this.#chooseFiles(this.els.file));
@@ -75,14 +79,18 @@ export class ReconciliationView {
     this.els.pageNext.addEventListener('click', () => this.#setPage(this.page + 1));
   }
 
-  get open() { return this.modal.isOpen; }
+  get open() {
+    return this.modal.isOpen;
+  }
   show() {
     this.els.status.textContent = this.pickDirectory
       ? 'Choose a folder to build a read-only plan.'
       : 'Direct folder access is unavailable. Use the file-selection fallback; no writes occur during scanning.';
     this.modal.open();
   }
-  close() { this.modal.close(); }
+  close() {
+    this.modal.close();
+  }
 
   async #chooseDirectory() {
     try {
@@ -94,9 +102,13 @@ export class ReconciliationView {
   }
 
   async #chooseFiles(input) {
-    try { await this.#scan(await readVaultFileList(input.files)); }
-    catch (error) { this.els.status.textContent = error?.message || String(error); }
-    finally { input.value = ''; }
+    try {
+      await this.#scan(await readVaultFileList(input.files));
+    } catch (error) {
+      this.els.status.textContent = error?.message || String(error);
+    } finally {
+      input.value = '';
+    }
   }
 
   async #scan(entries) {
@@ -113,10 +125,7 @@ export class ReconciliationView {
     if (version !== this.scanVersion) return false;
     this.plan = plan;
     this.page = 0;
-    this.decisions = new Map(this.plan.items.map((item) => [
-      item.key,
-      item.status === 'Conflict' ? 'skip' : '',
-    ]));
+    this.decisions = new Map(this.plan.items.map((item) => [item.key, item.status === 'Conflict' ? 'skip' : '']));
     this.lastReport = null;
     this.els.report.hidden = true;
     this.#renderPlan();
@@ -132,18 +141,20 @@ export class ReconciliationView {
     this.page = Math.min(this.page, pageCount - 1);
     const start = this.page * PAGE_SIZE;
     const visibleItems = this.plan.items.slice(start, start + PAGE_SIZE);
-    this.els.items.innerHTML = visibleItems.map((item) => {
-      const destination = item.destinationNoteId ? this.db.notes.get(item.destinationNoteId) : null;
-      const mutable = item.status === 'Add' || item.status === 'Update';
-      const selected = this.decisions.get(item.key);
-      const decision = mutable
-        ? `<label class="reconciliation-decision">Decision<select data-decision="${escapeHtml(item.key)}" aria-label="Decision for ${escapeHtml(item.relativePath)}"><option value=""${selected ? '' : ' selected'}>Choose…</option><option value="apply"${selected === 'apply' ? ' selected' : ''}>Apply ${item.status.toLowerCase()}</option><option value="skip"${selected === 'skip' ? ' selected' : ''}>Skip</option></select></label>`
-        : `<input type="hidden" data-decision="${escapeHtml(item.key)}" value="${item.status === 'Conflict' ? 'skip' : ''}"><span class="reconciliation-fixed">${item.status === 'Conflict' ? 'Conflict must be skipped until resolved' : 'No change'}</span>`;
-      return `<article class="reconciliation-item" data-status="${item.status.toLowerCase()}">
+    this.els.items.innerHTML = visibleItems
+      .map((item) => {
+        const destination = item.destinationNoteId ? this.db.notes.get(item.destinationNoteId) : null;
+        const mutable = item.status === 'Add' || item.status === 'Update';
+        const selected = this.decisions.get(item.key);
+        const decision = mutable
+          ? `<label class="reconciliation-decision">Decision<select data-decision="${escapeHtml(item.key)}" aria-label="Decision for ${escapeHtml(item.relativePath)}"><option value=""${selected ? '' : ' selected'}>Choose…</option><option value="apply"${selected === 'apply' ? ' selected' : ''}>Apply ${item.status.toLowerCase()}</option><option value="skip"${selected === 'skip' ? ' selected' : ''}>Skip</option></select></label>`
+          : `<input type="hidden" data-decision="${escapeHtml(item.key)}" value="${item.status === 'Conflict' ? 'skip' : ''}"><span class="reconciliation-fixed">${item.status === 'Conflict' ? 'Conflict must be skipped until resolved' : 'No change'}</span>`;
+        return `<article class="reconciliation-item" data-status="${item.status.toLowerCase()}">
         <header><div><span class="reconciliation-badge">${item.status}</span><strong>${escapeHtml(item.relativePath)}</strong><p class="muted">${escapeHtml(item.reasons.join(' '))}</p></div>${decision}</header>
         <details><summary>Compare Markdown</summary><div class="reconciliation-compare"><section><h4>Folder source</h4><pre>${escapeHtml(previewMarkdown(item.source))}</pre></section><section><h4>Vault destination</h4><pre>${escapeHtml(previewMarkdown(destination?.content || '(new note)'))}</pre></section></div></details>
       </article>`;
-    }).join('');
+      })
+      .join('');
     this.els.pagination.hidden = this.plan.items.length <= PAGE_SIZE;
     this.els.pagePrevious.disabled = this.page === 0;
     this.els.pageNext.disabled = this.page >= pageCount - 1;
@@ -160,15 +171,20 @@ export class ReconciliationView {
 
   #syncApplyAvailability() {
     const mutable = this.plan?.items.filter((item) => item.status === 'Add' || item.status === 'Update') || [];
-    this.els.apply.disabled = !mutable.length || mutable.some((item) => !['apply', 'skip'].includes(this.decisions.get(item.key)));
+    this.els.apply.disabled =
+      !mutable.length || mutable.some((item) => !['apply', 'skip'].includes(this.decisions.get(item.key)));
   }
 
   async #apply() {
     const decisions = Object.fromEntries([...this.decisions].filter(([, value]) => value));
-    if (typeof this.confirmApply !== 'function' || this.confirmApply({
-      message: 'Apply the selected folder changes? NoteForge will first download a verified portable backup, capture pre-change revisions, re-check every source file, and delete nothing.',
-      plan: this.plan,
-    }) !== true) {
+    if (
+      typeof this.confirmApply !== 'function' ||
+      this.confirmApply({
+        message:
+          'Apply the selected folder changes? NoteForge will first download a verified portable backup, capture pre-change revisions, re-check every source file, and delete nothing.',
+        plan: this.plan,
+      }) !== true
+    ) {
       this.els.status.textContent = 'Folder reconciliation cancelled. No data was changed.';
       return;
     }

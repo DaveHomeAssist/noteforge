@@ -15,8 +15,11 @@ export class Theme {
     this.db = db;
     this.buttons = [buttons].flat().filter(Boolean);
     this.mql = window.matchMedia('(prefers-color-scheme: dark)');
-    this.__onSystem = () => { if (this.mode === 'system') this.#applyResolved(); };
-    this.mql.addEventListener ? this.mql.addEventListener('change', this.__onSystem)
+    this.__onSystem = () => {
+      if (this.mode === 'system') this.#applyResolved();
+    };
+    this.mql.addEventListener
+      ? this.mql.addEventListener('change', this.__onSystem)
       : this.mql.addListener?.(this.__onSystem); // Safari <14 fallback
     // A persisted choice (new themeMode, or the legacy `theme` key) always wins;
     // whoever never chose gets the WEB-1 light default. The initial apply is not
@@ -38,7 +41,11 @@ export class Theme {
     const root = document.documentElement;
     root.setAttribute('data-theme', resolved);
     // Best effort: private mode or a full quota must never break theming.
-    try { localStorage.setItem(THEME_MIRROR_KEY, this.mode); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(THEME_MIRROR_KEY, this.mode);
+    } catch {
+      /* ignore */
+    }
     // Browser chrome (address bar, PWA title bar) follows the top-bar surface.
     const meta = document.querySelector('meta[name="theme-color"]');
     const color = getComputedStyle(root).getPropertyValue('--bg-elev').trim();

@@ -25,12 +25,18 @@ export function countJUnitCases(xml) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   mkdirSync(REPORT_DIR, { recursive: true });
-  const child = spawn(process.execPath, [
-    '--test',
-    '--test-reporter=spec', '--test-reporter-destination=stdout',
-    '--test-reporter=junit', `--test-reporter-destination=${JUNIT}`,
-    'test/*.test.mjs',
-  ], { cwd: ROOT, stdio: 'inherit' });
+  const child = spawn(
+    process.execPath,
+    [
+      '--test',
+      '--test-reporter=spec',
+      '--test-reporter-destination=stdout',
+      '--test-reporter=junit',
+      `--test-reporter-destination=${JUNIT}`,
+      'test/*.test.mjs',
+    ],
+    { cwd: ROOT, stdio: 'inherit' },
+  );
   child.on('exit', (code, signal) => {
     if (signal) {
       console.error(`node --test was terminated by ${signal}`);
@@ -46,8 +52,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(`\nJUnit: ${report.cases} cases, ${report.failures} failed → ${JUNIT}`);
     if (code !== 0) process.exit(code);
     if (report.cases < TEST_CASE_FLOOR) {
-      console.error(`Test floor: ${report.cases} cases is below the floor of ${TEST_CASE_FLOOR} `
-        + '(TEST_CASE_FLOOR in test/run-node-tests.mjs). Tests were removed or stopped registering.');
+      console.error(
+        `Test floor: ${report.cases} cases is below the floor of ${TEST_CASE_FLOOR} ` +
+          '(TEST_CASE_FLOOR in test/run-node-tests.mjs). Tests were removed or stopped registering.',
+      );
       process.exit(1);
     }
     process.exit(0);

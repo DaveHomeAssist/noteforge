@@ -37,7 +37,9 @@ export class ClipperView {
     this.els.copy.addEventListener('click', () => void this.#copy());
   }
 
-  get open() { return this.modal.isOpen; }
+  get open() {
+    return this.modal.isOpen;
+  }
 
   show() {
     const value = buildClipperBookmarklet(this.appUrl);
@@ -47,7 +49,9 @@ export class ClipperView {
     this.modal.open();
   }
 
-  close() { this.modal.close(); }
+  close() {
+    this.modal.close();
+  }
 
   async #copy() {
     try {

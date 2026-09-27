@@ -28,11 +28,20 @@ if (wants('--blocks')) {
   const files = sources.map((s) => {
     const blocks = parse(s.source);
     const serialized = serialize(blocks);
-    const golden = { slug: s.slug, title: s.title, source: s.source, roundTrip: serialized === s.source, serialized, blocks: stripBlocks(blocks) };
+    const golden = {
+      slug: s.slug,
+      title: s.title,
+      source: s.source,
+      roundTrip: serialized === s.source,
+      serialized,
+      blocks: stripBlocks(blocks),
+    };
     return [`${s.slug}.json`, `${JSON.stringify(golden, null, 2)}\n`];
   });
   replaceDir(resolve(DIR, 'blocks'), files);
-  console.log(`blocks: wrote ${files.length} goldens (${files.filter(([, c]) => c.includes('"roundTrip": true')).length} byte-identical round trips)`);
+  console.log(
+    `blocks: wrote ${files.length} goldens (${files.filter(([, c]) => c.includes('"roundTrip": true')).length} byte-identical round trips)`,
+  );
 }
 
 if (wants('--render')) {

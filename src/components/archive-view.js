@@ -28,9 +28,13 @@ export class ArchiveView {
     this.db = db;
     this.onRestored = onRestored;
     this.selectedId = null;
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.els.list.querySelector('button') || this.modal.panel });
+    this.modal = new Modal(els.overlay, {
+      initialFocus: () => this.els.list.querySelector('button') || this.modal.panel,
+    });
     this.els.list.addEventListener('click', (event) => this.#onClick(event));
-    this.unsubscribe = db.subscribe(() => { if (this.open) this.refresh(); });
+    this.unsubscribe = db.subscribe(() => {
+      if (this.open) this.refresh();
+    });
   }
 
   get open() {
@@ -51,10 +55,14 @@ export class ArchiveView {
     const notes = this.db.getArchived();
     if (!notes.some((note) => note.id === this.selectedId)) this.selectedId = notes[0]?.id || null;
     this.els.list.innerHTML = notes.length
-      ? notes.map((note) => `<div class="archive-item" role="listitem" data-id="${escapeHtml(note.id)}">
+      ? notes
+          .map(
+            (note) => `<div class="archive-item" role="listitem" data-id="${escapeHtml(note.id)}">
           <button type="button" class="archive-item__preview${note.id === this.selectedId ? ' is-selected' : ''}" data-preview aria-pressed="${note.id === this.selectedId}"><strong>${escapeHtml(note.title || 'Untitled')}</strong><span>${escapeHtml(formatDate(note.archivedAt))}</span></button>
           <button type="button" class="btn btn--ghost" data-unarchive>Unarchive</button>
-        </div>`).join('')
+        </div>`,
+          )
+          .join('')
       : '<p class="muted archive-empty">Archive is empty.</p>';
     this.#renderPreview();
   }
@@ -64,7 +72,9 @@ export class ArchiveView {
     this.els.preview.innerHTML = note
       ? `<h3>${escapeHtml(note.title || 'Untitled')}</h3><p class="muted">Archived ${escapeHtml(formatDate(note.archivedAt))}${note.parentId ? ' · hierarchy retained' : ''}</p><pre>${escapeHtml(truncate(note.content, 2_000) || 'Empty note')}</pre><button type="button" class="btn btn--primary" data-unarchive-preview>Unarchive and open</button>`
       : '<p class="muted">Choose an archived note to preview it.</p>';
-    this.els.preview.querySelector('[data-unarchive-preview]')?.addEventListener('click', () => this.#restore(this.selectedId, true));
+    this.els.preview
+      .querySelector('[data-unarchive-preview]')
+      ?.addEventListener('click', () => this.#restore(this.selectedId, true));
   }
 
   #onClick(event) {

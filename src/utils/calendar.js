@@ -4,7 +4,9 @@ import { extractTasks } from './tasks.js';
 function extractDateBlocks(markdown) {
   const dates = [];
   let fence = null;
-  const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(markdown ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
   lines.forEach((line, occurrence) => {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (!fence && marker) {
@@ -28,20 +30,45 @@ export function buildCalendarItems(notes) {
     if (!note || note.isTrashed || note.isArchived) continue;
     const titleDate = String(note.title || '').trim();
     if (isCalendarDate(titleDate)) {
-      items.push({ id: `daily:${note.id}`, type: 'daily', date: titleDate, noteId: note.id, noteTitle: note.title, label: 'Daily note' });
+      items.push({
+        id: `daily:${note.id}`,
+        type: 'daily',
+        date: titleDate,
+        noteId: note.id,
+        noteTitle: note.title,
+        label: 'Daily note',
+      });
     }
     for (const date of extractDateBlocks(note.content)) {
       // The standard Daily template contains its own matching @date block. One
       // source note should occupy one calendar row, not duplicate itself.
       if (date.date === titleDate) continue;
-      items.push({ id: `date:${note.id}:${date.occurrence}`, type: 'date', date: date.date, noteId: note.id, noteTitle: note.title, label: 'Date' });
+      items.push({
+        id: `date:${note.id}:${date.occurrence}`,
+        type: 'date',
+        date: date.date,
+        noteId: note.id,
+        noteTitle: note.title,
+        label: 'Date',
+      });
     }
     for (const task of extractTasks(note.content, { noteId: note.id, noteTitle: note.title, noteTags: note.tags })) {
       if (!task.dueDate) continue;
-      items.push({ id: `task:${task.id}`, type: 'task', date: task.dueDate, noteId: note.id, noteTitle: note.title, label: task.text || 'Untitled task', checked: task.checked, task });
+      items.push({
+        id: `task:${task.id}`,
+        type: 'task',
+        date: task.dueDate,
+        noteId: note.id,
+        noteTitle: note.title,
+        label: task.text || 'Untitled task',
+        checked: task.checked,
+        task,
+      });
     }
   }
-  return items.sort((a, b) => a.date.localeCompare(b.date) || a.noteTitle.localeCompare(b.noteTitle) || a.id.localeCompare(b.id));
+  return items.sort(
+    (a, b) => a.date.localeCompare(b.date) || a.noteTitle.localeCompare(b.noteTitle) || a.id.localeCompare(b.id),
+  );
 }
 
 export function calendarItemsByDate(items) {

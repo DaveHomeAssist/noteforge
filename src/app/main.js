@@ -91,11 +91,11 @@ class App {
             console.warn('[clipper] intake unavailable:', error);
             this.#announce(error?.message || 'Clipped content could not be opened.');
           });
-        }
-        else if (intakeUrl.searchParams.get('source') === 'share-target') void this.#openShareTarget().catch((error) => {
-          console.warn('[capture] shared intake unavailable:', error);
-          this.#announce(error?.message || 'Shared content could not be opened.');
-        });
+        } else if (intakeUrl.searchParams.get('source') === 'share-target')
+          void this.#openShareTarget().catch((error) => {
+            console.warn('[capture] shared intake unavailable:', error);
+            this.#announce(error?.message || 'Shared content could not be opened.');
+          });
         return this;
       })
       .catch((err) => {
@@ -139,7 +139,7 @@ class App {
         onReparent: (id, parentId) => this.reparent(id, parentId),
         onNewChild: (parentId) => this.newChild(parentId),
         onSelectionChange: (ids) => this.#selectionChanged(ids),
-      }
+      },
     );
     this.theme = new Theme(this.db, [this.el.themeBtn, this.el.mobileThemeBtn]);
     this.history = null; // loaded on first open to keep recovery UI out of the initial shell
@@ -171,9 +171,10 @@ class App {
       this.noteList.render();
       const savedWorkspace = this.db.config.workspace;
       const savedPane = savedWorkspace?.panes?.[savedWorkspace?.activePane];
-      const savedId = savedPane?.activeNoteId
-        || savedWorkspace?.panes?.primary?.activeNoteId
-        || savedWorkspace?.panes?.secondary?.activeNoteId;
+      const savedId =
+        savedPane?.activeNoteId ||
+        savedWorkspace?.panes?.primary?.activeNoteId ||
+        savedWorkspace?.panes?.secondary?.activeNoteId;
       const first = this.db.getNote(savedId) || this.db.getNotesSorted()[0];
       if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
@@ -196,19 +197,23 @@ class App {
       } else {
         this.navigation = { ...this.navigation, current: id };
       }
-    }
-    else void this.#ensureNavigation().then((navigation) => {
-      navigation.recordOpen(id, { replay: Boolean(opts.replay) });
-      this.#syncNavigationFrom(navigation);
-    }).catch((error) => {
-      console.warn('[navigation] note-open history unavailable:', error);
-    });
+    } else
+      void this.#ensureNavigation()
+        .then((navigation) => {
+          navigation.recordOpen(id, { replay: Boolean(opts.replay) });
+          this.#syncNavigationFrom(navigation);
+        })
+        .catch((error) => {
+          console.warn('[navigation] note-open history unavailable:', error);
+        });
     this.currentId = id;
     this.el.historyBtn.disabled = false;
     this.setView('editor');
     const fragment = String(opts.fragment || '');
     const blockId = fragment.startsWith('^') ? fragment.slice(1) : null;
-    const headingAnchor = blockId ? null : opts.headingAnchor || resolveHeadingAnchor(extractHeadings(note.content), fragment);
+    const headingAnchor = blockId
+      ? null
+      : opts.headingAnchor || resolveHeadingAnchor(extractHeadings(note.content), fragment);
     this.editor.open(id, { ...opts, headingAnchor, blockId });
     this.noteList.reveal(id); // expand collapsed ancestors so the active note is visible in the outline
     this.noteList.setActive(id);
@@ -248,7 +253,7 @@ class App {
 
   async goBack() {
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
     const navigation = await this.#ensureNavigation();
     const id = navigation.back((noteId) => Boolean(this.db.getNote(noteId)));
     if (!id) return;
@@ -258,7 +263,7 @@ class App {
 
   async goForward() {
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
     const navigation = await this.#ensureNavigation();
     const id = navigation.forward((noteId) => Boolean(this.db.getNote(noteId)));
     if (!id) return;
@@ -300,7 +305,10 @@ class App {
   reparent(id, parentId) {
     if (this.currentId === id) this.editor?.flushPending();
     if (!this.db.setParent(id, parentId)) return; // no-op / rejected (cycle, missing parent)
-    if (parentId) { this.noteList.expandTo(id); this.noteList.render(); } // reveal under new parent
+    if (parentId) {
+      this.noteList.expandTo(id);
+      this.noteList.render();
+    } // reveal under new parent
   }
 
   /** Pin/unpin a note, flushing the editor first so buffered edits aren't lost. */
@@ -316,7 +324,7 @@ class App {
 
   #applySettings(s) {
     const root = document.documentElement;
-    root.dataset.font = s.fontScale;   // CSS: html[data-font] .editor { font-size }
+    root.dataset.font = s.fontScale; // CSS: html[data-font] .editor { font-size }
     root.dataset.width = s.editorWidth; // CSS: html[data-width] { --editor-measure }
     // Settings already persisted `s`; the load path must not write, so a fresh
     // install keeps "never chose" (WEB-1 light default) distinct from a choice.
@@ -327,11 +335,25 @@ class App {
   #announce(message) {
     if (!this.el.appStatus) return;
     this.el.appStatus.textContent = '';
-    requestAnimationFrame(() => { this.el.appStatus.textContent = String(message || ''); });
+    requestAnimationFrame(() => {
+      this.el.appStatus.textContent = String(message || '');
+    });
   }
 
   #anyModalOpen() {
-    return !!(this.trash?.open || this.palette?.open || this.settings?.open || this.history?.open || this.backup?.open || this.linkTools?.open || this.archive?.open || this.savedSearches?.open || this.phase4?.open || this.phase5?.properties?.open || this.phase6?.open);
+    return !!(
+      this.trash?.open ||
+      this.palette?.open ||
+      this.settings?.open ||
+      this.history?.open ||
+      this.backup?.open ||
+      this.linkTools?.open ||
+      this.archive?.open ||
+      this.savedSearches?.open ||
+      this.phase4?.open ||
+      this.phase5?.properties?.open ||
+      this.phase6?.open
+    );
   }
 
   #toggleSidebar() {
@@ -367,7 +389,8 @@ class App {
     bar.className = 'storage-error';
     bar.setAttribute('role', 'alert');
     const msg = document.createElement('span');
-    msg.textContent = "⚠️ Your changes couldn't be saved to storage. Export your notes (⋯ → Export JSON) to avoid losing them.";
+    msg.textContent =
+      "⚠️ Your changes couldn't be saved to storage. Export your notes (⋯ → Export JSON) to avoid losing them.";
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'storage-error__close';
@@ -386,7 +409,8 @@ class App {
     bar.className = 'storage-error storage-error--history';
     bar.setAttribute('role', 'status');
     const msg = document.createElement('span');
-    msg.textContent = 'Your note was saved, but browser-local revision history is unavailable. Download a JSON backup from Backup center.';
+    msg.textContent =
+      'Your note was saved, but browser-local revision history is unavailable. Download a JSON backup from Backup center.';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'storage-error__close';
@@ -435,19 +459,21 @@ class App {
       import('../components/link-tools-view.js'),
       import('../core/knowledge-index.css'),
       this.db.initializeKnowledgeIndex(),
-    ]).then(([{ LinkToolsView, createLinkToolsElements }]) => {
-      this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
-        onApplied: ({ mode, result }) => {
-          if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
-          else if (mode === 'mention' && result.target) this.editor?.refresh();
-          this.linkTools?.modal.setReturnFocus(this.editor?.container?.querySelector('.editor__title'));
-        },
+    ])
+      .then(([{ LinkToolsView, createLinkToolsElements }]) => {
+        this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
+          onApplied: ({ mode, result }) => {
+            if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
+            else if (mode === 'mention' && result.target) this.editor?.refresh();
+            this.linkTools?.modal.setReturnFocus(this.editor?.container?.querySelector('.editor__title'));
+          },
+        });
+        return this.linkTools;
+      })
+      .catch((error) => {
+        this.linkToolsReady = null;
+        throw error;
       });
-      return this.linkTools;
-    }).catch((error) => {
-      this.linkToolsReady = null;
-      throw error;
-    });
     return this.linkToolsReady;
   }
 
@@ -479,15 +505,11 @@ class App {
       import('../components/history-view.js'),
       this.#ensureRecovery(),
     ]);
-    this.history = new HistoryView(
-      createHistoryElements(),
-      this.recovery,
-      {
-        confirmRestore: ({ message }) => confirm(message),
-        onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
-        onRestoreCopy: ({ note }) => this.openNote(note.id),
-      }
-    );
+    this.history = new HistoryView(createHistoryElements(), this.recovery, {
+      confirmRestore: ({ message }) => confirm(message),
+      onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
+      onRestoreCopy: ({ note }) => this.openNote(note.id),
+    });
     return this.history;
   }
 
@@ -497,34 +519,29 @@ class App {
       import('../components/backup-view.js'),
       this.#ensureRecovery(),
     ]);
-    this.backup = new BackupView(
-      createBackupElements(),
-      this.recovery,
-      {
-        confirmRestore: ({ message }) => confirm(message),
-        onRestored: () => this.#openFirstRestoredNote(),
-      }
-    );
+    this.backup = new BackupView(createBackupElements(), this.recovery, {
+      confirmRestore: ({ message }) => confirm(message),
+      onRestored: () => this.#openFirstRestoredNote(),
+    });
     return this.backup;
   }
 
   #ensureRecovery() {
     if (this.recoveryReady) return this.recoveryReady;
     if (this.recovery) return Promise.resolve(this.recovery);
-    this.recoveryReady = Promise.all([
-      import('../core/revision-store.js'),
-      import('../core/recovery-service.js'),
-    ]).then(async ([{ RevisionStore }, { RecoveryService }]) => {
-      this.revisionStore = new RevisionStore(storage);
-      this.recovery = new RecoveryService({ db: this.db, revisionStore: this.revisionStore, storage });
-      await this.recovery.ready;
-      return this.recovery;
-    }).catch((error) => {
-      this.recoveryReady = null;
-      this.recovery = null;
-      this.revisionStore = null;
-      throw error;
-    });
+    this.recoveryReady = Promise.all([import('../core/revision-store.js'), import('../core/recovery-service.js')])
+      .then(async ([{ RevisionStore }, { RecoveryService }]) => {
+        this.revisionStore = new RevisionStore(storage);
+        this.recovery = new RecoveryService({ db: this.db, revisionStore: this.revisionStore, storage });
+        await this.recovery.ready;
+        return this.recovery;
+      })
+      .catch((error) => {
+        this.recoveryReady = null;
+        this.recovery = null;
+        this.revisionStore = null;
+        throw error;
+      });
     return this.recoveryReady;
   }
 
@@ -558,24 +575,27 @@ class App {
   #ensureNavigation() {
     if (this.navigationController) return Promise.resolve(this.navigationController);
     if (this.navigationReady) return this.navigationReady;
-    this.navigationReady = import('../utils/navigation.js').then(({ NavigationController }) => {
-      this.navigationController = new NavigationController(this.db, {
-        state: this.navigation,
-        recentIds: this.recentNoteIds,
+    this.navigationReady = import('../utils/navigation.js')
+      .then(({ NavigationController }) => {
+        this.navigationController = new NavigationController(this.db, {
+          state: this.navigation,
+          recentIds: this.recentNoteIds,
+        });
+        this.#syncNavigationFrom(this.navigationController);
+        return this.navigationController;
+      })
+      .catch((error) => {
+        this.navigationReady = null;
+        throw error;
       });
-      this.#syncNavigationFrom(this.navigationController);
-      return this.navigationController;
-    }).catch((error) => {
-      this.navigationReady = null;
-      throw error;
-    });
     return this.navigationReady;
   }
 
   #scheduleNavigationInitialization() {
-    const initialize = () => void this.#ensureNavigation().catch((error) => {
-      console.warn('[navigation] deferred initialization unavailable:', error);
-    });
+    const initialize = () =>
+      void this.#ensureNavigation().catch((error) => {
+        console.warn('[navigation] deferred initialization unavailable:', error);
+      });
     if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 500 });
     else setTimeout(initialize, 0);
   }
@@ -583,120 +603,138 @@ class App {
   #ensureGraph() {
     if (this.graph) return Promise.resolve(this.graph);
     if (this.graphReady) return this.graphReady;
-    this.graphReady = import('../components/graph.js').then(({ GraphView }) => {
-      this.graph = new GraphView(this.el.graph, this.db, (id) => {
-        this.setView('editor');
-        this.openNote(id);
+    this.graphReady = import('../components/graph.js')
+      .then(({ GraphView }) => {
+        this.graph = new GraphView(this.el.graph, this.db, (id) => {
+          this.setView('editor');
+          this.openNote(id);
+        });
+        return this.graph;
+      })
+      .catch((error) => {
+        this.graphReady = null;
+        throw error;
       });
-      return this.graph;
-    }).catch((error) => {
-      this.graphReady = null;
-      throw error;
-    });
     return this.graphReady;
   }
 
   #ensureTrash() {
     if (this.trash) return Promise.resolve(this.trash);
     if (this.trashReady) return this.trashReady;
-    this.trashReady = import('../components/trash-view.js').then(({ TrashView, createTrashElements }) => {
-      this.trash = new TrashView(createTrashElements({ badge: this.el.trashBadge }), this.db, (id, { archived = false } = {}) => {
-        if (archived) void this.#showArchive(id);
-        else this.openNote(id);
+    this.trashReady = import('../components/trash-view.js')
+      .then(({ TrashView, createTrashElements }) => {
+        this.trash = new TrashView(
+          createTrashElements({ badge: this.el.trashBadge }),
+          this.db,
+          (id, { archived = false } = {}) => {
+            if (archived) void this.#showArchive(id);
+            else this.openNote(id);
+          },
+        );
+        return this.trash;
+      })
+      .catch((error) => {
+        this.trashReady = null;
+        throw error;
       });
-      return this.trash;
-    }).catch((error) => {
-      this.trashReady = null;
-      throw error;
-    });
     return this.trashReady;
   }
 
   #ensurePalette() {
     if (this.palette) return Promise.resolve(this.palette);
     if (this.paletteReady) return this.paletteReady;
-    this.paletteReady = import('../components/command-palette.js').then(({ CommandPalette, createCommandPaletteElements }) => {
-      this.palette = new CommandPalette(createCommandPaletteElements(), {
-        getNotes: () => this.db.getAllNotes(),
-        getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
-        getCommands: () => this.#commands(),
-        onOpenNote: (id) => this.openNote(id),
-        onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
+    this.paletteReady = import('../components/command-palette.js')
+      .then(({ CommandPalette, createCommandPaletteElements }) => {
+        this.palette = new CommandPalette(createCommandPaletteElements(), {
+          getNotes: () => this.db.getAllNotes(),
+          getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
+          getCommands: () => this.#commands(),
+          onOpenNote: (id) => this.openNote(id),
+          onOpenHeading: (id, headingAnchor) => this.openNote(id, { headingAnchor }),
+        });
+        return this.palette;
+      })
+      .catch((error) => {
+        this.paletteReady = null;
+        throw error;
       });
-      return this.palette;
-    }).catch((error) => {
-      this.paletteReady = null;
-      throw error;
-    });
     return this.paletteReady;
   }
 
   #ensureSettings() {
     if (this.settings) return Promise.resolve(this.settings);
     if (this.settingsReady) return this.settingsReady;
-    this.settingsReady = import('../components/settings-view.js').then(({ SettingsView, createSettingsElements }) => {
-      this.settings = new SettingsView(createSettingsElements(), this.db, (settings) => this.#applySettings(settings));
-      return this.settings;
-    }).catch((error) => {
-      this.settingsReady = null;
-      throw error;
-    });
+    this.settingsReady = import('../components/settings-view.js')
+      .then(({ SettingsView, createSettingsElements }) => {
+        this.settings = new SettingsView(createSettingsElements(), this.db, (settings) =>
+          this.#applySettings(settings),
+        );
+        return this.settings;
+      })
+      .catch((error) => {
+        this.settingsReady = null;
+        throw error;
+      });
     return this.settingsReady;
   }
 
   #ensureArchive() {
     if (this.archive) return Promise.resolve(this.archive);
     if (this.archiveReady) return this.archiveReady;
-    this.archiveReady = import('../components/archive-view.js').then(({ ArchiveView, createArchiveElements }) => {
-      this.archive = new ArchiveView(createArchiveElements(), this.db, {
-        onRestored: (id) => this.openNote(id, { discardPending: true }),
+    this.archiveReady = import('../components/archive-view.js')
+      .then(({ ArchiveView, createArchiveElements }) => {
+        this.archive = new ArchiveView(createArchiveElements(), this.db, {
+          onRestored: (id) => this.openNote(id, { discardPending: true }),
+        });
+        return this.archive;
+      })
+      .catch((error) => {
+        this.archiveReady = null;
+        throw error;
       });
-      return this.archive;
-    }).catch((error) => {
-      this.archiveReady = null;
-      throw error;
-    });
     return this.archiveReady;
   }
 
   #ensureFindReplace() {
     if (this.findReplace) return Promise.resolve(this.findReplace);
     if (this.findReplaceReady) return this.findReplaceReady;
-    this.findReplaceReady = Promise.all([
-      import('../components/find-replace-view.js'),
-      this.#ensureRecovery(),
-    ]).then(([{ FindReplaceView, createFindReplaceElements }]) => {
-      this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
-        confirmVaultApply: ({ message }) => confirm(message),
-        onApplied: () => this.noteList.render(),
+    this.findReplaceReady = Promise.all([import('../components/find-replace-view.js'), this.#ensureRecovery()])
+      .then(([{ FindReplaceView, createFindReplaceElements }]) => {
+        this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
+          confirmVaultApply: ({ message }) => confirm(message),
+          onApplied: () => this.noteList.render(),
+        });
+        return this.findReplace;
+      })
+      .catch((error) => {
+        this.findReplaceReady = null;
+        throw error;
       });
-      return this.findReplace;
-    }).catch((error) => {
-      this.findReplaceReady = null;
-      throw error;
-    });
     return this.findReplaceReady;
   }
 
   #ensureSavedSearches() {
     if (this.savedSearches) return Promise.resolve(this.savedSearches);
     if (this.savedSearchesReady) return this.savedSearchesReady;
-    this.savedSearchesReady = import('../components/saved-searches-view.js').then(({ SavedSearchesView, createSavedSearchElements }) => {
-      this.savedSearches = new SavedSearchesView(createSavedSearchElements(), this.db, this.noteList, {
-        onRun: () => this.#closeSidebar(),
+    this.savedSearchesReady = import('../components/saved-searches-view.js')
+      .then(({ SavedSearchesView, createSavedSearchElements }) => {
+        this.savedSearches = new SavedSearchesView(createSavedSearchElements(), this.db, this.noteList, {
+          onRun: () => this.#closeSidebar(),
+        });
+        return this.savedSearches;
+      })
+      .catch((error) => {
+        this.savedSearchesReady = null;
+        throw error;
       });
-      return this.savedSearches;
-    }).catch((error) => {
-      this.savedSearchesReady = null;
-      throw error;
-    });
     return this.savedSearchesReady;
   }
 
   #scheduleSavedSearchesInitialization() {
-    const initialize = () => void this.#ensureSavedSearches().catch((error) => {
-      console.warn('[search] deferred saved views unavailable:', error);
-    });
+    const initialize = () =>
+      void this.#ensureSavedSearches().catch((error) => {
+        console.warn('[search] deferred saved views unavailable:', error);
+      });
     if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 1_500 });
     else setTimeout(initialize, 0);
   }
@@ -704,16 +742,21 @@ class App {
   #ensurePhase4() {
     if (this.phase4) return Promise.resolve(this.phase4);
     if (this.phase4Ready) return this.phase4Ready;
-    this.phase4Ready = import('./phase4.js').then(({ Phase4Controller }) => {
-      this.phase4 = new Phase4Controller({
-        db: this.db,
-        editor: this.editor,
-        openNote: (id, options) => this.openNote(id, options),
-        showStorageError: () => this.#showStorageError(),
-        announce: (message) => this.#announce(message),
+    this.phase4Ready = import('./phase4.js')
+      .then(({ Phase4Controller }) => {
+        this.phase4 = new Phase4Controller({
+          db: this.db,
+          editor: this.editor,
+          openNote: (id, options) => this.openNote(id, options),
+          showStorageError: () => this.#showStorageError(),
+          announce: (message) => this.#announce(message),
+        });
+        return this.phase4;
+      })
+      .catch((error) => {
+        this.phase4Ready = null;
+        throw error;
       });
-      return this.phase4;
-    }).catch((error) => { this.phase4Ready = null; throw error; });
     return this.phase4Ready;
   }
 
@@ -724,28 +767,31 @@ class App {
       import('./phase5.js'),
       import('../components/properties-view.css'),
       this.#ensureRecovery(),
-    ]).then(async ([{ Phase5Controller }]) => {
-      this.phase5 = new Phase5Controller({
-        db: this.db,
-        editor: this.editor,
-        ensureRecovery: () => this.#ensureRecovery(),
-        announce: (message) => this.#announce(message),
-        refreshSearch: () => this.noteList.render(),
+    ])
+      .then(async ([{ Phase5Controller }]) => {
+        this.phase5 = new Phase5Controller({
+          db: this.db,
+          editor: this.editor,
+          ensureRecovery: () => this.#ensureRecovery(),
+          announce: (message) => this.#announce(message),
+          refreshSearch: () => this.noteList.render(),
+        });
+        await this.phase5.ready;
+        return this.phase5;
+      })
+      .catch((error) => {
+        this.phase5Ready = null;
+        this.phase5 = null;
+        throw error;
       });
-      await this.phase5.ready;
-      return this.phase5;
-    }).catch((error) => {
-      this.phase5Ready = null;
-      this.phase5 = null;
-      throw error;
-    });
     return this.phase5Ready;
   }
 
   #schedulePhase5Initialization() {
-    const initialize = () => void this.#ensurePhase5().catch((error) => {
-      console.warn('[properties] deferred initialization unavailable:', error);
-    });
+    const initialize = () =>
+      void this.#ensurePhase5().catch((error) => {
+        console.warn('[properties] deferred initialization unavailable:', error);
+      });
     if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 2_500 });
     else setTimeout(initialize, 0);
   }
@@ -754,44 +800,47 @@ class App {
     if (this.phase6Ready) return this.phase6Ready;
     if (this.phase6) return this.phase6.ready;
     const primaryEditor = this.editor;
-    this.phase6Ready = import('./phase6.js').then(async ({ Phase6Controller }) => {
-      this.phase6 = new Phase6Controller({
-        db: this.db,
-        primaryEditor,
-        primaryElement: this.el.editor,
-        onWorkspaceCreated: (workspace) => {
-          this.workspace = workspace;
-          this.editor = workspace;
-          workspace.element.hidden = this.view === 'graph';
-          if (this.phase4) this.phase4.editor = workspace;
-          if (this.phase5) this.phase5.editor = workspace;
-          if (this.findReplace) this.findReplace.editor = workspace;
-        },
-        commitOpen: (id, options) => this.#openNoteNow(id, options),
-        clearActive: () => this.#clearWorkspaceActive(),
-        openArchived: (id) => this.#showArchive(id),
-        ensureRecovery: () => this.#ensureRecovery(),
-        showQuickCapture: (options) => this.#showQuickCapture(options),
-        showStorageError: () => this.#showStorageError(),
-        announce: (message) => this.#announce(message),
+    this.phase6Ready = import('./phase6.js')
+      .then(async ({ Phase6Controller }) => {
+        this.phase6 = new Phase6Controller({
+          db: this.db,
+          primaryEditor,
+          primaryElement: this.el.editor,
+          onWorkspaceCreated: (workspace) => {
+            this.workspace = workspace;
+            this.editor = workspace;
+            workspace.element.hidden = this.view === 'graph';
+            if (this.phase4) this.phase4.editor = workspace;
+            if (this.phase5) this.phase5.editor = workspace;
+            if (this.findReplace) this.findReplace.editor = workspace;
+          },
+          commitOpen: (id, options) => this.#openNoteNow(id, options),
+          clearActive: () => this.#clearWorkspaceActive(),
+          openArchived: (id) => this.#showArchive(id),
+          ensureRecovery: () => this.#ensureRecovery(),
+          showQuickCapture: (options) => this.#showQuickCapture(options),
+          showStorageError: () => this.#showStorageError(),
+          announce: (message) => this.#announce(message),
+        });
+        await this.phase6.ready;
+        return this.phase6;
+      })
+      .catch((error) => {
+        this.phase6?.workspace?.destroy?.();
+        this.phase6Ready = null;
+        this.phase6 = null;
+        this.workspace = null;
+        this.editor = primaryEditor;
+        throw error;
       });
-      await this.phase6.ready;
-      return this.phase6;
-    }).catch((error) => {
-      this.phase6?.workspace?.destroy?.();
-      this.phase6Ready = null;
-      this.phase6 = null;
-      this.workspace = null;
-      this.editor = primaryEditor;
-      throw error;
-    });
     return this.phase6Ready;
   }
 
   #schedulePhase6Initialization() {
-    const initialize = () => void this.#ensurePhase6().catch((error) => {
-      console.warn('[workspace] deferred initialization unavailable:', error);
-    });
+    const initialize = () =>
+      void this.#ensurePhase6().catch((error) => {
+        console.warn('[workspace] deferred initialization unavailable:', error);
+      });
     if (typeof requestIdleCallback === 'function') requestIdleCallback(initialize, { timeout: 3_000 });
     else setTimeout(initialize, 0);
   }
@@ -844,27 +893,28 @@ class App {
 
   #selectionChanged(ids) {
     if (!ids.length && !this.bulkActions) return;
-    void this.#ensureBulkActions().then((view) => view.update(ids)).catch((error) => {
-      console.warn('[bulk] actions unavailable:', error);
-    });
+    void this.#ensureBulkActions()
+      .then((view) => view.update(ids))
+      .catch((error) => {
+        console.warn('[bulk] actions unavailable:', error);
+      });
   }
 
   #ensureBulkActions() {
     if (this.bulkActions) return Promise.resolve(this.bulkActions);
     if (this.bulkActionsReady) return this.bulkActionsReady;
-    this.bulkActionsReady = Promise.all([
-      import('../components/bulk-actions-view.js'),
-      this.#ensureRecovery(),
-    ]).then(([{ BulkActionsView, createBulkActionElements }]) => {
-      this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
-        confirmAction: ({ message }) => confirm(message),
-        onApplied: () => this.#syncCurrentAfterBatch(),
+    this.bulkActionsReady = Promise.all([import('../components/bulk-actions-view.js'), this.#ensureRecovery()])
+      .then(([{ BulkActionsView, createBulkActionElements }]) => {
+        this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
+          confirmAction: ({ message }) => confirm(message),
+          onApplied: () => this.#syncCurrentAfterBatch(),
+        });
+        return this.bulkActions;
+      })
+      .catch((error) => {
+        this.bulkActionsReady = null;
+        throw error;
       });
-      return this.bulkActions;
-    }).catch((error) => {
-      this.bulkActionsReady = null;
-      throw error;
-    });
     return this.bulkActionsReady;
   }
 
@@ -901,7 +951,7 @@ class App {
     this.#closeSidebar();
     const view = await this.#ensureFindReplace();
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
     view.show({ scope });
   }
 
@@ -939,9 +989,27 @@ class App {
     const cur = this.currentId ? this.db.getNote(this.currentId) : null;
     const cmds = [
       { id: 'new', title: 'New note', hint: 'Create', icon: '📝', run: () => this.newNote() },
-      { id: 'today', title: "Open Today’s Note", hint: 'Local Daily note · Ctrl/⌘ Shift D', icon: '◫', run: () => this.openDailyNote() },
-      { id: 'capture', title: 'Quick Capture', hint: 'Text, URL, clipboard, image · Ctrl/⌘ Shift C', icon: '↘', run: () => this.#showQuickCapture() },
-      { id: 'tasks', title: 'Open task dashboard', hint: 'Today, overdue, upcoming', icon: '☑', run: () => this.#showTaskDashboard() },
+      {
+        id: 'today',
+        title: 'Open Today’s Note',
+        hint: 'Local Daily note · Ctrl/⌘ Shift D',
+        icon: '◫',
+        run: () => this.openDailyNote(),
+      },
+      {
+        id: 'capture',
+        title: 'Quick Capture',
+        hint: 'Text, URL, clipboard, image · Ctrl/⌘ Shift C',
+        icon: '↘',
+        run: () => this.#showQuickCapture(),
+      },
+      {
+        id: 'tasks',
+        title: 'Open task dashboard',
+        hint: 'Today, overdue, upcoming',
+        icon: '☑',
+        run: () => this.#showTaskDashboard(),
+      },
       { id: 'calendar', title: 'Open calendar', hint: 'Month and week', icon: '▦', run: () => this.#showCalendar() },
       ...TEMPLATES.map((t) => ({
         id: 'tpl-' + t.id,
@@ -951,19 +1019,85 @@ class App {
         run: () => this.newFromTemplate(t),
       })),
       { id: 'search', title: 'Search notes', hint: 'Sidebar', icon: '🔍', run: () => this.#focusSearch() },
-      { id: 'back', title: 'Go back to previous note', hint: 'Navigation · Alt+Left', icon: '←', run: () => this.goBack() },
-      { id: 'forward', title: 'Go forward to next note', hint: 'Navigation · Alt+Right', icon: '→', run: () => this.goForward() },
-      { id: 'graph', title: this.view === 'graph' ? 'Close graph view' : 'Open graph view', hint: 'View', icon: '🕸️', run: () => this.toggleGraph() },
-      { id: 'theme', title: 'Toggle dark / light theme', hint: 'Appearance', icon: '🌓', run: () => this.theme.toggle() },
-      { id: 'find', title: 'Find and replace in current note', hint: 'Source Markdown · Ctrl/⌘ F', icon: '⌕', run: () => this.#showFindReplace('current') },
-      { id: 'find-vault', title: 'Find and replace across vault', hint: 'Preview required', icon: '⌕', run: () => this.#showFindReplace('vault') },
-      { id: 'archive-view', title: 'Open Archive', hint: `${this.db.getArchived().length} archived`, icon: '🗄', run: () => this.#showArchive() },
-      { id: 'trash', title: 'Open Trash', hint: `${this.db.getTrash().length} in trash`, icon: '🗑', run: () => this.#showTrash() },
+      {
+        id: 'back',
+        title: 'Go back to previous note',
+        hint: 'Navigation · Alt+Left',
+        icon: '←',
+        run: () => this.goBack(),
+      },
+      {
+        id: 'forward',
+        title: 'Go forward to next note',
+        hint: 'Navigation · Alt+Right',
+        icon: '→',
+        run: () => this.goForward(),
+      },
+      {
+        id: 'graph',
+        title: this.view === 'graph' ? 'Close graph view' : 'Open graph view',
+        hint: 'View',
+        icon: '🕸️',
+        run: () => this.toggleGraph(),
+      },
+      {
+        id: 'theme',
+        title: 'Toggle dark / light theme',
+        hint: 'Appearance',
+        icon: '🌓',
+        run: () => this.theme.toggle(),
+      },
+      {
+        id: 'find',
+        title: 'Find and replace in current note',
+        hint: 'Source Markdown · Ctrl/⌘ F',
+        icon: '⌕',
+        run: () => this.#showFindReplace('current'),
+      },
+      {
+        id: 'find-vault',
+        title: 'Find and replace across vault',
+        hint: 'Preview required',
+        icon: '⌕',
+        run: () => this.#showFindReplace('vault'),
+      },
+      {
+        id: 'archive-view',
+        title: 'Open Archive',
+        hint: `${this.db.getArchived().length} archived`,
+        icon: '🗄',
+        run: () => this.#showArchive(),
+      },
+      {
+        id: 'trash',
+        title: 'Open Trash',
+        hint: `${this.db.getTrash().length} in trash`,
+        icon: '🗑',
+        run: () => this.#showTrash(),
+      },
       { id: 'settings', title: 'Open settings', hint: 'Preferences', icon: '⚙', run: () => this.#showSettings() },
       { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: '🛟', run: () => this.#showBackup() },
-      { id: 'clipper', title: 'Set up web clipper', hint: 'Capture web pages', icon: '✂', run: () => this.#showClipper() },
-      { id: 'reconcile', title: 'Reconcile Markdown folder', hint: 'Preview, backup, then apply', icon: '⇄', run: () => this.#showReconciliation() },
-      { id: 'link-report', title: 'Open link integrity report', hint: 'Knowledge graph', icon: '🔗', run: () => this.#showLinkReport() },
+      {
+        id: 'clipper',
+        title: 'Set up web clipper',
+        hint: 'Capture web pages',
+        icon: '✂',
+        run: () => this.#showClipper(),
+      },
+      {
+        id: 'reconcile',
+        title: 'Reconcile Markdown folder',
+        hint: 'Preview, backup, then apply',
+        icon: '⇄',
+        run: () => this.#showReconciliation(),
+      },
+      {
+        id: 'link-report',
+        title: 'Open link integrity report',
+        hint: 'Knowledge graph',
+        icon: '🔗',
+        run: () => this.#showLinkReport(),
+      },
       { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: '⬇', run: () => this.#export() },
       { id: 'import', title: 'Import notes from JSON', hint: 'Data', icon: '⬆', run: () => this.el.importFile.click() },
       { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: '✨', run: () => this.#seed() },
@@ -971,18 +1105,79 @@ class App {
     ];
     // Save-to-folder needs the File System Access API (Chromium) — only offer it there.
     if (window.showDirectoryPicker) {
-      cmds.push({ id: 'save-folder', title: 'Save all notes to a folder…', hint: 'Markdown vault', icon: '📁', run: () => this.saveVaultToFolder() });
+      cmds.push({
+        id: 'save-folder',
+        title: 'Save all notes to a folder…',
+        hint: 'Markdown vault',
+        icon: '📁',
+        run: () => this.saveVaultToFolder(),
+      });
     }
     if (cur) {
-      cmds.push({ id: 'properties', title: 'Edit note properties', hint: 'YAML frontmatter', icon: '◇', run: () => this.#showProperties(cur.id) });
-      cmds.push({ id: 'history', title: 'Open revision history', hint: cur.title, icon: '↶', run: () => this.#showHistory() });
-      cmds.push({ id: 'archive', title: 'Archive current note', hint: cur.title, icon: '🗄', run: () => this.#archiveCurrent() });
-      cmds.push({ id: 'child', title: 'New sub-note under current', hint: cur.title, icon: '↳', run: () => this.newChild(cur.id) });
-      if (cur.parentId) cmds.push({ id: 'unnest', title: 'Move current note to top level', hint: cur.title, icon: '↤', run: () => this.reparent(cur.id, null) });
-      cmds.push({ id: 'pin', title: cur.pinned ? 'Unpin current note' : 'Pin current note to top', hint: cur.title, icon: '📌', run: () => this.togglePin(cur.id) });
-      cmds.push({ id: 'export-html', title: 'Export note as HTML', hint: 'Shareable page', icon: '🌐', run: () => this.exportNoteHtml(cur) });
-      cmds.push({ id: 'export-md', title: 'Download note as Markdown', hint: 'Save .md', icon: '⬇', run: () => this.downloadNoteMarkdown(cur) });
-      cmds.push({ id: 'del', title: 'Delete current note', hint: cur.title, icon: '🗑', run: () => this.deleteNote(cur.id) });
+      cmds.push({
+        id: 'properties',
+        title: 'Edit note properties',
+        hint: 'YAML frontmatter',
+        icon: '◇',
+        run: () => this.#showProperties(cur.id),
+      });
+      cmds.push({
+        id: 'history',
+        title: 'Open revision history',
+        hint: cur.title,
+        icon: '↶',
+        run: () => this.#showHistory(),
+      });
+      cmds.push({
+        id: 'archive',
+        title: 'Archive current note',
+        hint: cur.title,
+        icon: '🗄',
+        run: () => this.#archiveCurrent(),
+      });
+      cmds.push({
+        id: 'child',
+        title: 'New sub-note under current',
+        hint: cur.title,
+        icon: '↳',
+        run: () => this.newChild(cur.id),
+      });
+      if (cur.parentId)
+        cmds.push({
+          id: 'unnest',
+          title: 'Move current note to top level',
+          hint: cur.title,
+          icon: '↤',
+          run: () => this.reparent(cur.id, null),
+        });
+      cmds.push({
+        id: 'pin',
+        title: cur.pinned ? 'Unpin current note' : 'Pin current note to top',
+        hint: cur.title,
+        icon: '📌',
+        run: () => this.togglePin(cur.id),
+      });
+      cmds.push({
+        id: 'export-html',
+        title: 'Export note as HTML',
+        hint: 'Shareable page',
+        icon: '🌐',
+        run: () => this.exportNoteHtml(cur),
+      });
+      cmds.push({
+        id: 'export-md',
+        title: 'Download note as Markdown',
+        hint: 'Save .md',
+        icon: '⬇',
+        run: () => this.downloadNoteMarkdown(cur),
+      });
+      cmds.push({
+        id: 'del',
+        title: 'Delete current note',
+        hint: cur.title,
+        icon: '🗑',
+        run: () => this.deleteNote(cur.id),
+      });
     }
     return cmds;
   }
@@ -1024,7 +1219,7 @@ class App {
     const note = this.currentId ? this.db.getNote(this.currentId) : null;
     if (!note) return;
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
     const id = note.id;
     if (!this.db.archiveNote(id)) return;
     const next = this.db.getNotesSorted()[0];
@@ -1048,7 +1243,7 @@ class App {
     if (this.view === 'graph') return this.setView('editor');
     await this.#ensureGraph();
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.#showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
     this.setView('graph');
   }
 
@@ -1085,8 +1280,10 @@ class App {
     this.el.captureBtn?.addEventListener('click', () => this.#showQuickCapture());
     this.el.tasksBtn?.addEventListener('click', () => this.#showTaskDashboard());
     this.el.calendarBtn?.addEventListener('click', () => this.#showCalendar());
-    for (const button of [this.el.navBack, this.el.mobileNavBack]) button?.addEventListener('click', () => this.goBack());
-    for (const button of [this.el.navForward, this.el.mobileNavForward]) button?.addEventListener('click', () => this.goForward());
+    for (const button of [this.el.navBack, this.el.mobileNavBack])
+      button?.addEventListener('click', () => this.goBack());
+    for (const button of [this.el.navForward, this.el.mobileNavForward])
+      button?.addEventListener('click', () => this.goForward());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
     this.el.sidebarBackdrop?.addEventListener('click', () => this.#closeSidebar());
   }
@@ -1095,8 +1292,16 @@ class App {
     // Archive is a live lifecycle state, not deletion. Keep archived notes and
     // archivedAt in the legacy merge-export format; Trash remains exclusive to
     // the complete portable backup flow.
-    const data = JSON.stringify(this.db.getNotesInScope('nontrash').map((n) => n.toJSON()), null, 2);
-    await this.#downloadBlob(data, `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+    const data = JSON.stringify(
+      this.db.getNotesInScope('nontrash').map((n) => n.toJSON()),
+      null,
+      2,
+    );
+    await this.#downloadBlob(
+      data,
+      `noteforge-export-${new Date().toISOString().slice(0, 10)}.json`,
+      'application/json',
+    );
     this.#closeMenu();
   }
 
@@ -1111,7 +1316,9 @@ class App {
     if (!note) return;
     const { buildNoteHtmlDoc, flattenExportWikilinks, noteFileStem } = await import('../utils/export.js');
     setKnownTitles(this.db.allTitles()); // so renderMarkdown resolves wikilink styling
-    const inner = flattenExportWikilinks(renderMarkdown(note.content, { resolveNote: (title) => this.db.resolveTitle(title), sourceNoteId: note.id }));
+    const inner = flattenExportWikilinks(
+      renderMarkdown(note.content, { resolveNote: (title) => this.db.resolveTitle(title), sourceNoteId: note.id }),
+    );
     await this.#downloadBlob(buildNoteHtmlDoc(note.title, inner), `${noteFileStem(note.title)}.html`, 'text/html');
   }
 
@@ -1125,7 +1332,7 @@ class App {
   /** Save the whole (live) vault to a chosen folder as Obsidian-compatible .md files. */
   async saveVaultToFolder() {
     if (!window.showDirectoryPicker) {
-      alert("Saving to a folder needs a Chromium-based browser (Chrome/Edge). Use Export JSON instead.");
+      alert('Saving to a folder needs a Chromium-based browser (Chrome/Edge). Use Export JSON instead.');
       return;
     }
     let dir;
@@ -1138,7 +1345,7 @@ class App {
       const { saveVaultToFolder } = await import('../utils/vault.js');
       this.editor?.flushPending();
       const written = await saveVaultToFolder(dir, this.db);
-      if (!await this.db.flushCurrentWrites()) this.#showStorageError();
+      if (!(await this.db.flushCurrentWrites())) this.#showStorageError();
       alert(`Saved ${written} note${written === 1 ? '' : 's'} to the folder as Markdown files.`);
     } catch (err) {
       console.warn('[vault] save failed:', err);
@@ -1159,17 +1366,20 @@ class App {
       const idMap = new Map(); // oldId -> newId
       const pendingParents = []; // { id, oldParent }
       for (const data of selectImportableNotes(parsed)) {
-        const note = this.db.createNote({
-          title: data.title || 'Untitled',
-          content: data.content,
-          tags: Array.isArray(data.tags) ? data.tags : [],
-          banner: data.banner || null,
-          pinned: !!data.pinned,
-          aliases: Array.isArray(data.aliases) ? data.aliases : [],
-          archivedAt: typeof data.archivedAt === 'string' ? data.archivedAt : null,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        }, { allowIdentityConflicts: true });
+        const note = this.db.createNote(
+          {
+            title: data.title || 'Untitled',
+            content: data.content,
+            tags: Array.isArray(data.tags) ? data.tags : [],
+            banner: data.banner || null,
+            pinned: !!data.pinned,
+            aliases: Array.isArray(data.aliases) ? data.aliases : [],
+            archivedAt: typeof data.archivedAt === 'string' ? data.archivedAt : null,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          },
+          { allowIdentityConflicts: true },
+        );
         if (data.id) idMap.set(data.id, note.id);
         if (typeof data.parentId === 'string') pendingParents.push({ id: note.id, oldParent: data.parentId });
         imported++;
@@ -1190,7 +1400,9 @@ class App {
       if (report.healthy) {
         alert(`Imported ${imported} note${imported === 1 ? '' : 's'}.`);
       } else {
-        alert(`Imported ${imported} note${imported === 1 ? '' : 's'}. ${report.ambiguities.length} ambiguous title or alias group${report.ambiguities.length === 1 ? '' : 's'} need repair; NoteForge will never guess those link targets.`);
+        alert(
+          `Imported ${imported} note${imported === 1 ? '' : 's'}. ${report.ambiguities.length} ambiguous title or alias group${report.ambiguities.length === 1 ? '' : 's'} need repair; NoteForge will never guess those link targets.`,
+        );
         tools.showReport();
       }
     } catch (err) {
@@ -1266,8 +1478,10 @@ class App {
         e.preventDefault();
         void this.goForward();
       } else if (e.key === 'Escape') {
-        if (!this.el.menuDropdown.hidden) { this.#closeMenu(); this.el.menuBtn.focus(); }
-        else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();
+        if (!this.el.menuDropdown.hidden) {
+          this.#closeMenu();
+          this.el.menuBtn.focus();
+        } else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();
         else if (this.view === 'graph') this.setView('editor');
       }
     });

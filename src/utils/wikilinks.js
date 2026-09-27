@@ -17,9 +17,7 @@ function escapedAt(source, index) {
 }
 
 function mergeRanges(ranges) {
-  const sorted = ranges
-    .filter((range) => range.end > range.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const sorted = ranges.filter((range) => range.end > range.start).sort((a, b) => a.start - b.start || a.end - b.end);
   const result = [];
   for (const range of sorted) {
     const previous = result[result.length - 1];
@@ -77,7 +75,7 @@ export function markdownExclusionRanges(markdown) {
   }
   if (fence) ranges.push({ start: fence.start, end: source.length, kind: 'fence' });
   const fenced = mergeRanges(ranges.filter((range) => range.kind === 'fence'));
-  for (let cursor = 0; cursor < source.length;) {
+  for (let cursor = 0; cursor < source.length; ) {
     if (source[cursor] !== '`' || escapedAt(source, cursor) || rangeContains(fenced, cursor)) {
       cursor += 1;
       continue;
@@ -98,7 +96,10 @@ export function markdownExclusionRanges(markdown) {
       }
       break;
     }
-    if (close < 0) { cursor += run; continue; }
+    if (close < 0) {
+      cursor += run;
+      continue;
+    }
     ranges.push({ start: cursor, end: close + run, kind: 'inline-code' });
     cursor = close + run;
   }
@@ -160,19 +161,21 @@ export function parseWikilinks(markdown) {
     const hash = rawTarget.indexOf('#');
     const titlePartLength = (hash < 0 ? rawTarget : rawTarget.slice(0, hash)).length;
     const targetEnd = bodyStart + titlePartLength - parsed.trailing;
-    tokens.push(Object.freeze({
-      start,
-      end: close + 2,
-      targetStart,
-      targetEnd,
-      target: parsed.target,
-      display: displayRaw === null ? null : displayRaw.trim(),
-      displayRaw,
-      fragment: parsed.fragment,
-      fragmentRaw: parsed.fragmentRaw,
-      embedded,
-      raw: source.slice(start, close + 2),
-    }));
+    tokens.push(
+      Object.freeze({
+        start,
+        end: close + 2,
+        targetStart,
+        targetEnd,
+        target: parsed.target,
+        display: displayRaw === null ? null : displayRaw.trim(),
+        displayRaw,
+        fragment: parsed.fragment,
+        fragmentRaw: parsed.fragmentRaw,
+        embedded,
+        raw: source.slice(start, close + 2),
+      }),
+    );
     open = source.indexOf('[[', close + 2);
   }
   return tokens;

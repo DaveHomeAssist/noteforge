@@ -87,7 +87,9 @@ export class BannerControl {
     const controls = el('div', 'banner__controls');
     controls.innerHTML =
       '<button type="button" class="banner__btn" data-act="change">Change</button>' +
-      (banner.type === 'image' ? '<button type="button" class="banner__btn" data-act="reposition">Reposition</button>' : '') +
+      (banner.type === 'image'
+        ? '<button type="button" class="banner__btn" data-act="reposition">Reposition</button>'
+        : '') +
       '<button type="button" class="banner__btn" data-act="remove">Remove</button>';
     controls.addEventListener('click', (e) => {
       const act = e.target.closest('.banner__btn')?.dataset.act;
@@ -157,7 +159,8 @@ export class BannerControl {
         <div class="banner-picker__label">Gradients</div>
         <div class="banner-picker__grid">
           ${BANNER_GRADIENTS.map(
-            (g) => `<button type="button" class="banner-swatch" data-grad="${escapeAttr(g)}" style="background-image:${escapeAttr(g)}"></button>`
+            (g) =>
+              `<button type="button" class="banner-swatch" data-grad="${escapeAttr(g)}" style="background-image:${escapeAttr(g)}"></button>`,
           ).join('')}
         </div>
       </div>
@@ -175,9 +178,7 @@ export class BannerControl {
 
     // Gradient swatches
     for (const sw of p.querySelectorAll('.banner-swatch')) {
-      sw.addEventListener('click', () =>
-        this.#apply({ type: 'gradient', value: sw.dataset.grad, position: 50 })
-      );
+      sw.addEventListener('click', () => this.#apply({ type: 'gradient', value: sw.dataset.grad, position: 50 }));
     }
 
     // Upload
@@ -209,14 +210,24 @@ export class BannerControl {
     const applyUrl = () => {
       const v = urlInput.value.trim();
       if (/^https?:\/\//i.test(v)) this.#apply({ type: 'image', value: v, position: 50 });
-      else { status.hidden = false; status.textContent = 'Enter an http(s) image URL.'; }
+      else {
+        status.hidden = false;
+        status.textContent = 'Enter an http(s) image URL.';
+      }
     };
     p.querySelector('.banner-picker__url-apply').addEventListener('click', applyUrl);
-    urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyUrl(); } });
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyUrl();
+      }
+    });
 
     this.#positionPicker(anchor);
     document.addEventListener('mousedown', this.__onDocClick, true);
-    this.__onEsc = (e) => { if (e.key === 'Escape') this.#closePicker(); };
+    this.__onEsc = (e) => {
+      if (e.key === 'Escape') this.#closePicker();
+    };
     document.addEventListener('keydown', this.__onEsc);
   }
 
@@ -230,8 +241,14 @@ export class BannerControl {
   }
 
   #closePicker() {
-    if (this.picker) { this.picker.remove(); this.picker = null; }
+    if (this.picker) {
+      this.picker.remove();
+      this.picker = null;
+    }
     document.removeEventListener('mousedown', this.__onDocClick, true);
-    if (this.__onEsc) { document.removeEventListener('keydown', this.__onEsc); this.__onEsc = null; }
+    if (this.__onEsc) {
+      document.removeEventListener('keydown', this.__onEsc);
+      this.__onEsc = null;
+    }
   }
 }

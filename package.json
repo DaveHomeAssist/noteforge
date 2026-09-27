@@ -13,9 +13,11 @@
     "test": "node test/run-node-tests.mjs",
     "test:browser": "node test/run-features.mjs",
     "test:budget": "node test/bundle-budget.mjs",
-    "test:all": "npm run lint && npm run typecheck && npm test && node test/run-features.mjs && npm run build && npm run test:budget",
+    "test:all": "npm run check && npm run typecheck && npm test && node test/run-features.mjs && npm run build && npm run test:budget",
     "lint": "biome lint",
-    "typecheck": "node test/typecheck-ratchet.mjs"
+    "typecheck": "node test/typecheck-ratchet.mjs",
+    "format": "biome format --write",
+    "check": "biome ci"
   },
   "dependencies": {
     "dompurify": "^3.4.16",

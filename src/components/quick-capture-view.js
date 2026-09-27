@@ -46,12 +46,17 @@ export class QuickCaptureView {
     this.readClipboard = readClipboard || (() => navigator.clipboard?.readText?.());
     this.onSaved = onSaved;
     this.modal = new Modal(els.overlay, { initialFocus: () => this.els.text });
-    this.els.form.addEventListener('submit', (event) => { event.preventDefault(); void this.#save(); });
+    this.els.form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.#save();
+    });
     this.els.destination.addEventListener('change', () => this.#syncDestination());
     this.els.overlay.querySelector('[data-read-clipboard]').addEventListener('click', () => this.#pasteClipboard());
   }
 
-  get open() { return this.modal.isOpen; }
+  get open() {
+    return this.modal.isOpen;
+  }
 
   show({ payload = null, destinationId = null } = {}) {
     this.#renderDestinations(destinationId);
@@ -60,19 +65,32 @@ export class QuickCaptureView {
     this.els.url.value = payload?.url || '';
     this.els.image.value = '';
     this.els.newTitle.value = payload?.title || `Capture ${localDateKey()}`;
-    this.els.status.textContent = payload ? 'Shared content is ready to review. Nothing is saved until you choose Save capture.' : '';
+    this.els.status.textContent = payload
+      ? 'Shared content is ready to review. Nothing is saved until you choose Save capture.'
+      : '';
     this.#syncDestination();
     this.modal.open();
   }
 
-  close() { this.modal.close(); }
+  close() {
+    this.modal.close();
+  }
 
   #renderDestinations(destinationId) {
-    const notes = this.db.getAllNotes().slice().sort((a, b) => a.title.localeCompare(b.title));
-    this.els.destination.innerHTML = '<option value="inbox">Inbox (create if needed)</option>'
-      + notes.map((note) => `<option value="existing:${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</option>`).join('')
-      + '<option value="new">New note…</option>';
-    if (destinationId && notes.some((note) => note.id === destinationId)) this.els.destination.value = `existing:${destinationId}`;
+    const notes = this.db
+      .getAllNotes()
+      .slice()
+      .sort((a, b) => a.title.localeCompare(b.title));
+    this.els.destination.innerHTML =
+      '<option value="inbox">Inbox (create if needed)</option>' +
+      notes
+        .map(
+          (note) => `<option value="existing:${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</option>`,
+        )
+        .join('') +
+      '<option value="new">New note…</option>';
+    if (destinationId && notes.some((note) => note.id === destinationId))
+      this.els.destination.value = `existing:${destinationId}`;
     else this.els.destination.value = 'inbox';
   }
 
@@ -88,7 +106,8 @@ export class QuickCaptureView {
       this.els.status.textContent = 'Clipboard text added. Review it before saving.';
       this.els.text.focus();
     } catch (error) {
-      this.els.status.textContent = `Clipboard access was unavailable. Paste into the Text field instead. ${error?.message || ''}`.trim();
+      this.els.status.textContent =
+        `Clipboard access was unavailable. Paste into the Text field instead. ${error?.message || ''}`.trim();
     }
   }
 

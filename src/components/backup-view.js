@@ -111,12 +111,16 @@ function restoreChangeDetails(plan, limit = 20) {
     ['Unchanged', plan?.notes?.unchanged],
   ].filter(([, notes]) => Array.isArray(notes));
   if (categories.length === 0) return '';
-  return `<div class="backup-restore-preview__changes">${categories.map(([label, notes]) => {
-    const visible = notes.slice(0, limit);
-    return `<section><h4>${escapeHtml(label)} (${notes.length})</h4>${visible.length
-      ? `<ul>${visible.map((note) => `<li><span>${escapeHtml(note.title || 'Untitled')}</span> <code>${escapeHtml(note.id)}</code>${note.state === 'archived' ? ' <span class="muted">Archive</span>' : note.state === 'trashed' ? ' <span class="muted">Trash</span>' : ''}${note.fields?.length ? ` <span class="muted">${escapeHtml(note.fields.join(', '))}</span>` : ''}</li>`).join('')}</ul>`
-      : '<p class="muted">None</p>'}${notes.length > visible.length ? `<p class="muted">${notes.length - visible.length} more not shown.</p>` : ''}</section>`;
-  }).join('')}</div>`;
+  return `<div class="backup-restore-preview__changes">${categories
+    .map(([label, notes]) => {
+      const visible = notes.slice(0, limit);
+      return `<section><h4>${escapeHtml(label)} (${notes.length})</h4>${
+        visible.length
+          ? `<ul>${visible.map((note) => `<li><span>${escapeHtml(note.title || 'Untitled')}</span> <code>${escapeHtml(note.id)}</code>${note.state === 'archived' ? ' <span class="muted">Archive</span>' : note.state === 'trashed' ? ' <span class="muted">Trash</span>' : ''}${note.fields?.length ? ` <span class="muted">${escapeHtml(note.fields.join(', '))}</span>` : ''}</li>`).join('')}</ul>`
+          : '<p class="muted">None</p>'
+      }${notes.length > visible.length ? `<p class="muted">${notes.length - visible.length} more not shown.</p>` : ''}</section>`;
+    })
+    .join('')}</div>`;
 }
 
 function asTextBackup(result) {
@@ -218,10 +222,8 @@ export class BackupView {
     const token = ++this.loadToken;
     try {
       const health = await this.service.getStorageHealth();
-      const localSnapshotsAvailable = health?.localSnapshotsAvailable
-        ?? health?.historyAvailable
-        ?? health?.available
-        ?? true;
+      const localSnapshotsAvailable =
+        health?.localSnapshotsAvailable ?? health?.historyAvailable ?? health?.available ?? true;
       let snapshots = [];
       let snapshotError = null;
       if (localSnapshotsAvailable && typeof this.service.listLocalSnapshots === 'function') {
@@ -237,9 +239,12 @@ export class BackupView {
         available: Boolean(localSnapshotsAvailable),
         error: snapshotError,
       });
-      this.#setStatus(snapshotError
-        ? 'Storage health loaded, but local snapshots could not be read.'
-        : 'Storage and backup status updated.', Boolean(snapshotError));
+      this.#setStatus(
+        snapshotError
+          ? 'Storage health loaded, but local snapshots could not be read.'
+          : 'Storage and backup status updated.',
+        Boolean(snapshotError),
+      );
     } catch (error) {
       if (token !== this.loadToken) return;
       this.els.health.innerHTML = `<div class="backup-view__notice backup-view__notice--error" role="alert"><strong>Storage health could not be loaded.</strong><p>${escapeHtml(error?.message || 'Unknown storage error.')}</p></div>`;
@@ -249,29 +254,29 @@ export class BackupView {
   }
 
   #initialFocus() {
-    return this.els.download
-      || this.els.file
-      || this.els.overlay.querySelector('[data-close]')
-      || this.modal?.panel;
+    return this.els.download || this.els.file || this.els.overlay.querySelector('[data-close]') || this.modal?.panel;
   }
 
   #renderLoading() {
     this.els.health.innerHTML = '<p class="muted backup-view__loading">Loading storage health…</p>';
-    if (this.els.snapshots) this.els.snapshots.innerHTML = '<p class="muted backup-view__loading">Loading local snapshots…</p>';
+    if (this.els.snapshots)
+      this.els.snapshots.innerHTML = '<p class="muted backup-view__loading">Loading local snapshots…</p>';
     this.#setStatus('Loading storage and backup status…');
   }
 
   #renderHealth(health) {
     const usage = health.usage ?? health.quota?.usage;
     const quota = health.quotaBytes ?? health.quota?.quota;
-    const quotaText = Number.isFinite(Number(usage)) && Number.isFinite(Number(quota))
-      ? `${formatBytes(usage)} of ${formatBytes(quota)} used${Number(quota) > 0 ? ` (${Math.round((Number(usage) / Number(quota)) * 100)}%)` : ''}`
-      : 'Unavailable in this browser';
+    const quotaText =
+      Number.isFinite(Number(usage)) && Number.isFinite(Number(quota))
+        ? `${formatBytes(usage)} of ${formatBytes(quota)} used${Number(quota) > 0 ? ` (${Math.round((Number(usage) / Number(quota)) * 100)}%)` : ''}`
+        : 'Unavailable in this browser';
     const available = health.historyAvailable !== false && health.available !== false;
-    const degraded = health.error
-      || health.lastError
-      || health.message
-      || (!available
+    const degraded =
+      health.error ||
+      health.lastError ||
+      health.message ||
+      (!available
         ? 'Revision history and local snapshots are unavailable in fallback storage.'
         : health.degraded
           ? 'Browser-local recovery is degraded. Current-note persistence remains the priority.'
@@ -303,7 +308,8 @@ export class BackupView {
   #renderSnapshots(snapshots, { available = true, error = null } = {}) {
     if (!this.els.snapshots) return;
     if (!available) {
-      this.els.snapshots.innerHTML = '<div class="backup-view__notice" role="note"><strong>Local snapshots unavailable.</strong><p>This storage mode can persist current notes only. Download a JSON backup for portable recovery.</p></div>';
+      this.els.snapshots.innerHTML =
+        '<div class="backup-view__notice" role="note"><strong>Local snapshots unavailable.</strong><p>This storage mode can persist current notes only. Download a JSON backup for portable recovery.</p></div>';
       return;
     }
     if (error) {
@@ -318,21 +324,25 @@ export class BackupView {
     const sorted = snapshots.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     this.els.snapshots.innerHTML = `<section class="backup-snapshots" aria-labelledby="backup-snapshots-title">
       <h3 id="backup-snapshots-title" class="backup-snapshots__title">Local snapshots</h3>
-      <ul class="backup-snapshots__list">${sorted.map((snapshot) => {
-        const summary = [
-          countLabel(snapshot.noteCount ?? snapshot.notes, 'note'),
-          snapshot.size != null ? formatBytes(snapshot.size) : null,
-          snapshot.kind ? String(snapshot.kind) : null,
-        ].filter(Boolean).join(' · ');
-        const canPreview = typeof this.service.previewLocalSnapshot === 'function';
-        return `<li class="backup-snapshot">
+      <ul class="backup-snapshots__list">${sorted
+        .map((snapshot) => {
+          const summary = [
+            countLabel(snapshot.noteCount ?? snapshot.notes, 'note'),
+            snapshot.size != null ? formatBytes(snapshot.size) : null,
+            snapshot.kind ? String(snapshot.kind) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          const canPreview = typeof this.service.previewLocalSnapshot === 'function';
+          return `<li class="backup-snapshot">
           <div class="backup-snapshot__body">
             <time datetime="${escapeHtml(snapshot.createdAt || '')}">${escapeHtml(formatDateTime(snapshot.createdAt))}</time>
             ${summary ? `<span class="muted">${escapeHtml(summary)}</span>` : ''}
           </div>
           ${canPreview ? `<button type="button" class="btn btn--ghost" data-snapshot-id="${escapeHtml(snapshot.id)}">Restore preview</button>` : ''}
         </li>`;
-      }).join('')}</ul>
+        })
+        .join('')}</ul>
       <p class="muted backup-snapshots__footnote">Local snapshots may be evicted with browser site data.</p>
     </section>`;
   }
@@ -361,14 +371,22 @@ export class BackupView {
         if (text == null) throw new Error('The backup service did not return downloadable JSON.');
         if (typeof this.service.verifyBackup === 'function') {
           const verification = await this.service.verifyBackup(text);
-          if (verification?.valid === false) throw new Error(verification.message || 'The created backup failed integrity verification.');
+          if (verification?.valid === false)
+            throw new Error(verification.message || 'The created backup failed integrity verification.');
         }
-        downloadText(text, result?.filename || `noteforge-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+        downloadText(
+          text,
+          result?.filename || `noteforge-backup-${new Date().toISOString().slice(0, 10)}.json`,
+          'application/json',
+        );
       } else {
         throw new Error('Portable backup creation is unavailable.');
       }
       await this.refresh();
-      this.#setStatus(result?.message || 'Portable JSON backup verified and downloaded. Store it somewhere independent of this browser.');
+      this.#setStatus(
+        result?.message ||
+          'Portable JSON backup verified and downloaded. Store it somewhere independent of this browser.',
+      );
     });
   }
 
@@ -377,9 +395,11 @@ export class BackupView {
     await this.#runAction('Creating local snapshot…', async () => {
       const result = await this.service.createLocalSnapshot();
       await this.refresh();
-      this.#setStatus(result?.created === false
-        ? "Today's local snapshot already exists. It remains browser-local and is not a portable backup."
-        : 'Local snapshot created. It remains browser-local and is not a portable backup.');
+      this.#setStatus(
+        result?.created === false
+          ? "Today's local snapshot already exists. It remains browser-local and is not a portable backup."
+          : 'Local snapshot created. It remains browser-local and is not a portable backup.',
+      );
     });
   }
 
@@ -396,7 +416,8 @@ export class BackupView {
 
     await this.#runAction('Verifying backup integrity…', async () => {
       const result = await this.service.verifyBackup(file);
-      if (!result || result.valid === false) throw new Error(result?.message || 'Backup integrity verification failed.');
+      if (!result || result.valid === false)
+        throw new Error(result?.message || 'Backup integrity verification failed.');
       this.verified = result;
       this.restorePlan = null;
       this.restoreSource = { type: 'portable', file, verified: result };
@@ -462,7 +483,8 @@ export class BackupView {
     const details = {
       source: this.restoreSource,
       plan: this.restorePlan,
-      message: 'Replace the current vault with this verified recovery source? NoteForge will prepare a separate safety backup download before applying the replacement.',
+      message:
+        'Replace the current vault with this verified recovery source? NoteForge will prepare a separate safety backup download before applying the replacement.',
     };
     this.busy = true;
     this.#syncActions();
@@ -520,7 +542,9 @@ export class BackupView {
     if (this.els.download) this.els.download.disabled = this.busy;
     if (this.els.createSnapshot) this.els.createSnapshot.disabled = this.busy || !this.snapshotAvailable;
     if (this.els.verify) this.els.verify.disabled = this.busy || !hasFile;
-    if (this.els.previewRestore) this.els.previewRestore.disabled = this.busy || !this.restoreSource || this.restoreSource.type !== 'portable' || !this.verified;
+    if (this.els.previewRestore)
+      this.els.previewRestore.disabled =
+        this.busy || !this.restoreSource || this.restoreSource.type !== 'portable' || !this.verified;
     if (this.els.restore) this.els.restore.disabled = this.busy || !this.restorePlan;
   }
 

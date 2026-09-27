@@ -114,13 +114,16 @@ export class NoteList {
 
   #renderTags() {
     const counts = [...this.db.tagCounts().entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    if (counts.length === 0) { this.els.tags.innerHTML = ''; return; }
+    if (counts.length === 0) {
+      this.els.tags.innerHTML = '';
+      return;
+    }
     const chips = counts
       .map(
         ([tag, n]) => `
         <button class="tag-chip ${this.activeTag === tag ? 'tag-chip--on' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${this.activeTag === tag}">
           #${escapeHtml(tag)}<span class="tag-chip__n">${n}</span>
-        </button>`
+        </button>`,
       )
       .join('');
     const clear = this.activeTag ? `<button class="tag-chip tag-chip--clear" data-tag="">✕ clear</button>` : '';
@@ -148,7 +151,7 @@ export class NoteList {
       created: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
       title: (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }),
     }[this.#sortMode()];
-    return (a, b) => (Number(!!b.pinned) - Number(!!a.pinned)) || base(a, b);
+    return (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || base(a, b);
   }
 
   /** @returns {{ rows:{note,depth,hasChildren,collapsed,titlePositions}[], searching:boolean }} */
@@ -158,14 +161,19 @@ export class NoteList {
     const q = text.trim();
     // A scoped filter (tag:/has:banner/is:pinned/in:title) counts as searching even
     // with no free text — otherwise the tree view would ignore the filter.
-    const hasFilters = filters.tags.length > 0 || filters.properties.length > 0
-      || filters.hasBanner === true || filters.pinned === true || filters.inTitle === true || filters.archived === true;
+    const hasFilters =
+      filters.tags.length > 0 ||
+      filters.properties.length > 0 ||
+      filters.hasBanner === true ||
+      filters.pinned === true ||
+      filters.inTitle === true ||
+      filters.archived === true;
     const searching = !!q || !!this.activeTag || hasFilters;
 
     if (searching) {
       // Flat, relevance-ranked results (hierarchy is irrelevant while filtering).
       const filtered = live.filter(
-        (n) => noteMatchesFilters(n, filters) && (!this.activeTag || n.tags.includes(this.activeTag))
+        (n) => noteMatchesFilters(n, filters) && (!this.activeTag || n.tags.includes(this.activeTag)),
       );
       const scored = filtered
         .map((n) => {
@@ -175,7 +183,16 @@ export class NoteList {
         .filter(Boolean);
       if (q) scored.sort((a, b) => b.score - a.score || new Date(b.note.updatedAt) - new Date(a.note.updatedAt));
       else scored.sort((a, b) => this.#siblingComparator()(a.note, b.note));
-      return { searching, rows: scored.map((r) => ({ note: r.note, depth: 0, hasChildren: false, collapsed: false, titlePositions: r.titlePositions })) };
+      return {
+        searching,
+        rows: scored.map((r) => ({
+          note: r.note,
+          depth: 0,
+          hasChildren: false,
+          collapsed: false,
+          titlePositions: r.titlePositions,
+        })),
+      };
     }
 
     // Outline tree. First prune collapsed ids that no longer refer to a parent
@@ -184,7 +201,11 @@ export class NoteList {
       const parentIds = new Set();
       for (const n of live) if (n.parentId) parentIds.add(n.parentId);
       let pruned = false;
-      for (const id of [...this.collapsed]) if (!parentIds.has(id)) { this.collapsed.delete(id); pruned = true; }
+      for (const id of [...this.collapsed])
+        if (!parentIds.has(id)) {
+          this.collapsed.delete(id);
+          pruned = true;
+        }
       if (pruned) this.db.setConfig({ collapsed: [...this.collapsed] });
     }
     const forest = buildForest(live, { sort: this.#siblingComparator() });
@@ -194,14 +215,18 @@ export class NoteList {
   #renderList() {
     // Never rebuild the list mid-drag — it would detach the dragged row and
     // strand dragId. Defer and flush when the drag ends.
-    if (this.dragId) { this._pendingRender = true; return; }
+    if (this.dragId) {
+      this._pendingRender = true;
+      return;
+    }
     const { rows, searching } = this.#currentRows();
     this._rows = rows;
     const visibleIds = new Set(rows.map((row) => row.note.id));
     const selectedBefore = this.selection.ids.size;
     this.selection = pruneSelection(this.selection, (id) => visibleIds.has(id));
     if (this.selection.ids.size !== selectedBefore) this.onSelectionChange(this.getSelection());
-    const total = parseQuery(this.query).filters.archived === true ? this.db.getArchived().length : this.db.getAllNotes().length;
+    const total =
+      parseQuery(this.query).filters.archived === true ? this.db.getArchived().length : this.db.getAllNotes().length;
     this.els.count.textContent = searching
       ? `${rows.length} match${rows.length === 1 ? '' : 'es'}`
       : `${total} note${total === 1 ? '' : 's'}`;
@@ -284,10 +309,22 @@ export class NoteList {
     const item = e.target.closest('.note-item');
     if (!item) return;
     const id = item.dataset.id;
-    if (e.target.closest('[data-select]')) { this.#toggleSelected(id, e.shiftKey); return; }
-    if (e.target.closest('[data-twist]')) { this.#toggleCollapse(id); return; }
-    if (e.target.closest('[data-pin]')) { this.onTogglePin?.(id); return; }
-    if (e.target.closest('[data-add]')) { this.onNewChild?.(id); return; }
+    if (e.target.closest('[data-select]')) {
+      this.#toggleSelected(id, e.shiftKey);
+      return;
+    }
+    if (e.target.closest('[data-twist]')) {
+      this.#toggleCollapse(id);
+      return;
+    }
+    if (e.target.closest('[data-pin]')) {
+      this.onTogglePin?.(id);
+      return;
+    }
+    if (e.target.closest('[data-add]')) {
+      this.onNewChild?.(id);
+      return;
+    }
     const note = this.db.notes.get(id);
     if (note?.isArchived) this.onOpenArchived(id);
     else this.onOpen(id);
@@ -369,10 +406,17 @@ export class NoteList {
   #onDragStart(e) {
     const item = e.target.closest('.note-item');
     if (!item) return;
-    if (e.target.closest('[data-select]')) { e.preventDefault(); return; }
+    if (e.target.closest('[data-select]')) {
+      e.preventDefault();
+      return;
+    }
     this.dragId = item.dataset.id;
     e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', this.dragId); } catch { /* some browsers */ }
+    try {
+      e.dataTransfer.setData('text/plain', this.dragId);
+    } catch {
+      /* some browsers */
+    }
     item.classList.add('note-item--dragging');
   }
 
@@ -383,7 +427,8 @@ export class NoteList {
     this.#clearDropMarks();
     const item = e.target.closest('.note-item');
     if (item && item.dataset.id !== this.dragId) item.classList.add('note-item--drop-into');
-    else if (e.target === this.els.list || e.target.closest('.note-list__pad')) this.els.list.classList.add('note-list--drop-root');
+    else if (e.target === this.els.list || e.target.closest('.note-list__pad'))
+      this.els.list.classList.add('note-list--drop-root');
   }
 
   #onDrop(e) {
@@ -403,14 +448,21 @@ export class NoteList {
 
   #clearDropMarks() {
     this.els.list.classList.remove('note-list--drop-root');
-    this.els.list.querySelectorAll('.note-item--drop-into').forEach((el) => { el.classList.remove('note-item--drop-into'); });
+    this.els.list.querySelectorAll('.note-item--drop-into').forEach((el) => {
+      el.classList.remove('note-item--drop-into');
+    });
   }
 
   #clearDrag() {
     this.dragId = null;
     this.#clearDropMarks();
-    this.els.list.querySelectorAll('.note-item--dragging').forEach((el) => { el.classList.remove('note-item--dragging'); });
-    if (this._pendingRender) { this._pendingRender = false; this.#renderList(); } // flush a render deferred during the drag
+    this.els.list.querySelectorAll('.note-item--dragging').forEach((el) => {
+      el.classList.remove('note-item--dragging');
+    });
+    if (this._pendingRender) {
+      this._pendingRender = false;
+      this.#renderList();
+    } // flush a render deferred during the drag
   }
 
   /** Escape text, then highlight literal occurrences of `query`, safe against entities. */

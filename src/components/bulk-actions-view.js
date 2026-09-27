@@ -43,10 +43,13 @@ export class BulkActionsView {
     this.els.title.textContent = `${this.ids.length} selected`;
     if (!this.ids.length) return;
     const selected = new Set(this.ids);
-    this.els.parent.innerHTML = '<option value="">Top level</option>' + this.db.getAllNotes()
-      .filter((note) => !selected.has(note.id))
-      .map((note) => `<option value="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</option>`)
-      .join('');
+    this.els.parent.innerHTML =
+      '<option value="">Top level</option>' +
+      this.db
+        .getAllNotes()
+        .filter((note) => !selected.has(note.id))
+        .map((note) => `<option value="${escapeHtml(note.id)}">${escapeHtml(note.title || 'Untitled')}</option>`)
+        .join('');
     const notes = this.ids.map((id) => this.db.notes.get(id)).filter(Boolean);
     this.els.bar.querySelector('[data-bulk-action="archive"]').hidden = notes.every((note) => note.isArchived);
     this.els.bar.querySelector('[data-bulk-action="unarchive"]').hidden = notes.every((note) => !note.isArchived);
@@ -63,19 +66,26 @@ export class BulkActionsView {
     const button = event.target.closest('[data-bulk-action]');
     if (!button) return;
     const action = button.dataset.bulkAction;
-    const payload = action === 'tag'
-      ? { tag: this.els.tag.value }
-      : action === 'reparent'
-        ? { parentId: this.els.parent.value || null }
-        : {};
+    const payload =
+      action === 'tag'
+        ? { tag: this.els.tag.value }
+        : action === 'reparent'
+          ? { parentId: this.els.parent.value || null }
+          : {};
     const plan = this.bulk.planNoteBatch(this.ids, action, payload);
     if (!plan.valid) {
       this.els.status.textContent = plan.message;
       return;
     }
     if (action === 'trash') {
-      const approved = await this.confirmAction({ message: `Move ${plan.changed.length} selected note${plan.changed.length === 1 ? '' : 's'} to Trash?`, plan });
-      if (!approved) { this.els.status.textContent = 'Move to Trash cancelled.'; return; }
+      const approved = await this.confirmAction({
+        message: `Move ${plan.changed.length} selected note${plan.changed.length === 1 ? '' : 's'} to Trash?`,
+        plan,
+      });
+      if (!approved) {
+        this.els.status.textContent = 'Move to Trash cancelled.';
+        return;
+      }
     }
     this.els.status.textContent = `Applying ${action} to ${plan.changed.length} note${plan.changed.length === 1 ? '' : 's'}…`;
     const selectedIds = [...this.ids];
@@ -99,7 +109,15 @@ export class BulkActionsView {
     const notes = this.ids.map((id) => this.db.notes.get(id)?.toJSON()).filter(Boolean);
     if (!notes.length) return;
     const date = new Date().toISOString().slice(0, 10);
-    downloadText(JSON.stringify({ format: 'noteforge-selection', version: 1, exportedAt: new Date().toISOString(), notes }, null, 2), `noteforge-selection-${date}.json`, 'application/json');
+    downloadText(
+      JSON.stringify(
+        { format: 'noteforge-selection', version: 1, exportedAt: new Date().toISOString(), notes },
+        null,
+        2,
+      ),
+      `noteforge-selection-${date}.json`,
+      'application/json',
+    );
     const message = `${notes.length} selected note${notes.length === 1 ? '' : 's'} exported.`;
     this.els.status.textContent = message;
     this.els.announcer.textContent = message;

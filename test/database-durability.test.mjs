@@ -7,13 +7,18 @@ import nodeAssert from 'node:assert/strict';
 // Each check is its own node:test case (counted by test/run-node-tests.mjs).
 // The condition is evaluated where ok() is called, so the sequential async flow
 // below is unchanged; a failing check no longer aborts the later ones.
-const ok = (name, condition) => test(name, () => { nodeAssert.ok(condition, name); });
+const ok = (name, condition) =>
+  test(name, () => {
+    nodeAssert.ok(condition, name);
+  });
 
 function memoryBackend({ failNotes = false } = {}) {
   const values = new Map();
   return {
     values,
-    async load(key, fallback) { return values.has(key) ? values.get(key) : fallback; },
+    async load(key, fallback) {
+      return values.has(key) ? values.get(key) : fallback;
+    },
     async save(key, value) {
       if (failNotes && key === 'notes') return false;
       values.set(key, structuredClone(value));
@@ -31,11 +36,21 @@ function memoryBackend({ failNotes = false } = {}) {
   ]);
   let transactionCalls = 0;
   globalThis.localStorage = {
-    get length() { return staleFallback.size; },
-    key(index) { return [...staleFallback.keys()][index] ?? null; },
-    getItem(key) { return staleFallback.get(key) ?? null; },
-    setItem(key, value) { staleFallback.set(key, value); },
-    removeItem(key) { staleFallback.delete(key); },
+    get length() {
+      return staleFallback.size;
+    },
+    key(index) {
+      return [...staleFallback.keys()][index] ?? null;
+    },
+    getItem(key) {
+      return staleFallback.get(key) ?? null;
+    },
+    setItem(key, value) {
+      staleFallback.set(key, value);
+    },
+    removeItem(key) {
+      staleFallback.delete(key);
+    },
   };
   globalThis.indexedDB = {
     open() {
@@ -64,17 +79,37 @@ function memoryBackend({ failNotes = false } = {}) {
     const { storage } = await import(`../src/core/storage.js?read-failure=${Date.now()}`);
     const db = new Database({ storageBackend: storage });
     let initError = null;
-    try { await db.init(); } catch (error) { initError = error; }
-    ok('an authoritative IndexedDB read failure rejects initialization instead of hydrating stale fallback notes',
-      initError?.name === 'UnknownError' && transactionCalls === 1 && db.getNote('stale') === null);
+    try {
+      await db.init();
+    } catch (error) {
+      initError = error;
+    }
+    ok(
+      'an authoritative IndexedDB read failure rejects initialization instead of hydrating stale fallback notes',
+      initError?.name === 'UnknownError' && transactionCalls === 1 && db.getNote('stale') === null,
+    );
 
     let batchRejected = false;
-    try { await storage.loadMany(['notes', 'config'], null); } catch { batchRejected = true; }
-    ok('an authoritative IndexedDB batch-read failure rejects instead of returning stale fallback values', batchRejected);
+    try {
+      await storage.loadMany(['notes', 'config'], null);
+    } catch {
+      batchRejected = true;
+    }
+    ok(
+      'an authoritative IndexedDB batch-read failure rejects instead of returning stale fallback values',
+      batchRejected,
+    );
 
     let enumerationRejected = false;
-    try { await storage.keys(); } catch { enumerationRejected = true; }
-    ok('an authoritative IndexedDB enumeration failure rejects instead of returning stale fallback keys', enumerationRejected);
+    try {
+      await storage.keys();
+    } catch {
+      enumerationRejected = true;
+    }
+    ok(
+      'an authoritative IndexedDB enumeration failure rejects instead of returning stale fallback keys',
+      enumerationRejected,
+    );
   } finally {
     if (originalIndexedDB === undefined) delete globalThis.indexedDB;
     else globalThis.indexedDB = originalIndexedDB;
@@ -100,10 +135,14 @@ function memoryBackend({ failNotes = false } = {}) {
   await db.flush();
 
   ok('revision capture runs once for the first durable edit', captures.length === 1);
-  ok('revision capture runs after the matching note snapshot is durable',
-    captures[0].stored.find((item) => item.id === note.id)?.content === 'Committed Markdown');
-  ok('revision capture receives an immutable JSON-shaped note snapshot',
-    captures[0].batch[0].note !== note && captures[0].batch[0].note.content === 'Committed Markdown');
+  ok(
+    'revision capture runs after the matching note snapshot is durable',
+    captures[0].stored.find((item) => item.id === note.id)?.content === 'Committed Markdown',
+  );
+  ok(
+    'revision capture receives an immutable JSON-shaped note snapshot',
+    captures[0].batch[0].note !== note && captures[0].batch[0].note.content === 'Committed Markdown',
+  );
   ok('revision capture receives the durable-boundary reason', captures[0].batch[0].reason === 'autosave');
 }
 
@@ -120,16 +159,25 @@ function memoryBackend({ failNotes = false } = {}) {
     onNotesPersisted: (captures) => buffered.push(...captures),
     onNotesPurged: () => {},
   });
-  ok('durable revisions buffered before lazy recovery initialization are drained exactly once',
-    buffered.length === 1 && buffered[0].note.content === 'committed before recovery loaded');
+  ok(
+    'durable revisions buffered before lazy recovery initialization are drained exactly once',
+    buffered.length === 1 && buffered[0].note.content === 'committed before recovery loaded',
+  );
 }
 
 {
   const backend = memoryBackend({ failNotes: true });
   let captured = false;
   let persistError = null;
-  const db = new Database({ storageBackend: backend, onNotesPersisted() { captured = true; } });
-  db.onPersistError = (key) => { persistError = key; };
+  const db = new Database({
+    storageBackend: backend,
+    onNotesPersisted() {
+      captured = true;
+    },
+  });
+  db.onPersistError = (key) => {
+    persistError = key;
+  };
   db.createNote({ id: 'failed', title: 'Failed write' });
   await db.flushCurrentWrites();
 
@@ -140,7 +188,9 @@ function memoryBackend({ failNotes = false } = {}) {
 {
   const backend = memoryBackend();
   let releaseHistory;
-  const historyGate = new Promise((resolve) => { releaseHistory = resolve; });
+  const historyGate = new Promise((resolve) => {
+    releaseHistory = resolve;
+  });
   const db = new Database({ storageBackend: backend, onNotesPersisted: () => historyGate });
   const note = db.createNote({ id: 'priority', title: 'Priority' });
   await db.flushCurrentWrites();
@@ -161,9 +211,13 @@ function memoryBackend({ failNotes = false } = {}) {
   let degraded = false;
   const db = new Database({
     storageBackend: backend,
-    onNotesPersisted() { throw new Error('history quota'); },
+    onNotesPersisted() {
+      throw new Error('history quota');
+    },
   });
-  db.onHistoryError = () => { degraded = true; };
+  db.onHistoryError = () => {
+    degraded = true;
+  };
   const note = db.createNote({ id: 'degraded', title: 'Still durable' });
   await db.flushCurrentWrites();
   note.update({ content: 'authoritative content' });
@@ -171,8 +225,10 @@ function memoryBackend({ failNotes = false } = {}) {
   await db.flush();
 
   ok('revision failure is reported separately', degraded === true);
-  ok('revision failure does not roll back the durable current note',
-    backend.values.get('notes')?.find((item) => item.id === note.id)?.content === 'authoritative content');
+  ok(
+    'revision failure does not roll back the durable current note',
+    backend.values.get('notes')?.find((item) => item.id === note.id)?.content === 'authoritative content',
+  );
 }
 
 {
@@ -180,17 +236,21 @@ function memoryBackend({ failNotes = false } = {}) {
   const boundaries = [];
   const db = new Database({
     storageBackend: backend,
-    onNotesPersisted(batch) { boundaries.push(batch); },
+    onNotesPersisted(batch) {
+      boundaries.push(batch);
+    },
   });
   const note = db.createNote({ id: 'restore-target', title: 'Before restore', content: 'safe state' });
   await db.flush();
   const available = await db.captureRevisionBoundary([note], 'pre_restore');
 
   ok('explicit destructive boundary reports available history', available === true);
-  ok('explicit destructive boundary captures the requested reason and exact state',
-    boundaries.length === 1
-      && boundaries[0][0].reason === 'pre_restore'
-      && boundaries[0][0].note.content === 'safe state');
+  ok(
+    'explicit destructive boundary captures the requested reason and exact state',
+    boundaries.length === 1 &&
+      boundaries[0][0].reason === 'pre_restore' &&
+      boundaries[0][0].note.content === 'safe state',
+  );
   note.content = 'mutated after boundary';
   ok('explicit destructive boundary detaches its safety snapshot', boundaries[0][0].note.content === 'safe state');
 }
@@ -199,8 +259,10 @@ function memoryBackend({ failNotes = false } = {}) {
   const db = new Database({ storageBackend: memoryBackend() });
   const note = db.createNote({ id: 'fallback', title: 'No history' });
   await db.flush();
-  ok('explicit destructive boundary reports unavailable history without a capture service',
-    await db.captureRevisionBoundary([note], 'pre_restore') === false);
+  ok(
+    'explicit destructive boundary reports unavailable history without a capture service',
+    (await db.captureRevisionBoundary([note], 'pre_restore')) === false,
+  );
 }
 
 {
@@ -216,32 +278,54 @@ function memoryBackend({ failNotes = false } = {}) {
   db.createNote({ id: 'old', title: 'Old vault' });
   await db.flush();
   let emitted = 0;
-  db.subscribe(() => { emitted += 1; });
+  db.subscribe(() => {
+    emitted += 1;
+  });
   const restored = await db.replaceVault({
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    notes: [{
-      id: 'restored', title: 'Restored', content: 'exact', tags: [],
-      banner: { position: 25, type: 'gradient', value: 'linear-gradient(90deg, #111, #222)' },
-      createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T11:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null, aliases: ['Previous restored title'], archivedAt: null,
-      futureMetadata: { kept: true, order: ['z', 'a'] },
-      ...JSON.parse('{"__proto__":{"polluted":true}}'),
-    }],
+    notes: [
+      {
+        id: 'restored',
+        title: 'Restored',
+        content: 'exact',
+        tags: [],
+        banner: { position: 25, type: 'gradient', value: 'linear-gradient(90deg, #111, #222)' },
+        createdAt: '2026-08-19T10:00:00.000Z',
+        updatedAt: '2026-08-19T11:00:00.000Z',
+        deletedAt: null,
+        pinned: false,
+        parentId: null,
+        aliases: ['Previous restored title'],
+        archivedAt: null,
+        futureMetadata: { kept: true, order: ['z', 'a'] },
+        ...JSON.parse('{"__proto__":{"polluted":true}}'),
+      },
+    ],
     config: { showGraph: true, custom: 'kept' },
   });
 
-  ok('verified vault replacement commits the complete batch', restored === true
-    && backend.values.get('notes')[0].id === 'restored'
-    && backend.values.get('config').custom === 'kept'
-    && backend.values.get('schemaVersion') === CURRENT_SCHEMA_VERSION);
-  ok('verified vault replacement updates memory only after persistence', db.getNote('restored')?.content === 'exact' && db.getNote('old') === null);
-  ok('verified vault replacement preserves additive note metadata without prototype pollution',
-    db.getNote('restored').toJSON().futureMetadata.kept === true
-      && Object.hasOwn(db.getNote('restored').toJSON(), '__proto__')
-      && backend.values.get('notes')[0].__proto__.polluted === true
-      && Object.prototype.polluted === undefined);
-  ok('verified vault replacement compares valid banner JSON independent of object key order',
-    db.getNote('restored').banner.type === 'gradient' && db.getNote('restored').banner.position === 25);
+  ok(
+    'verified vault replacement commits the complete batch',
+    restored === true &&
+      backend.values.get('notes')[0].id === 'restored' &&
+      backend.values.get('config').custom === 'kept' &&
+      backend.values.get('schemaVersion') === CURRENT_SCHEMA_VERSION,
+  );
+  ok(
+    'verified vault replacement updates memory only after persistence',
+    db.getNote('restored')?.content === 'exact' && db.getNote('old') === null,
+  );
+  ok(
+    'verified vault replacement preserves additive note metadata without prototype pollution',
+    db.getNote('restored').toJSON().futureMetadata.kept === true &&
+      Object.hasOwn(db.getNote('restored').toJSON(), '__proto__') &&
+      backend.values.get('notes')[0].__proto__.polluted === true &&
+      Object.prototype.polluted === undefined,
+  );
+  ok(
+    'verified vault replacement compares valid banner JSON independent of object key order',
+    db.getNote('restored').banner.type === 'gradient' && db.getNote('restored').banner.position === 25,
+  );
   ok('verified vault replacement emits one coherent store update', emitted === 1);
 }
 
@@ -257,17 +341,27 @@ function memoryBackend({ failNotes = false } = {}) {
   db.createNote({ id: 'preserved', title: 'Preserved' });
   await db.flush();
   const result = await db.replaceVault({ schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} });
-  ok('failed IndexedDB vault replacement forbids fallback and leaves memory untouched',
-    result === false && fallbackOption === false && db.getNote('preserved') !== null);
+  ok(
+    'failed IndexedDB vault replacement forbids fallback and leaves memory untouched',
+    result === false && fallbackOption === false && db.getNote('preserved') !== null,
+  );
 }
 
 {
   const db = new Database({ storageBackend: memoryBackend() });
   const malformed = {
-    id: 'unsafe', title: 'Unsafe', content: '', tags: [],
+    id: 'unsafe',
+    title: 'Unsafe',
+    content: '',
+    tags: [],
     banner: { type: 'image', value: 'javascript:alert(1)', position: 50 },
-    createdAt: '2026-08-19T10:00:00.000Z', updatedAt: '2026-08-19T10:00:00.000Z',
-    deletedAt: null, pinned: false, parentId: null, aliases: [], archivedAt: null,
+    createdAt: '2026-08-19T10:00:00.000Z',
+    updatedAt: '2026-08-19T10:00:00.000Z',
+    deletedAt: null,
+    pinned: false,
+    parentId: null,
+    aliases: [],
+    archivedAt: null,
   };
   let rejected = false;
   try {
@@ -286,7 +380,9 @@ function memoryBackend({ failNotes = false } = {}) {
   await db.flush();
   const originalSave = backend.save.bind(backend);
   let releaseConfig;
-  const configGate = new Promise((resolve) => { releaseConfig = resolve; });
+  const configGate = new Promise((resolve) => {
+    releaseConfig = resolve;
+  });
   let blockConfig = true;
   backend.save = async (key, value) => {
     if (key === 'config' && blockConfig) {
@@ -300,8 +396,10 @@ function memoryBackend({ failNotes = false } = {}) {
   db.createNote({ id: 'later-write', title: 'Later write' });
   releaseConfig();
   await db.flush();
-  ok('coalesced note writes retain post-commit purge cleanup metadata',
-    purged.length === 1 && purged[0] === 'coalesced-purge');
+  ok(
+    'coalesced note writes retain post-commit purge cleanup metadata',
+    purged.length === 1 && purged[0] === 'coalesced-purge',
+  );
 }
 
 {
@@ -312,7 +410,9 @@ function memoryBackend({ failNotes = false } = {}) {
   await db.flush();
   const originalSave = backend.save.bind(backend);
   let releaseFailure;
-  const failureGate = new Promise((resolve) => { releaseFailure = resolve; });
+  const failureGate = new Promise((resolve) => {
+    releaseFailure = resolve;
+  });
   let failNextNotes = true;
   backend.save = async (key, value) => {
     if (key === 'notes' && failNextNotes) {
@@ -327,9 +427,14 @@ function memoryBackend({ failNotes = false } = {}) {
   releaseFailure();
   await db.flush();
   await db.flush();
-  ok('failed in-flight note writes hand purge cleanup metadata to the durable successor',
-    purged.includes('failed-in-flight-purge')
-      && backend.values.get('notes').map((note) => note.id).join(',') === 'successor');
+  ok(
+    'failed in-flight note writes hand purge cleanup metadata to the durable successor',
+    purged.includes('failed-in-flight-purge') &&
+      backend.values
+        .get('notes')
+        .map((note) => note.id)
+        .join(',') === 'successor',
+  );
 }
 
 {
@@ -347,8 +452,10 @@ function memoryBackend({ failNotes = false } = {}) {
   const persistedAt = db.getPersistenceStatus().lastPersistedAt;
   const reloaded = new Database({ storageBackend: backend });
   await reloaded.init();
-  ok('last current-note persistence timestamp survives a database reload',
-    Number.isFinite(Date.parse(persistedAt)) && reloaded.getPersistenceStatus().lastPersistedAt === persistedAt);
+  ok(
+    'last current-note persistence timestamp survives a database reload',
+    Number.isFinite(Date.parse(persistedAt)) && reloaded.getPersistenceStatus().lastPersistedAt === persistedAt,
+  );
 }
 
 {
@@ -372,15 +479,28 @@ function memoryBackend({ failNotes = false } = {}) {
   await db.flush();
   const blocked = await db.replaceVault({
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    notes: [{
-      id: 'new-vault', title: 'New vault', content: 'restored', tags: [], banner: null,
-      createdAt: '2026-08-20T00:00:00.000Z', updatedAt: '2026-08-20T00:00:00.000Z',
-      deletedAt: null, pinned: false, parentId: null, aliases: [], archivedAt: null,
-    }],
+    notes: [
+      {
+        id: 'new-vault',
+        title: 'New vault',
+        content: 'restored',
+        tags: [],
+        banner: null,
+        createdAt: '2026-08-20T00:00:00.000Z',
+        updatedAt: '2026-08-20T00:00:00.000Z',
+        deletedAt: null,
+        pinned: false,
+        parentId: null,
+        aliases: [],
+        archivedAt: null,
+      },
+    ],
     config: {},
   });
-  ok('vault replacement fails closed while a stale authoritative note write remains queued',
-    blocked === false && db.getNote('old-vault') !== null && backend.values.get('notes')[0].id === 'old-vault');
+  ok(
+    'vault replacement fails closed while a stale authoritative note write remains queued',
+    blocked === false && db.getNote('old-vault') !== null && backend.values.get('notes')[0].id === 'old-vault',
+  );
   failNotes = false;
   await db.flush();
 }

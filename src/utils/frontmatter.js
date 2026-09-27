@@ -24,9 +24,7 @@ let yamlModule;
 const loadYaml = () => (yamlModule ||= import('yaml'));
 
 function diagnostic(error, lineCounter = null) {
-  const position = Number.isFinite(error?.pos?.[0]) && lineCounter
-    ? lineCounter.linePos(error.pos[0])
-    : null;
+  const position = Number.isFinite(error?.pos?.[0]) && lineCounter ? lineCounter.linePos(error.pos[0]) : null;
   return Object.freeze({
     code: error?.code || 'invalid_yaml',
     message: error?.message || String(error),
@@ -43,8 +41,18 @@ export async function parseFrontmatter(markdown) {
   }
   if (split.raw.length > MAX_FRONTMATTER_BYTES) {
     return Object.freeze({
-      status: 'invalid', split, properties: new Map(), document: null,
-      diagnostics: [Object.freeze({ code: 'frontmatter_too_large', message: `Frontmatter exceeds ${MAX_FRONTMATTER_BYTES.toLocaleString()} bytes.`, line: 1, column: 1 })],
+      status: 'invalid',
+      split,
+      properties: new Map(),
+      document: null,
+      diagnostics: [
+        Object.freeze({
+          code: 'frontmatter_too_large',
+          message: `Frontmatter exceeds ${MAX_FRONTMATTER_BYTES.toLocaleString()} bytes.`,
+          line: 1,
+          column: 1,
+        }),
+      ],
     });
   }
 
@@ -66,13 +74,29 @@ export async function parseFrontmatter(markdown) {
       logLevel: 'silent',
     });
   } catch (error) {
-    return Object.freeze({ status: 'invalid', split, properties: new Map(), document: null, diagnostics: [diagnostic(error, lineCounter)] });
+    return Object.freeze({
+      status: 'invalid',
+      split,
+      properties: new Map(),
+      document: null,
+      diagnostics: [diagnostic(error, lineCounter)],
+    });
   }
-  const errors = [...(document.errors || []), ...(document.warnings || []).filter((warning) => warning?.code === 'TAG_RESOLVE_FAILED')];
+  const errors = [
+    ...(document.errors || []),
+    ...(document.warnings || []).filter((warning) => warning?.code === 'TAG_RESOLVE_FAILED'),
+  ];
   if (errors.length || (document.contents !== null && !isMap(document.contents))) {
     const diagnostics = errors.length
       ? errors.map((error) => diagnostic(error, lineCounter))
-      : [Object.freeze({ code: 'mapping_required', message: 'Frontmatter must be a YAML mapping of property names to values.', line: 1, column: 1 })];
+      : [
+          Object.freeze({
+            code: 'mapping_required',
+            message: 'Frontmatter must be a YAML mapping of property names to values.',
+            line: 1,
+            column: 1,
+          }),
+        ];
     return Object.freeze({ status: 'invalid', split, properties: new Map(), document, diagnostics });
   }
 
@@ -83,7 +107,13 @@ export async function parseFrontmatter(markdown) {
     const properties = value instanceof Map ? value : new Map();
     return Object.freeze({ status: 'valid', split, properties, document, diagnostics: [] });
   } catch (error) {
-    return Object.freeze({ status: 'invalid', split, properties: new Map(), document, diagnostics: [diagnostic(error, lineCounter)] });
+    return Object.freeze({
+      status: 'invalid',
+      split,
+      properties: new Map(),
+      document,
+      diagnostics: [diagnostic(error, lineCounter)],
+    });
   }
 }
 
@@ -125,8 +155,13 @@ export function normalizePropertyValue(type, raw) {
       if (!isSafeHttpUrl(raw)) throw new FrontmatterError('unsafe_url', 'Only HTTP and HTTPS URLs are allowed.');
       return String(raw);
     case 'multi-select':
-      return [...new Set((Array.isArray(raw) ? raw : String(raw ?? '').split(','))
-        .map((value) => String(value).trim()).filter(Boolean))];
+      return [
+        ...new Set(
+          (Array.isArray(raw) ? raw : String(raw ?? '').split(','))
+            .map((value) => String(value).trim())
+            .filter(Boolean),
+        ),
+      ];
     default:
       throw new FrontmatterError('unsupported_type', `Unsupported property type: ${type}.`);
   }
@@ -145,37 +180,55 @@ export function inferPropertyType(value, key = '') {
 function composeSource(parsed, yamlText) {
   const { split } = parsed;
   const newline = split.newline || '\n';
-  const normalized = String(yamlText).replace(/\r?\n/g, newline).replace(new RegExp(`${newline.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`), '');
+  const normalized = String(yamlText)
+    .replace(/\r?\n/g, newline)
+    .replace(new RegExp(`${newline.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`), '');
   return `---${newline}${normalized}${normalized ? newline : ''}${split.closing || '---'}${split.separator || newline}${split.body}`;
 }
 
 /** Mutate one YAML node while leaving every body byte untouched. */
 export async function setFrontmatterProperty(markdown, key, value, { type = null } = {}) {
   const property = String(key ?? '').trim();
-  if (!KEY_RE.test(property)) throw new FrontmatterError('invalid_key', 'Property names must be 1–128 characters on one line.');
+  if (!KEY_RE.test(property))
+    throw new FrontmatterError('invalid_key', 'Property names must be 1–128 characters on one line.');
   const parsed = await parseFrontmatter(markdown);
-  if (parsed.status === 'invalid') throw new FrontmatterError('invalid_yaml', parsed.diagnostics[0]?.message || 'Frontmatter is invalid.', { diagnostics: parsed.diagnostics });
+  if (parsed.status === 'invalid')
+    throw new FrontmatterError('invalid_yaml', parsed.diagnostics[0]?.message || 'Frontmatter is invalid.', {
+      diagnostics: parsed.diagnostics,
+    });
   const normalized = type ? normalizePropertyValue(type, value) : value;
-  if (property === 'noteforge_id' && parsed.status === 'valid' && parsed.properties.has(property) && parsed.properties.get(property) !== normalized) {
+  if (
+    property === 'noteforge_id' &&
+    parsed.status === 'valid' &&
+    parsed.properties.has(property) &&
+    parsed.properties.get(property) !== normalized
+  ) {
     throw new FrontmatterError('immutable_property', 'noteforge_id is immutable in the property editor.');
   }
 
   const { Document } = await loadYaml();
   const document = parsed.status === 'valid' ? parsed.document : new Document(new Map(), null, { version: '1.2' });
   document.set(property, normalized);
-  const base = parsed.status === 'valid'
-    ? parsed
-    : { ...parsed, split: { ...parsed.split, closing: '---', separator: parsed.split.newline, body: parsed.split.body } };
+  const base =
+    parsed.status === 'valid'
+      ? parsed
+      : {
+          ...parsed,
+          split: { ...parsed.split, closing: '---', separator: parsed.split.newline, body: parsed.split.body },
+        };
   return composeSource(base, document.toString({ lineWidth: 0, directives: false }));
 }
 
 export async function removeFrontmatterProperty(markdown, key) {
   const property = String(key ?? '').trim();
-  if (property === 'noteforge_id') throw new FrontmatterError('immutable_property', 'noteforge_id is immutable in the property editor.');
+  if (property === 'noteforge_id')
+    throw new FrontmatterError('immutable_property', 'noteforge_id is immutable in the property editor.');
   const parsed = await parseFrontmatter(markdown);
   if (parsed.status !== 'valid') {
     if (parsed.status === 'none') return String(markdown ?? '');
-    throw new FrontmatterError('invalid_yaml', parsed.diagnostics[0]?.message || 'Frontmatter is invalid.', { diagnostics: parsed.diagnostics });
+    throw new FrontmatterError('invalid_yaml', parsed.diagnostics[0]?.message || 'Frontmatter is invalid.', {
+      diagnostics: parsed.diagnostics,
+    });
   }
   parsed.document.delete(property);
   return composeSource(parsed, parsed.document.toString({ lineWidth: 0, directives: false }));

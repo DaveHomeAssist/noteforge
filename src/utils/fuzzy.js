@@ -30,18 +30,26 @@ export function fuzzyMatch(query, text) {
     const ch = ql[qi];
     let found = -1;
     for (let i = ti; i < tl.length; i++) {
-      if (tl[i] === ch) { found = i; break; }
+      if (tl[i] === ch) {
+        found = i;
+        break;
+      }
     }
     if (found === -1) return null; // not a subsequence
 
     positions.push(found);
     let charScore = 1;
-    if (found === prev + 1) { run += 1; charScore += run * 5; } // consecutive run
+    if (found === prev + 1) {
+      run += 1;
+      charScore += run * 5;
+    } // consecutive run
     else run = 0;
 
     const before = found > 0 ? t[found - 1] : '';
-    if (found === 0) charScore += 10; // start of string
-    else if (BOUNDARY.test(before)) charScore += 8; // start of a word
+    if (found === 0)
+      charScore += 10; // start of string
+    else if (BOUNDARY.test(before))
+      charScore += 8; // start of a word
     else if (before === before.toLowerCase() && t[found] !== t[found].toLowerCase()) charScore += 5; // camelCase hump
 
     charScore += Math.max(0, 4 - found * 0.1); // earlier is better
@@ -68,8 +76,13 @@ export function fuzzyHighlight(text, positions) {
   let open = false;
   for (let i = 0; i < t.length; i++) {
     const hit = mark.has(i);
-    if (hit && !open) { out += '<mark>'; open = true; }
-    else if (!hit && open) { out += '</mark>'; open = false; }
+    if (hit && !open) {
+      out += '<mark>';
+      open = true;
+    } else if (!hit && open) {
+      out += '</mark>';
+      open = false;
+    }
     out += escapeHtml(t[i]);
   }
   if (open) out += '</mark>';

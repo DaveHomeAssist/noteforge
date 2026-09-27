@@ -32,7 +32,8 @@ export function inspectBlockIds(markdown) {
   });
   return {
     occurrences,
-    duplicates: [...byId].filter(([, entries]) => entries.length > 1)
+    duplicates: [...byId]
+      .filter(([, entries]) => entries.length > 1)
       .map(([id, entries]) => Object.freeze({ id, entries: Object.freeze(entries) })),
   };
 }

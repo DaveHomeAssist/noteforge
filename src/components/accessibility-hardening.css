@@ -1,6 +1,8 @@
 /* Loaded after the first usable paint with the deferred workspace controller. */
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto !important; }
+  html {
+    scroll-behavior: auto !important;
+  }
 }
 
 @media (prefers-contrast: more) {
@@ -9,13 +11,20 @@
   .task-card,
   .calendar-day,
   .backup-actions,
-  .history-revision { border-color: var(--text); }
+  .history-revision {
+    border-color: var(--text);
+  }
   .workspace-tab-wrap:has(.workspace-tab[aria-selected="true"]),
-  .note-item--on { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .note-item--on {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
 }
 
 @media (forced-colors: active) {
-  :focus-visible { outline-color: Highlight; }
+  :focus-visible {
+    outline-color: Highlight;
+  }
   button,
   input,
   select,
@@ -25,11 +34,21 @@
   .task-card,
   .calendar-day,
   .backup-actions,
-  .history-revision { border: 1px solid ButtonText; }
+  .history-revision {
+    border: 1px solid ButtonText;
+  }
   .workspace-tab-wrap:has(.workspace-tab[aria-selected="true"]),
   .note-item--on,
-  [aria-current="date"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  [aria-current="date"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
   .workspace__splitter,
-  .workspace__splitter::after { background: ButtonText; }
-  .modal__backdrop { background: Canvas; opacity: .75; }
+  .workspace__splitter::after {
+    background: ButtonText;
+  }
+  .modal__backdrop {
+    background: Canvas;
+    opacity: 0.75;
+  }
 }

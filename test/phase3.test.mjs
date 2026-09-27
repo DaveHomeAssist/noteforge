@@ -22,8 +22,13 @@ function memoryBackend({ failBatch = false } = {}) {
   const values = new Map();
   return {
     values,
-    async load(key, fallback) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
-    async save(key, value) { values.set(key, structuredClone(value)); return true; },
+    async load(key, fallback) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
+    async save(key, value) {
+      values.set(key, structuredClone(value));
+      return true;
+    },
     async saveMany(entries) {
       if (failBatch) return false;
       const next = new Map(values);
@@ -32,7 +37,9 @@ function memoryBackend({ failBatch = false } = {}) {
       next.forEach((value, key) => values.set(key, value));
       return true;
     },
-    async getStatus() { return { backend: 'indexeddb' }; },
+    async getStatus() {
+      return { backend: 'indexeddb' };
+    },
   };
 }
 
@@ -68,17 +75,29 @@ test('Archive excludes notes from active identity and promotes visible children 
   assert.equal(db.getNote(parent.id), null);
   assert.equal(db.getArchivedNote(parent.id)?.title, 'Parent');
   assert.equal(db.resolveTitle('Parent'), null);
-  assert.deepEqual(flattenForest(buildForest(db.getAllNotes())).map((row) => [row.note.id, row.depth]), [['child', 0]]);
+  assert.deepEqual(
+    flattenForest(buildForest(db.getAllNotes())).map((row) => [row.note.id, row.depth]),
+    [['child', 0]],
+  );
   assert.equal(db.getNote(child.id)?.parentId, parent.id, 'the stored relationship survives filtering');
   assert.equal(db.unarchiveNote(parent.id), true);
-  assert.deepEqual(flattenForest(buildForest(db.getAllNotes())).map((row) => [row.note.id, row.depth]), [['parent', 0], ['child', 1]]);
+  assert.deepEqual(
+    flattenForest(buildForest(db.getAllNotes())).map((row) => [row.note.id, row.depth]),
+    [
+      ['parent', 0],
+      ['child', 1],
+    ],
+  );
 });
 
 test('unarchiving fails closed when an active title now owns the archived identity', async () => {
   const { db } = await database();
   db.createNote({ id: 'archived', title: 'Shared title', archivedAt: WHEN });
   db.createNote({ id: 'active', title: 'Shared title' }, { allowIdentityConflicts: true });
-  assert.throws(() => db.unarchiveNote('archived'), (error) => error.code === 'identity_collision');
+  assert.throws(
+    () => db.unarchiveNote('archived'),
+    (error) => error.code === 'identity_collision',
+  );
   assert.equal(db.getArchivedNote('archived')?.archivedAt, WHEN);
 });
 
@@ -90,22 +109,44 @@ test('saved searches normalize malformed records and preserve stable CRUD orderi
     { id: 'a', name: 'Duplicate', icon: 'x', query: '', sortMode: 'updated', activeTag: null, order: 2 },
     { id: 'bad', name: '', icon: 'x', query: 7, sortMode: 'nope', activeTag: null, order: 3 },
   ]);
-  assert.deepEqual(normalized.records.map((record) => record.id), ['a', 'b']);
-  assert.deepEqual(normalized.rejected.map((entry) => entry.reason), ['malformed', 'duplicate_id', 'malformed']);
-  let records = createSavedSearch(normalized.records, { name: 'Third', query: 'in:title plan', sortMode: 'created' }, { createId: () => 'stable-c' });
+  assert.deepEqual(
+    normalized.records.map((record) => record.id),
+    ['a', 'b'],
+  );
+  assert.deepEqual(
+    normalized.rejected.map((entry) => entry.reason),
+    ['malformed', 'duplicate_id', 'malformed'],
+  );
+  let records = createSavedSearch(
+    normalized.records,
+    { name: 'Third', query: 'in:title plan', sortMode: 'created' },
+    { createId: () => 'stable-c' },
+  );
   records = updateSavedSearch(records, 'stable-c', { name: 'Renamed' });
   records = moveSavedSearch(records, 'stable-c', -1);
-  assert.deepEqual(records.map(({ id, name, order }) => ({ id, name, order })), [
-    { id: 'a', name: 'First', order: 0 },
-    { id: 'stable-c', name: 'Renamed', order: 1 },
-    { id: 'b', name: 'Second', order: 2 },
-  ]);
-  assert.deepEqual(removeSavedSearch(records, 'a').map((record) => [record.id, record.order]), [['stable-c', 0], ['b', 1]]);
+  assert.deepEqual(
+    records.map(({ id, name, order }) => ({ id, name, order })),
+    [
+      { id: 'a', name: 'First', order: 0 },
+      { id: 'stable-c', name: 'Renamed', order: 1 },
+      { id: 'b', name: 'Second', order: 2 },
+    ],
+  );
+  assert.deepEqual(
+    removeSavedSearch(records, 'a').map((record) => [record.id, record.order]),
+    [
+      ['stable-c', 0],
+      ['b', 1],
+    ],
+  );
 });
 
 test('literal find and replace handles case, Unicode word edges, dollars, backslashes, and Markdown bytes', () => {
   const source = 'Café Cafés CAFÉ\n`$&` and [link](\\path)';
-  assert.deepEqual(findLiteralMatches(source, 'café', { wholeWord: true }).map((match) => match.text), ['Café', 'CAFÉ']);
+  assert.deepEqual(
+    findLiteralMatches(source, 'café', { wholeWord: true }).map((match) => match.text),
+    ['Café', 'CAFÉ'],
+  );
   assert.equal(findLiteralMatches(source, 'café', { wholeWord: true, caseSensitive: true }).length, 0);
   assert.equal(findLiteralMatches('𐐀alpha alpha𐐀 alpha', 'alpha', { wholeWord: true }).length, 1);
   const replaced = replaceLiteral('alpha $& alpha \\ alpha', 'alpha', '$&\\done');
@@ -134,10 +175,20 @@ test('batch planners classify no-ops, reject cycles, and atomically archive with
   captures.length = 0;
   const bulk = new BulkOperations(db);
   const tags = bulk.planNoteBatch([parent.id, child.id], 'tag', { tag: 'kept' });
-  assert.deepEqual(tags.changed.map((entry) => entry.id), ['c']);
-  assert.deepEqual(tags.unchanged.map((entry) => entry.id), ['p']);
+  assert.deepEqual(
+    tags.changed.map((entry) => entry.id),
+    ['c'],
+  );
+  assert.deepEqual(
+    tags.unchanged.map((entry) => entry.id),
+    ['p'],
+  );
   await bulk.applyNoteBatch(tags);
-  assert.deepEqual(captures.map((capture) => capture.note.id), ['c'], 'unchanged notes do not receive misleading safety revisions');
+  assert.deepEqual(
+    captures.map((capture) => capture.note.id),
+    ['c'],
+    'unchanged notes do not receive misleading safety revisions',
+  );
   captures.length = 0;
   assert.equal(bulk.planNoteBatch([parent.id], 'reparent', { parentId: child.id }).code, 'parent_cycle');
   const plan = bulk.planNoteBatch([parent.id, child.id], 'archive');
@@ -146,13 +197,22 @@ test('batch planners classify no-ops, reject cycles, and atomically archive with
   assert.equal(captures.filter((capture) => capture.reason === 'pre_bulk_action').length, 2);
   assert.equal(db.getAllNotes().length, 0);
   assert.equal(db.getArchived().length, 2);
-  assert.equal(backend.values.get('notes').every((note) => typeof note.archivedAt === 'string'), true);
+  assert.equal(
+    backend.values.get('notes').every((note) => typeof note.archivedAt === 'string'),
+    true,
+  );
 
   const live = db.createNote({ id: 'already-live', title: 'Already live' });
   const mixedUnarchive = bulk.planNoteBatch([parent.id, live.id], 'unarchive');
   assert.equal(mixedUnarchive.valid, true, 'an already-live note is a no-op, not an identity collision');
-  assert.deepEqual(mixedUnarchive.changed.map((entry) => entry.id), [parent.id]);
-  assert.deepEqual(mixedUnarchive.unchanged.map((entry) => entry.id), [live.id]);
+  assert.deepEqual(
+    mixedUnarchive.changed.map((entry) => entry.id),
+    [parent.id],
+  );
+  assert.deepEqual(
+    mixedUnarchive.unchanged.map((entry) => entry.id),
+    [live.id],
+  );
 
   const stale = bulk.planNoteBatch([parent.id], 'unarchive');
   db.createNote({ id: 'unrelated', title: 'Unrelated vault change' });
@@ -170,9 +230,21 @@ test('vault replacement previews explicit scopes, applies source Markdown atomic
   captures.length = 0;
   const bulk = new BulkOperations(db);
   const preview = bulk.planVaultReplace({ query: 'needle', replacement: '$&\\literal' });
-  assert.deepEqual(preview.changed.map((entry) => entry.id), ['active']);
-  assert.deepEqual(preview.unchanged.map((entry) => entry.id), ['unchanged']);
-  assert.deepEqual(preview.skipped.map((entry) => [entry.id, entry.reason]), [['archived', 'archive'], ['trash', 'trash']]);
+  assert.deepEqual(
+    preview.changed.map((entry) => entry.id),
+    ['active'],
+  );
+  assert.deepEqual(
+    preview.unchanged.map((entry) => entry.id),
+    ['unchanged'],
+  );
+  assert.deepEqual(
+    preview.skipped.map((entry) => [entry.id, entry.reason]),
+    [
+      ['archived', 'archive'],
+      ['trash', 'trash'],
+    ],
+  );
   const report = await bulk.applyVaultReplace(preview);
   assert.equal(report.failed.length, 0);
   assert.equal(db.getNote(active.id).content, '$&\\literal $& $&\\literal');
@@ -198,7 +270,10 @@ test('a failed atomic batch reports every planned note failed and changes no in-
     bulk.applyNoteBatch(plan),
     (error) => error.report.failed.length === 2 && error.report.changed.length === 0,
   );
-  assert.equal(db.getAllNotes().every((note) => !note.tags.includes('blocked')), true);
+  assert.equal(
+    db.getAllNotes().every((note) => !note.tags.includes('blocked')),
+    true,
+  );
 });
 
 test('portable backup and restore preview preserve active, Archive, and Trash lifecycle states', async () => {
@@ -210,7 +285,10 @@ test('portable backup and restore preview preserve active, Archive, and Trash li
   const state = { schemaVersion: CURRENT_SCHEMA_VERSION, notes, config: { savedSearches: [] } };
   const backup = await createBackup(state, { createdAt: WHEN });
   const verified = await verifyBackup(backup);
-  const preview = await createRestorePreview({ schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} }, verified);
+  const preview = await createRestorePreview(
+    { schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} },
+    verified,
+  );
   assert.equal(preview.restoreState.notes.find((note) => note.id === 'archive').archivedAt, WHEN);
   assert.equal(preview.notes.added.find((note) => note.id === 'archive').state, 'archived');
   assert.equal(preview.restoreState.notes.find((note) => note.id === 'trash').deletedAt, WHEN);

@@ -48,7 +48,9 @@ export function compareToBaseline(perFile, baseline) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const update = process.argv.includes('--update');
   const result = spawnSync(process.execPath, [TSC, '-p', 'jsconfig.json', '--pretty', 'false'], {
-    cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    cwd: ROOT,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
   });
   const output = `${result.stdout || ''}\n${result.stderr || ''}`;
   const { perFile, lines } = parseTscErrors(output);
@@ -58,16 +60,28 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(result.status || 1);
   }
   let baseline = {};
-  try { baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).files || {}; } catch { /* first run */ }
+  try {
+    baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')).files || {};
+  } catch {
+    /* first run */
+  }
   const files = Object.fromEntries([...perFile].sort(([a], [b]) => a.localeCompare(b)));
   const baselineTotal = Object.values(baseline).reduce((sum, n) => sum + n, 0);
 
   if (update) {
-    writeFileSync(BASELINE_PATH, `${JSON.stringify({
-      $comment: 'Per-file tsc --checkJs error ceiling; lower it with `npm run typecheck -- --update`, never raise it by hand.',
-      total: lines.length,
-      files,
-    }, null, 2)}\n`);
+    writeFileSync(
+      BASELINE_PATH,
+      `${JSON.stringify(
+        {
+          $comment:
+            'Per-file tsc --checkJs error ceiling; lower it with `npm run typecheck -- --update`, never raise it by hand.',
+          total: lines.length,
+          files,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     console.log(`Typecheck baseline written: ${lines.length} errors across ${perFile.size} files → ${BASELINE_PATH}`);
     process.exit(0);
   }
@@ -79,11 +93,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.error(`\n${file}: ${count} errors, baseline allows ${allowed}`);
       for (const line of lines) if (line.startsWith(file)) console.error(`  ${line}`);
     }
-    console.error('\nTypecheck ratchet: new type errors. Fix them, or explain a deliberate baseline change in the commit.');
+    console.error(
+      '\nTypecheck ratchet: new type errors. Fix them, or explain a deliberate baseline change in the commit.',
+    );
     process.exit(1);
   }
   if (improvements.length) {
-    console.log(`Typecheck ratchet: ${improvements.length} file(s) improved; run \`npm run typecheck -- --update\` and commit test/typecheck-baseline.json.`);
+    console.log(
+      `Typecheck ratchet: ${improvements.length} file(s) improved; run \`npm run typecheck -- --update\` and commit test/typecheck-baseline.json.`,
+    );
   }
   process.exit(0);
 }

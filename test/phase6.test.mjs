@@ -32,29 +32,48 @@ import { exportVaultToDir, saveVaultToFolder } from '../src/utils/vault.js';
 import { debounce } from '../src/utils/helpers.js';
 
 const note = (id, title = id, content = `# ${title}`, extra = {}) => ({
-  id, title, content, aliases: [], tags: [], createdAt: '2026-08-20T00:00:00.000Z',
-  updatedAt: '2026-08-20T00:00:00.000Z', deletedAt: null, archivedAt: null,
-  pinned: false, parentId: null, banner: null, ...extra,
+  id,
+  title,
+  content,
+  aliases: [],
+  tags: [],
+  createdAt: '2026-08-20T00:00:00.000Z',
+  updatedAt: '2026-08-20T00:00:00.000Z',
+  deletedAt: null,
+  archivedAt: null,
+  pinned: false,
+  parentId: null,
+  banner: null,
+  ...extra,
 });
 
 function backend(initial = {}, { failBatch = false } = {}) {
   const values = new Map(Object.entries(structuredClone(initial)));
   return {
     values,
-    async load(key, fallback) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
-    async save(key, value) { values.set(key, structuredClone(value)); return true; },
+    async load(key, fallback) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
+    async save(key, value) {
+      values.set(key, structuredClone(value));
+      return true;
+    },
     async saveMany(entries) {
       if (failBatch) return false;
       entries.forEach(([key, value]) => values.set(key, structuredClone(value)));
       return true;
     },
-    async getStatus() { return { backend: 'indexeddb', available: true }; },
+    async getStatus() {
+      return { backend: 'indexeddb', available: true };
+    },
   };
 }
 
 test('debounced persistence flush runs only when work is pending', () => {
   let calls = 0;
-  const pending = debounce(() => { calls += 1; }, 60_000);
+  const pending = debounce(() => {
+    calls += 1;
+  }, 60_000);
   assert.equal(pending.flush(), false);
   assert.equal(calls, 0);
   pending();
@@ -72,16 +91,27 @@ test('workspace normalization repairs corrupt state, duplicate ownership, bounds
   const notes = Array.from({ length: 24 }, (_, index) => note(`n${index}`));
   notes[19].archivedAt = '2026-08-20T01:00:00.000Z';
   notes[20].deletedAt = '2026-08-20T01:00:00.000Z';
-  const state = normalizeWorkspaceState({
-    version: 1,
-    activePane: 'secondary',
-    panes: {
-      primary: { tabs: ['n0', 'n0', ...notes.slice(1, 18).map(({ id }) => id)], activeNoteId: 'missing', scrollTop: -5 },
-      secondary: { tabs: ['n0', ...notes.slice(18).map(({ id }) => id), 'missing'], activeNoteId: 'n19', scrollTop: '12.5' },
+  const state = normalizeWorkspaceState(
+    {
+      version: 1,
+      activePane: 'secondary',
+      panes: {
+        primary: {
+          tabs: ['n0', 'n0', ...notes.slice(1, 18).map(({ id }) => id)],
+          activeNoteId: 'missing',
+          scrollTop: -5,
+        },
+        secondary: {
+          tabs: ['n0', ...notes.slice(18).map(({ id }) => id), 'missing'],
+          activeNoteId: 'n19',
+          scrollTop: '12.5',
+        },
+      },
+      split: { enabled: true, ratio: 100 },
+      recentlyClosed: ['n21', 'n21', 'n22', 'missing', ...notes.slice(1, 16).map(({ id }) => id)],
     },
-    split: { enabled: true, ratio: 100 },
-    recentlyClosed: ['n21', 'n21', 'n22', 'missing', ...notes.slice(1, 16).map(({ id }) => id)],
-  }, notes);
+    notes,
+  );
   assert.equal(new Set([...state.panes.primary.tabs, ...state.panes.secondary.tabs]).size, WORKSPACE_MAX_TABS);
   assert.equal(state.panes.secondary.tabs.includes('n20'), false);
   assert.equal(state.panes.secondary.tabs.includes('n19'), true, 'archived notes remain when explicitly open');
@@ -90,7 +120,10 @@ test('workspace normalization repairs corrupt state, duplicate ownership, bounds
   assert.equal(state.panes.secondary.scrollTop, 12.5);
   assert.equal(state.split.ratio, 0.75);
   assert.ok(state.recentlyClosed.length <= WORKSPACE_MAX_RECENTLY_CLOSED);
-  assert.equal(state.recentlyClosed.some((id) => state.panes.primary.tabs.includes(id) || state.panes.secondary.tabs.includes(id)), false);
+  assert.equal(
+    state.recentlyClosed.some((id) => state.panes.primary.tabs.includes(id) || state.panes.secondary.tabs.includes(id)),
+    false,
+  );
 });
 
 test('workspace open, close, reopen, reorder, and move preserve one editable owner', () => {
@@ -116,12 +149,16 @@ test('workspace clamps ratios and rejects a twenty-first globally unique tab', (
   let state = setWorkspaceRatio(emptyWorkspaceState(), -1);
   assert.equal(state.split.ratio, 0.25);
   for (let index = 0; index < WORKSPACE_MAX_TABS; index += 1) state = openWorkspaceNote(state, `n${index}`);
-  assert.throws(() => openWorkspaceNote(state, 'overflow'), (error) => error.code === 'workspace_tab_limit');
+  assert.throws(
+    () => openWorkspaceNote(state, 'overflow'),
+    (error) => error.code === 'workspace_tab_limit',
+  );
 });
 
 test('clipper normalizes text, bounds payloads, and rejects unsafe source URLs', () => {
   const payload = normalizeClipperPayload({
-    title: ' Title\0 ', url: 'https://example.com/path',
+    title: ' Title\0 ',
+    url: 'https://example.com/path',
     selection: `A\r\n${'s'.repeat(CLIPPER_MAX_SELECTION + 20)}`,
     article: 'x'.repeat(CLIPPER_MAX_ARTICLE + 20),
   });
@@ -133,7 +170,9 @@ test('clipper normalizes text, bounds payloads, and rejects unsafe source URLs',
 });
 
 test('clipper intake is explicit, one-shot, decoded, and preserves malicious markup only as text', () => {
-  const input = consumeClipperIntake('https://app.test/noteforge/?capture=clipper&title=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E&url=https%3A%2F%2Fexample.com&selection=%3Cscript%3Ebad()%3C%2Fscript%3E#frag');
+  const input = consumeClipperIntake(
+    'https://app.test/noteforge/?capture=clipper&title=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E&url=https%3A%2F%2Fexample.com&selection=%3Cscript%3Ebad()%3C%2Fscript%3E#frag',
+  );
   assert.equal(input.matched, true);
   assert.equal(input.cleanUrl, '/noteforge/#frag');
   assert.equal(input.payload.title, '<img src=x onerror=alert(1)>');
@@ -160,7 +199,10 @@ test('vault paths allow nested Markdown and reject traversal, absolute, drive, N
 
 test('vault planner matches stable IDs before title and preserves unknown frontmatter source', async () => {
   const source = '---\nnoteforge_id: stable\nfuture: { keep: true }\n---\nExternal bytes';
-  const plan = await planVaultImport([{ relativePath: 'nested/Renamed.md', text: source }], [note('stable', 'Different', '# Old')]);
+  const plan = await planVaultImport(
+    [{ relativePath: 'nested/Renamed.md', text: source }],
+    [note('stable', 'Different', '# Old')],
+  );
   assert.equal(plan.items[0].status, 'Update');
   assert.equal(plan.items[0].destinationNoteId, 'stable');
   assert.equal(plan.items[0].source, source);
@@ -174,17 +216,23 @@ test('vault planner marks both duplicate IDs, ambiguous titles, Trash targets, a
     { relativePath: 'trash.md', text: '---\nnoteforge_id: trash\n---\nChanged' },
     { relativePath: 'broken.md', text: '---\na: [\n---\nBroken' },
   ];
-  const plan = await planVaultImport(files, [note('same', 'Same'), note('trash', 'Trash', '# Old', { deletedAt: '2026-08-20T01:00:00.000Z' })]);
+  const plan = await planVaultImport(files, [
+    note('same', 'Same'),
+    note('trash', 'Trash', '# Old', { deletedAt: '2026-08-20T01:00:00.000Z' }),
+  ]);
   assert.deepEqual(plan.counts, { Add: 0, Update: 0, Conflict: 5, Unchanged: 0 });
   assert.equal(plan.items.filter((item) => item.externalId === 'duplicate').length, 2);
   assert.ok(plan.items.filter((item) => item.externalId === 'duplicate').every((item) => item.status === 'Conflict'));
 });
 
 test('vault planner marks both duplicate normalized paths as conflicts', async () => {
-  const plan = await planVaultImport([
-    { relativePath: 'nested\\same.md', text: '# First' },
-    { relativePath: 'nested/same.md', text: '# Second' },
-  ], []);
+  const plan = await planVaultImport(
+    [
+      { relativePath: 'nested\\same.md', text: '# First' },
+      { relativePath: 'nested/same.md', text: '# Second' },
+    ],
+    [],
+  );
   assert.deepEqual(plan.counts, { Add: 0, Update: 0, Conflict: 2, Unchanged: 0 });
 });
 
@@ -211,67 +259,125 @@ test('vault planner refuses ambiguous, missing, and title-divergent prior mappin
 test('vault planner requires path and title continuity, detects two-sided edits, and protects internal-only changes', async () => {
   const destination = note('mapped', 'Mapped', '# Internal current');
   const mappings = {
-    mapped: { noteId: 'mapped', relativePath: 'nested/Mapped.md', title: 'Mapped', sourceHash: await (await import('../src/utils/vault-import.js')).hashVaultSource('# Old external'), destinationHash: await (await import('../src/utils/vault-import.js')).hashVaultSource('# Old internal') },
+    mapped: {
+      noteId: 'mapped',
+      relativePath: 'nested/Mapped.md',
+      title: 'Mapped',
+      sourceHash: await (await import('../src/utils/vault-import.js')).hashVaultSource('# Old external'),
+      destinationHash: await (await import('../src/utils/vault-import.js')).hashVaultSource('# Old internal'),
+    },
   };
-  const conflict = await planVaultImport([{ relativePath: 'nested/Mapped.md', text: '# New external' }], [destination], { mappings });
+  const conflict = await planVaultImport(
+    [{ relativePath: 'nested/Mapped.md', text: '# New external' }],
+    [destination],
+    { mappings },
+  );
   assert.equal(conflict.items[0].status, 'Conflict');
-  const internalOnly = await planVaultImport([{ relativePath: 'nested/Mapped.md', text: '# Old external' }], [destination], { mappings });
+  const internalOnly = await planVaultImport(
+    [{ relativePath: 'nested/Mapped.md', text: '# Old external' }],
+    [destination],
+    { mappings },
+  );
   assert.equal(internalOnly.items[0].status, 'Unchanged');
-  const renamed = await planVaultImport([{ relativePath: 'nested/Mapped.md', text: '# New external' }], [note('mapped', 'Renamed', '# Old internal')], { mappings });
+  const renamed = await planVaultImport(
+    [{ relativePath: 'nested/Mapped.md', text: '# New external' }],
+    [note('mapped', 'Renamed', '# Old internal')],
+    { mappings },
+  );
   assert.equal(renamed.items[0].status, 'Conflict', 'simultaneous file and internal-title changes require a decision');
 });
 
 test('vault plans are stable, sorted, collision-safe, and become unchanged after an applied add', async () => {
-  const entries = [{ relativePath: 'z.md', text: '# Z' }, { relativePath: 'a.md', text: '# A' }];
+  const entries = [
+    { relativePath: 'z.md', text: '# Z' },
+    { relativePath: 'a.md', text: '# A' },
+  ];
   const first = await planVaultImport(entries, []);
   const second = await planVaultImport(entries, []);
   assert.equal(JSON.stringify(first), JSON.stringify(second));
-  assert.deepEqual(first.items.map((item) => item.relativePath), ['a.md', 'z.md']);
+  assert.deepEqual(
+    first.items.map((item) => item.relativePath),
+    ['a.md', 'z.md'],
+  );
   const added = first.items.map((item) => note(item.proposedNoteId, item.title, item.source));
-  const mappings = Object.fromEntries(first.items.map((item) => [item.proposedNoteId, {
-    noteId: item.proposedNoteId, relativePath: item.relativePath, title: item.title,
-    sourceHash: item.sourceHash, destinationHash: item.sourceHash,
-  }]));
+  const mappings = Object.fromEntries(
+    first.items.map((item) => [
+      item.proposedNoteId,
+      {
+        noteId: item.proposedNoteId,
+        relativePath: item.relativePath,
+        title: item.title,
+        sourceHash: item.sourceHash,
+        destinationHash: item.sourceHash,
+      },
+    ]),
+  );
   const rerun = await planVaultImport(entries, added, { mappings });
   assert.deepEqual(rerun.counts, { Add: 0, Update: 0, Conflict: 0, Unchanged: 2 });
 });
 
 test('deterministic add IDs include the safe path and actual byte limits cannot be spoofed', async () => {
-  const sameBytes = await planVaultImport([
-    { relativePath: 'a.md', text: '# Same' },
-    { relativePath: 'b.md', text: '# Same' },
-  ], []);
+  const sameBytes = await planVaultImport(
+    [
+      { relativePath: 'a.md', text: '# Same' },
+      { relativePath: 'b.md', text: '# Same' },
+    ],
+    [],
+  );
   assert.equal(new Set(sameBytes.items.map((item) => item.proposedNoteId)).size, 2);
-  const oversized = await planVaultImport([{
-    relativePath: 'large.md',
-    size: 0,
-    text: 'x'.repeat(VAULT_IMPORT_MAX_FILE_BYTES + 1),
-  }], []);
+  const oversized = await planVaultImport(
+    [
+      {
+        relativePath: 'large.md',
+        size: 0,
+        text: 'x'.repeat(VAULT_IMPORT_MAX_FILE_BYTES + 1),
+      },
+    ],
+    [],
+  );
   assert.equal(oversized.items[0].status, 'Conflict');
   assert.equal(oversized.items[0].source, '', 'oversized source is not retained in a rendered plan');
 });
 
 test('file-list fallback filters non-Markdown and rejects invalid UTF-8 and oversized files', async () => {
   const textFile = (name, bytes, webkitRelativePath = '') => ({
-    name, webkitRelativePath, size: bytes.byteLength, async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); },
+    name,
+    webkitRelativePath,
+    size: bytes.byteLength,
+    async arrayBuffer() {
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    },
   });
   const entries = await readVaultFileList([
     textFile('note.md', new TextEncoder().encode('# Note'), 'nested/note.md'),
     textFile('skip.txt', new TextEncoder().encode('skip')),
   ]);
-  assert.deepEqual(entries.map(({ relativePath, text }) => [relativePath, text]), [['nested/note.md', '# Note']]);
+  assert.deepEqual(
+    entries.map(({ relativePath, text }) => [relativePath, text]),
+    [['nested/note.md', '# Note']],
+  );
   await assert.rejects(() => readVaultFileList([textFile('bad.md', new Uint8Array([0xff]))]), /encoded as UTF-8/);
   await assert.rejects(() => readVaultFileList([textFile('huge.md', new Uint8Array(2 * 1024 * 1024 + 1))]), /exceeds/);
 });
 
 test('reconciliation backs up, captures update revisions, atomically adds/updates, preserves other notes, and reports no deletions', async () => {
   const events = [];
-  const store = backend({ schemaVersion: 6, config: {}, notes: [note('existing', 'Existing', '# Old'), note('keep', 'Keep', '# Untouched')] });
+  const store = backend({
+    schemaVersion: 6,
+    config: {},
+    notes: [note('existing', 'Existing', '# Old'), note('keep', 'Keep', '# Untouched')],
+  });
   const db = await new Database({
     storageBackend: store,
-    onNotesPersisted: async (captures) => events.push(`revision:${captures.map(({ note: value }) => value.id).join(',')}`),
+    onNotesPersisted: async (captures) =>
+      events.push(`revision:${captures.map(({ note: value }) => value.id).join(',')}`),
   }).init();
-  const recovery = { async downloadBackup() { events.push('backup'); return { message: 'verified' }; } };
+  const recovery = {
+    async downloadBackup() {
+      events.push('backup');
+      return { message: 'verified' };
+    },
+  };
   const service = new ReconciliationService({ db, recovery, now: () => new Date('2026-08-20T12:00:00.000Z') });
   const entries = [
     { relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\nfuture: keep\n---\n# New' },
@@ -284,11 +390,23 @@ test('reconciliation backs up, captures update revisions, atomically adds/update
   assert.equal(events[0], 'backup');
   assert.equal(events[1], 'revision:existing');
   assert.match(db.getNote('existing').content, /future: keep/);
-  assert.equal(db.getNote('existing').title, 'Existing', 'file reconciliation does not silently rename stable identities');
+  assert.equal(
+    db.getNote('existing').title,
+    'Existing',
+    'file reconciliation does not silently rename stable identities',
+  );
   assert.equal(db.getNote('keep').content, '# Untouched');
   const added = plan.items.find((item) => item.status === 'Add');
   assert.equal(db.getNote(added.proposedNoteId).content, '# Added bytes');
-  assert.deepEqual(report.summary, { added: 1, updated: 1, unchanged: 0, skipped: 0, conflicted: 0, failed: 0, deleted: 0 });
+  assert.deepEqual(report.summary, {
+    added: 1,
+    updated: 1,
+    unchanged: 0,
+    skipped: 0,
+    conflicted: 0,
+    failed: 0,
+    deleted: 0,
+  });
   assert.equal(JSON.stringify(report).includes('# Added bytes'), false, 'completion reports omit note content');
   assert.equal(db.config.folderMappings[added.proposedNoteId].relativePath, 'nested/Added.md');
   const rerun = await service.plan(entries);
@@ -296,30 +414,70 @@ test('reconciliation backs up, captures update revisions, atomically adds/update
 });
 
 test('save-to-folder records export mappings so reconciliation recognises its own files without noteforge_id', async () => {
-  const store = backend({ schemaVersion: 6, config: {}, notes: [note('a', 'Alpha', '# Alpha'), note('b', 'Beta', '# Beta'), note('c', 'Gamma', '---\nnoteforge_id: gamma-id\n---\n# Gamma')] });
+  const store = backend({
+    schemaVersion: 6,
+    config: {},
+    notes: [
+      note('a', 'Alpha', '# Alpha'),
+      note('b', 'Beta', '# Beta'),
+      note('c', 'Gamma', '---\nnoteforge_id: gamma-id\n---\n# Gamma'),
+    ],
+  });
   const db = await new Database({ storageBackend: store }).init();
   const files = new Map();
   const directory = {
     async getFileHandle(name) {
-      return { async createWritable() { return { async write(value) { files.set(name, value); }, async close() {} }; } };
+      return {
+        async createWritable() {
+          return {
+            async write(value) {
+              files.set(name, value);
+            },
+            async close() {},
+          };
+        },
+      };
     },
   };
   const exported = await exportVaultToDir(directory, db.getAllNotes());
   assert.equal(exported.written, 3);
-  assert.deepEqual(exported.files.map((file) => [file.noteId, file.relativePath]), [['a', 'Alpha.md'], ['b', 'Beta.md'], ['c', 'Gamma.md']]);
-  const mappings = await folderMappingsAfterExport({ __proto__: { stale: true }, keep: { noteId: 'keep', relativePath: 'Keep.md' } }, exported.files, { exportedAt: '2026-08-20T12:00:00.000Z' });
-  assert.deepEqual(Object.keys(mappings).sort(), ['a', 'b', 'c', 'keep'], 'existing mappings survive and prototype keys are not inherited');
+  assert.deepEqual(
+    exported.files.map((file) => [file.noteId, file.relativePath]),
+    [
+      ['a', 'Alpha.md'],
+      ['b', 'Beta.md'],
+      ['c', 'Gamma.md'],
+    ],
+  );
+  const mappings = await folderMappingsAfterExport(
+    { __proto__: { stale: true }, keep: { noteId: 'keep', relativePath: 'Keep.md' } },
+    exported.files,
+    { exportedAt: '2026-08-20T12:00:00.000Z' },
+  );
+  assert.deepEqual(
+    Object.keys(mappings).sort(),
+    ['a', 'b', 'c', 'keep'],
+    'existing mappings survive and prototype keys are not inherited',
+  );
   assert.equal(mappings.a.sourceHash, mappings.a.destinationHash);
   assert.equal(mappings.c.externalId, 'gamma-id');
   assert.equal(mappings.a.externalId, null);
   db.setConfig({ folderMappings: mappings });
   await db.flush();
-  assert.equal(await saveVaultToFolder(directory, db), 3, 'the app entry point writes and records mappings in one step');
+  assert.equal(
+    await saveVaultToFolder(directory, db),
+    3,
+    'the app entry point writes and records mappings in one step',
+  );
   assert.deepEqual(Object.keys(db.config.folderMappings).sort(), ['a', 'b', 'c', 'keep']);
 
   // Unedited round trip: every exported file is Unchanged, never a title Conflict.
   const entries = () => [...files].map(([relativePath, text]) => ({ relativePath, text }));
-  const service = new ReconciliationService({ db, recovery: { async downloadBackup() {} }, now: () => new Date('2026-08-20T13:00:00.000Z') });
+  const service = new ReconciliationService({
+    db,
+    recovery: { async downloadBackup() {} },
+    now: () => new Date('2026-08-20T13:00:00.000Z'),
+  });
   assert.deepEqual((await service.plan(entries())).counts, { Add: 0, Update: 0, Conflict: 0, Unchanged: 3 });
 
   // External edit only: Update. Vault edit only: Unchanged. Both: Conflict.
@@ -344,14 +502,25 @@ test('save-to-folder records export mappings so reconciliation recognises its ow
 test('reconciliation requires an explicit decision for every mutable item and never backs up a no-op', async () => {
   const db = await new Database({ storageBackend: backend({ schemaVersion: 6, config: {}, notes: [] }) }).init();
   let backups = 0;
-  const service = new ReconciliationService({ db, recovery: { async downloadBackup() { backups += 1; } } });
+  const service = new ReconciliationService({
+    db,
+    recovery: {
+      async downloadBackup() {
+        backups += 1;
+      },
+    },
+  });
   const plan = await service.plan([{ relativePath: 'Add.md', text: '# Add' }]);
   await assert.rejects(() => service.apply({ plan, decisions: {}, confirmed: true }), /Choose Apply or Skip/);
-  await assert.rejects(() => service.apply({
-    plan: { ...plan, version: 99 },
-    decisions: { [plan.items[0].key]: 'skip' },
-    confirmed: true,
-  }), /not the latest/);
+  await assert.rejects(
+    () =>
+      service.apply({
+        plan: { ...plan, version: 99 },
+        decisions: { [plan.items[0].key]: 'skip' },
+        confirmed: true,
+      }),
+    /not the latest/,
+  );
   const report = await service.apply({ plan, decisions: { [plan.items[0].key]: 'skip' }, confirmed: true });
   assert.equal(backups, 0);
   assert.equal(report.summary.skipped, 1);
@@ -380,10 +549,12 @@ test('prototype-shaped stable note IDs remain own mapping data after apply', asy
     onNotesPersisted: async () => {},
   }).init();
   const service = new ReconciliationService({ db, recovery: { async downloadBackup() {} } });
-  const plan = await service.plan([{
-    relativePath: 'Prototype.md',
-    text: '---\nnoteforge_id: __proto__\n---\n# New',
-  }]);
+  const plan = await service.plan([
+    {
+      relativePath: 'Prototype.md',
+      text: '---\nnoteforge_id: __proto__\n---\n# New',
+    },
+  ]);
   await service.apply({ plan, decisions: { [plan.items[0].key]: 'apply' }, confirmed: true });
   assert.equal(Object.hasOwn(db.config.folderMappings, '__proto__'), true);
   assert.equal(db.config.folderMappings.__proto__.noteId, '__proto__');
@@ -397,10 +568,20 @@ test('reconciliation rejects stale source after safety backup and before revisio
     onNotesPersisted: async () => events.push('revision'),
   }).init();
   let source = '---\nnoteforge_id: existing\n---\n# Previewed';
-  const service = new ReconciliationService({ db, recovery: { async downloadBackup() { events.push('backup'); } } });
+  const service = new ReconciliationService({
+    db,
+    recovery: {
+      async downloadBackup() {
+        events.push('backup');
+      },
+    },
+  });
   const plan = await service.plan([{ relativePath: 'Existing.md', text: source, read: async () => source }]);
   source = '---\nnoteforge_id: existing\n---\n# Changed after preview';
-  await assert.rejects(() => service.apply({ plan, decisions: { [plan.items[0].key]: 'apply' }, confirmed: true }), /changed after preview/);
+  await assert.rejects(
+    () => service.apply({ plan, decisions: { [plan.items[0].key]: 'apply' }, confirmed: true }),
+    /changed after preview/,
+  );
   assert.deepEqual(events, ['backup']);
   assert.equal(db.getNote('existing').content, '# Old');
 });
@@ -408,14 +589,35 @@ test('reconciliation rejects stale source after safety backup and before revisio
 test('reconciliation fails closed when portable backup or atomic replacement fails', async () => {
   const initial = { schemaVersion: 6, config: {}, notes: [note('existing', 'Existing', '# Old')] };
   const deniedDb = await new Database({ storageBackend: backend(initial) }).init();
-  const denied = new ReconciliationService({ deniedDb, db: deniedDb, recovery: { async downloadBackup() { throw new Error('download denied'); } } });
-  const deniedPlan = await denied.plan([{ relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\n---\n# New' }]);
-  await assert.rejects(() => denied.apply({ plan: deniedPlan, decisions: { [deniedPlan.items[0].key]: 'apply' }, confirmed: true }), /download denied/);
+  const denied = new ReconciliationService({
+    deniedDb,
+    db: deniedDb,
+    recovery: {
+      async downloadBackup() {
+        throw new Error('download denied');
+      },
+    },
+  });
+  const deniedPlan = await denied.plan([
+    { relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\n---\n# New' },
+  ]);
+  await assert.rejects(
+    () => denied.apply({ plan: deniedPlan, decisions: { [deniedPlan.items[0].key]: 'apply' }, confirmed: true }),
+    /download denied/,
+  );
   assert.equal(deniedDb.getNote('existing').content, '# Old');
 
-  const failedDb = await new Database({ storageBackend: backend(initial, { failBatch: true }), onNotesPersisted: async () => {} }).init();
+  const failedDb = await new Database({
+    storageBackend: backend(initial, { failBatch: true }),
+    onNotesPersisted: async () => {},
+  }).init();
   const failed = new ReconciliationService({ db: failedDb, recovery: { async downloadBackup() {} } });
-  const failedPlan = await failed.plan([{ relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\n---\n# New' }]);
-  await assert.rejects(() => failed.apply({ plan: failedPlan, decisions: { [failedPlan.items[0].key]: 'apply' }, confirmed: true }), /not saved/);
+  const failedPlan = await failed.plan([
+    { relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\n---\n# New' },
+  ]);
+  await assert.rejects(
+    () => failed.apply({ plan: failedPlan, decisions: { [failedPlan.items[0].key]: 'apply' }, confirmed: true }),
+    /not saved/,
+  );
   assert.equal(failedDb.getNote('existing').content, '# Old');
 });

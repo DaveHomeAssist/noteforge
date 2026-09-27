@@ -42,8 +42,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint (Biome, zero errors)
-        run: npm run lint
+      - name: Lint and format check (biome ci, zero errors, no unformatted files)
+        run: npm run check
 
       - name: Typecheck (tsc --checkJs per-file ratchet)
         run: npm run typecheck

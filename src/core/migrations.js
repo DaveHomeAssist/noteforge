@@ -24,7 +24,7 @@ const MIGRATIONS = {
   // v1 -> v2: introduce pinning. Every note gains an explicit `pinned` flag.
   2: (payload) => {
     const notes = Array.isArray(payload.notes)
-      ? payload.notes.map((n) => ({ ...n, pinned: !!(n?.pinned) }))
+      ? payload.notes.map((n) => ({ ...n, pinned: !!n?.pinned }))
       : payload.notes;
     return { ...payload, notes };
   },

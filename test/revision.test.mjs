@@ -38,7 +38,7 @@ class MemoryStorage {
   }
 
   async loadMany(keys, fallback = null) {
-    return [...keys].map((key) => this.data.has(key) ? this.data.get(key) : fallback);
+    return [...keys].map((key) => (this.data.has(key) ? this.data.get(key) : fallback));
   }
 
   async keys(prefix = '') {
@@ -110,7 +110,10 @@ function countKeys(storage, prefix) {
 test('canonical JSON and Web Crypto hashing are deterministic', async () => {
   assert.equal(canonicalJson({ z: 1, a: { y: 2, x: [3, 1] } }), '{"a":{"x":[3,1],"y":2},"z":1}');
   assert.equal(await sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-  assert.throws(() => canonicalJson({ value: undefined }), (error) => error.code === 'malformed_metadata');
+  assert.throws(
+    () => canonicalJson({ value: undefined }),
+    (error) => error.code === 'malformed_metadata',
+  );
 });
 
 test('retention settings enforce documented safe ranges', () => {
@@ -130,32 +133,57 @@ test('storage fallback batches logical namespaced keys but reports history unava
   let quotaLimit = Infinity;
   globalThis.indexedDB = undefined;
   globalThis.localStorage = {
-    get length() { return values.size; },
-    key(index) { return [...values.keys()][index] ?? null; },
-    getItem(key) { return values.get(key) ?? null; },
+    get length() {
+      return values.size;
+    },
+    key(index) {
+      return [...values.keys()][index] ?? null;
+    },
+    getItem(key) {
+      return values.get(key) ?? null;
+    },
     setItem(key, value) {
       if (key === failOnKey) {
         failOnKey = null;
         throw new DOMException('quota', 'QuotaExceededError');
       }
-      const nextSize = [...values].reduce((total, [storedKey, storedValue]) => (
-        total + (storedKey === key ? 0 : storedValue.length)
-      ), value.length);
+      const nextSize = [...values].reduce(
+        (total, [storedKey, storedValue]) => total + (storedKey === key ? 0 : storedValue.length),
+        value.length,
+      );
       if (nextSize > quotaLimit) throw new DOMException('quota', 'QuotaExceededError');
       values.set(key, value);
     },
-    removeItem(key) { values.delete(key); },
+    removeItem(key) {
+      values.delete(key);
+    },
   };
   try {
     const { storage } = await import(`../src/core/storage.js?fallback-test=${Date.now()}`);
     assert.deepEqual(await storage.keys(), ['notes']);
-    assert.equal(await storage.saveMany([['revision:test:a', 1], ['revision:test:b', 2]]), true);
+    assert.equal(
+      await storage.saveMany([
+        ['revision:test:a', 1],
+        ['revision:test:b', 2],
+      ]),
+      true,
+    );
     assert.deepEqual(await storage.keys('revision:'), ['revision:test:a', 'revision:test:b']);
     assert.deepEqual(await storage.loadMany(['revision:test:b', 'missing'], 'fallback'), [2, 'fallback']);
     const originalNotes = values.get('my-notes-app:notes');
     failOnKey = 'my-notes-app:config';
-    assert.equal(await storage.saveMany([['notes', [{ id: 'replacement' }]], ['config', { changed: true }]]), false);
-    assert.equal(values.get('my-notes-app:notes'), originalNotes, 'failed fallback batch rolls back an earlier note write');
+    assert.equal(
+      await storage.saveMany([
+        ['notes', [{ id: 'replacement' }]],
+        ['config', { changed: true }],
+      ]),
+      false,
+    );
+    assert.equal(
+      values.get('my-notes-app:notes'),
+      originalNotes,
+      'failed fallback batch rolls back an earlier note write',
+    );
     assert.equal(values.has('my-notes-app:config'), false, 'failed fallback batch leaves absent keys absent');
 
     const largeOldNotes = JSON.stringify([{ id: 'legacy', body: 'x'.repeat(120) }]);
@@ -168,14 +196,29 @@ test('storage fallback batches logical namespaced keys but reports history unava
     quotaLimit = fixedSize;
     failOnKey = 'my-notes-app:schemaVersion';
     const largeNewConfig = { pad: 'y'.repeat(Math.max(1, largeOldNotes.length - 30)) };
-    assert.equal(await storage.saveMany([
-      ['notes', [{ id: 'small-new' }]],
-      ['config', largeNewConfig],
-      ['schemaVersion', 3],
-    ]), false);
-    assert.equal(values.get('my-notes-app:notes'), largeOldNotes, 'late fallback failure restores the original large notes');
-    assert.equal(values.get('my-notes-app:config'), smallOldConfig, 'late fallback failure restores the original config');
-    assert.equal(values.get('my-notes-app:schemaVersion'), oldSchema, 'late fallback failure restores the original schema');
+    assert.equal(
+      await storage.saveMany([
+        ['notes', [{ id: 'small-new' }]],
+        ['config', largeNewConfig],
+        ['schemaVersion', 3],
+      ]),
+      false,
+    );
+    assert.equal(
+      values.get('my-notes-app:notes'),
+      largeOldNotes,
+      'late fallback failure restores the original large notes',
+    );
+    assert.equal(
+      values.get('my-notes-app:config'),
+      smallOldConfig,
+      'late fallback failure restores the original config',
+    );
+    assert.equal(
+      values.get('my-notes-app:schemaVersion'),
+      oldSchema,
+      'late fallback failure restores the original schema',
+    );
     quotaLimit = Infinity;
     failOnKey = null;
     assert.equal(await storage.saveMany([['revision:test:c', 3]], { allowFallback: false }), false);
@@ -206,7 +249,11 @@ test('capture stores immutable records and deduplicates exact content and metada
   assert.equal(duplicate.captured, false);
   assert.equal(duplicate.revision.id, first.revision.id);
   assert.equal(acrossNotes.revision.contentHash, first.revision.contentHash);
-  assert.notEqual(acrossNotes.revision.metadataHash, first.revision.metadataHash, 'authoritative metadata includes each note ID');
+  assert.notEqual(
+    acrossNotes.revision.metadataHash,
+    first.revision.metadataHash,
+    'authoritative metadata includes each note ID',
+  );
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.content), 1);
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.metadata), 2);
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.record), 2);
@@ -257,9 +304,12 @@ test('capture enforces count retention and collects only unreferenced blobs', as
     gcBatchSize: 100,
   });
   for (let index = 0; index < 12; index += 1) {
-    await revisions.capture(note('counted', `version ${index}`, { updatedAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z` }), {
-      createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
-    });
+    await revisions.capture(
+      note('counted', `version ${index}`, { updatedAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z` }),
+      {
+        createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+      },
+    );
   }
   const records = await revisions.list('counted');
   assert.equal(records.length, 10);
@@ -277,7 +327,10 @@ test('concurrent capture requests serialize parent ordering', async () => {
     revisions.capture(note('queued', 'second'), { createdAt: '2026-08-19T10:01:00.000Z' }),
   ]);
   assert.equal(second.revision.parentRevisionId, first.revision.id);
-  assert.deepEqual((await revisions.list('queued')).map((record) => record.id), [second.revision.id, first.revision.id]);
+  assert.deepEqual(
+    (await revisions.list('queued')).map((record) => record.id),
+    [second.revision.id, first.revision.id],
+  );
 });
 
 test('per-note index preserves parent order when revisions share a timestamp', async () => {
@@ -288,8 +341,14 @@ test('per-note index preserves parent order when revisions share a timestamp', a
   await revisions.capture(note('same-time', 'old'), { createdAt });
   await revisions.capture(note('same-time', 'new'), { createdAt });
   const listed = await revisions.list('same-time', { materialize: true });
-  assert.deepEqual(listed.map((entry) => entry.id), ['a-new', 'z-old']);
-  assert.deepEqual(listed.map((entry) => entry.content), ['new', 'old']);
+  assert.deepEqual(
+    listed.map((entry) => entry.id),
+    ['a-new', 'z-old'],
+  );
+  assert.deepEqual(
+    listed.map((entry) => entry.content),
+    ['new', 'old'],
+  );
   assert.equal(listed[0].parentRevisionId, 'z-old');
 });
 
@@ -308,7 +367,10 @@ test('age retention runs before count retention and always keeps the newest revi
   now = new Date('2026-08-19T12:00:00.000Z');
   await revisions.capture(note('aged', 'new'), { createdAt: '2026-08-19T12:00:00.000Z' });
   const records = await revisions.list('aged', { materialize: true });
-  assert.deepEqual(records.map((entry) => entry.content), ['new']);
+  assert.deepEqual(
+    records.map((entry) => entry.content),
+    ['new'],
+  );
 });
 
 test('an unchanged durable save still removes expired older revisions', async () => {
@@ -325,7 +387,10 @@ test('an unchanged durable save still removes expired older revisions', async ()
   const unchanged = await revisions.capture(note('dormant', 'latest'), { createdAt: now.toISOString() });
   assert.equal(unchanged.captured, false);
   assert.equal(unchanged.pruned, 1);
-  assert.deepEqual((await revisions.list('dormant')).map((record) => record.id), ['unchanged-age-2']);
+  assert.deepEqual(
+    (await revisions.list('dormant')).map((record) => record.id),
+    ['unchanged-age-2'],
+  );
 });
 
 test('failed revision pruning remains discoverable and is completed after reload', async () => {
@@ -349,7 +414,11 @@ test('failed revision pruning remains discoverable and is completed after reload
     revisions.capture(note('retry-note', 'new'), { createdAt: '2026-08-20T00:00:00.000Z' }),
     (error) => error.code === 'revision_remove_failed',
   );
-  assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.record), 2, 'failed removal leaves both authoritative records reachable');
+  assert.equal(
+    countKeys(storage, REVISION_STORAGE_PREFIXES.record),
+    2,
+    'failed removal leaves both authoritative records reachable',
+  );
 
   const reloaded = new RevisionStore(storage, {
     retention: { count: 10, days: 7 },
@@ -357,9 +426,16 @@ test('failed revision pruning remains discoverable and is completed after reload
   });
   const reconciled = await reloaded.reconcileVaultNoteIds(['retry-note']);
   assert.equal(reconciled.pruned, 1);
-  assert.deepEqual((await reloaded.list('retry-note', { materialize: true })).map((entry) => entry.content), ['new']);
+  assert.deepEqual(
+    (await reloaded.list('retry-note', { materialize: true })).map((entry) => entry.content),
+    ['new'],
+  );
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.record), 1);
-  assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.content), 1, 'startup retry also collects the pruned content blob');
+  assert.equal(
+    countKeys(storage, REVISION_STORAGE_PREFIXES.content),
+    1,
+    'startup retry also collects the pruned content blob',
+  );
 });
 
 test('quota pressure pauses optional history before a write', async () => {
@@ -465,7 +541,10 @@ test('daily and weekly snapshots reuse blobs, materialize, retain 7/4, and delet
   const revisions = new RevisionStore(storage, { idFactory: ids('snapshot'), gcBatchSize: 100 });
   const sourceVault = vault([note('one', 'shared'), note('two', 'shared', { title: 'Note one' })]);
   for (let index = 0; index < 8; index += 1) {
-    await revisions.createSnapshot(sourceVault, { kind: 'daily', createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z` });
+    await revisions.createSnapshot(sourceVault, {
+      kind: 'daily',
+      createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    });
   }
   for (let index = 0; index < 5; index += 1) {
     const day = String(index * 7 + 1).padStart(2, '0');
@@ -478,14 +557,24 @@ test('daily and weekly snapshots reuse blobs, materialize, retain 7/4, and delet
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.content), 1);
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.metadata), 3);
   const materialized = await revisions.materializeSnapshot(daily[0]);
-  assert.deepEqual(materialized.notes.map((entry) => [entry.id, entry.content]), [['one', 'shared'], ['two', 'shared']]);
+  assert.deepEqual(
+    materialized.notes.map((entry) => [entry.id, entry.content]),
+    [
+      ['one', 'shared'],
+      ['two', 'shared'],
+    ],
+  );
   assert.deepEqual(materialized.config, { themeMode: 'dark' });
   assert.equal(materialized.vaultSchemaVersion, 3);
 
   await revisions.deleteSnapshot(daily[0].id);
   assert.equal((await revisions.listSnapshots({ kind: 'daily' })).length, 6);
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.content), 1, 'weekly snapshots still reference the blob');
-  assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.metadata), 3, 'weekly snapshots still reference note metadata and config');
+  assert.equal(
+    countKeys(storage, REVISION_STORAGE_PREFIXES.metadata),
+    3,
+    'weekly snapshots still reference note metadata and config',
+  );
 });
 
 test('snapshot creation is idempotent within each UTC daily or weekly period', async () => {
@@ -498,7 +587,10 @@ test('snapshot creation is idempotent within each UTC daily or weekly period', a
     createdAt: '2026-08-19T23:00:00.000Z',
   });
   const weekly = await revisions.createSnapshot(sourceVault, { kind: 'weekly', createdAt: '2026-08-17T01:00:00.000Z' });
-  const repeatedWeekly = await revisions.createSnapshot(sourceVault, { kind: 'weekly', createdAt: '2026-08-23T23:00:00.000Z' });
+  const repeatedWeekly = await revisions.createSnapshot(sourceVault, {
+    kind: 'weekly',
+    createdAt: '2026-08-23T23:00:00.000Z',
+  });
   assert.equal(daily.created, true);
   assert.equal(repeatedDaily.created, false);
   assert.equal(repeatedDaily.snapshot.id, daily.snapshot.id);
@@ -574,10 +666,9 @@ test('snapshot pruning drains every orphan through bounded garbage-collection ba
   const revisions = new RevisionStore(storage, { idFactory: ids('drain'), gcBatchSize: 25 });
   let lastResult;
   for (let day = 1; day <= 8; day += 1) {
-    const notes = Array.from({ length: 30 }, (_, index) => note(
-      `day-${day}-note-${index}`,
-      `unique content ${day}:${index}`,
-    ));
+    const notes = Array.from({ length: 30 }, (_, index) =>
+      note(`day-${day}-note-${index}`, `unique content ${day}:${index}`),
+    );
     lastResult = await revisions.createSnapshot(vault(notes), {
       kind: 'daily',
       createdAt: `2026-08-${String(day).padStart(2, '0')}T12:00:00.000Z`,
@@ -588,8 +679,15 @@ test('snapshot pruning drains every orphan through bounded garbage-collection ba
   assert.equal(lastResult.garbageCollected, 60, '30 content and 30 metadata blobs exceed one 25-key batch');
   assert.equal((await revisions.listSnapshots({ kind: 'daily' })).length, 7);
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.content), 210);
-  assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.metadata), 211, '210 note metadata blobs plus shared config');
-  assert.equal([...storage.data.values()].some((value) => typeof value === 'string' && value.includes('day-1-note')), false);
+  assert.equal(
+    countKeys(storage, REVISION_STORAGE_PREFIXES.metadata),
+    211,
+    '210 note metadata blobs plus shared config',
+  );
+  assert.equal(
+    [...storage.data.values()].some((value) => typeof value === 'string' && value.includes('day-1-note')),
+    false,
+  );
 });
 
 test('snapshot config and vault schema are required and hash-verified', async () => {
@@ -604,7 +702,10 @@ test('snapshot config and vault schema are required and hash-verified', async ()
     (error) => error.code === 'malformed_snapshot',
   );
   const created = await revisions.createSnapshot(vault([note('one', 'x')], { themeMode: 'dark', showGraph: true }));
-  storage.data.set(`${REVISION_STORAGE_PREFIXES.metadata}${created.snapshot.configHash}`, canonicalJson({ themeMode: 'light' }));
+  storage.data.set(
+    `${REVISION_STORAGE_PREFIXES.metadata}${created.snapshot.configHash}`,
+    canonicalJson({ themeMode: 'light' }),
+  );
   await assert.rejects(
     revisions.materializeSnapshot(created.snapshot.id),
     (error) => error.code === 'snapshot_integrity_failed',
@@ -632,10 +733,9 @@ test('startup reconciliation retries orphan cleanup interrupted after record del
   const originalRemoveMany = storage.removeMany.bind(storage);
   let failBlobSweepOnce = true;
   storage.removeMany = async (keys) => {
-    const isBlobSweep = [...keys].some((key) => (
-      key.startsWith(REVISION_STORAGE_PREFIXES.content)
-      || key.startsWith(REVISION_STORAGE_PREFIXES.metadata)
-    ));
+    const isBlobSweep = [...keys].some(
+      (key) => key.startsWith(REVISION_STORAGE_PREFIXES.content) || key.startsWith(REVISION_STORAGE_PREFIXES.metadata),
+    );
     if (isBlobSweep && failBlobSweepOnce) {
       failBlobSweepOnce = false;
       return false;
@@ -646,7 +746,11 @@ test('startup reconciliation retries orphan cleanup interrupted after record del
     revisions.deleteNoteHistory('deleted-before-gc'),
     (error) => error.code === 'revision_remove_failed',
   );
-  assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.record), 0, 'history record deletion committed before the interrupted blob sweep');
+  assert.equal(
+    countKeys(storage, REVISION_STORAGE_PREFIXES.record),
+    0,
+    'history record deletion committed before the interrupted blob sweep',
+  );
   assert.ok(countKeys(storage, REVISION_STORAGE_PREFIXES.content) > 0, 'orphaned content remains for startup retry');
 
   const reloaded = new RevisionStore(storage, { gcBatchSize: 100 });
@@ -664,7 +768,10 @@ test('garbage collection is bounded and aborts when a record is malformed', asyn
   const first = await revisions.garbageCollect();
   assert.deepEqual(first, { removed: 1, remaining: 1 });
   storage.data.set(`${REVISION_STORAGE_PREFIXES.snapshotRecord}bad`, { id: 'bad', schemaVersion: 1 });
-  await assert.rejects(revisions.garbageCollect(), (error) => error instanceof RevisionStoreError && error.code === 'malformed_snapshot');
+  await assert.rejects(
+    revisions.garbageCollect(),
+    (error) => error instanceof RevisionStoreError && error.code === 'malformed_snapshot',
+  );
   assert.equal(countKeys(storage, REVISION_STORAGE_PREFIXES.metadata), 1);
 });
 
@@ -698,8 +805,12 @@ test('origin-wide mutation locking prevents cross-instance capture and GC interl
   const originalKeys = storage.keys.bind(storage);
   let releaseScan;
   let reachedBlobScan;
-  const atBlobScan = new Promise((resolve) => { reachedBlobScan = resolve; });
-  const continueScan = new Promise((resolve) => { releaseScan = resolve; });
+  const atBlobScan = new Promise((resolve) => {
+    reachedBlobScan = resolve;
+  });
+  const continueScan = new Promise((resolve) => {
+    releaseScan = resolve;
+  });
   let blockOnce = true;
   storage.keys = async (prefix = '') => {
     if (blockOnce && prefix === REVISION_STORAGE_PREFIXES.content) {
@@ -713,8 +824,10 @@ test('origin-wide mutation locking prevents cross-instance capture and GC interl
   const collecting = first.garbageCollect();
   await atBlobScan;
   let captureFinished = false;
-  const capturing = second.capture(note('concurrent', 'new durable bytes'))
-    .then((result) => { captureFinished = true; return result; });
+  const capturing = second.capture(note('concurrent', 'new durable bytes')).then((result) => {
+    captureFinished = true;
+    return result;
+  });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(captureFinished, false, 'the second store waits for the origin-wide lock');
   releaseScan();

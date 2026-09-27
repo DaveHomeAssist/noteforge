@@ -12,10 +12,15 @@ export function splitFrontmatterSource(markdown) {
       const rawEnd = lineEnd - (source[lineEnd - 1] === '\r' ? 1 : 0);
       const bodyStart = nextBreak < 0 ? source.length : nextBreak + 1;
       return Object.freeze({
-        hasFrontmatter: true, source, raw: source.slice(0, rawEnd),
-        yaml: source.slice(firstBreak + 1, lineStart), body: source.slice(bodyStart), bodyStart,
+        hasFrontmatter: true,
+        source,
+        raw: source.slice(0, rawEnd),
+        yaml: source.slice(firstBreak + 1, lineStart),
+        body: source.slice(bodyStart),
+        bodyStart,
         separator: nextBreak < 0 ? '' : source.slice(rawEnd, nextBreak + 1),
-        newline: source.slice(3, firstBreak + 1) || '\n', closing: line,
+        newline: source.slice(3, firstBreak + 1) || '\n',
+        closing: line,
       });
     }
     if (nextBreak < 0) break;
@@ -24,7 +29,15 @@ export function splitFrontmatterSource(markdown) {
   return none(source);
 }
 
-const none = (source) => Object.freeze({
-  hasFrontmatter: false, source, raw: '', yaml: '', body: source, bodyStart: 0,
-  separator: '', newline: source.includes('\r\n') ? '\r\n' : '\n', closing: null,
-});
+const none = (source) =>
+  Object.freeze({
+    hasFrontmatter: false,
+    source,
+    raw: '',
+    yaml: '',
+    body: source,
+    bodyStart: 0,
+    separator: '',
+    newline: source.includes('\r\n') ? '\r\n' : '\n',
+    closing: null,
+  });

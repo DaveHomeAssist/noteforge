@@ -10,7 +10,12 @@ import { TaskService } from '../src/core/task-service.js';
 import { REVISION_REASONS } from '../src/core/revision-store.js';
 import { parse, serialize } from '../src/utils/blocks.js';
 import { buildCalendarItems, calendarItemsByDate, calendarPeriod } from '../src/utils/calendar.js';
-import { appendCapturedMarkdown, buildCaptureMarkdown, consumeShareTarget, normalizeCaptureUrl } from '../src/utils/capture.js';
+import {
+  appendCapturedMarkdown,
+  buildCaptureMarkdown,
+  consumeShareTarget,
+  normalizeCaptureUrl,
+} from '../src/utils/capture.js';
 import { resolveDailyNote } from '../src/utils/daily-workflow.js';
 import {
   addCalendarDays,
@@ -31,7 +36,9 @@ function memoryBackend() {
   return {
     values,
     fail: false,
-    async load(key, fallback) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
+    async load(key, fallback) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
     async save(key, value) {
       if (this.fail) return false;
       values.set(key, structuredClone(value));
@@ -42,14 +49,19 @@ function memoryBackend() {
       entries.forEach(([key, value]) => values.set(key, structuredClone(value)));
       return true;
     },
-    async getStatus() { return { backend: 'indexeddb' }; },
+    async getStatus() {
+      return { backend: 'indexeddb' };
+    },
   };
 }
 
 async function database() {
   const backend = memoryBackend();
   const captures = [];
-  const db = new Database({ storageBackend: backend, onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)) });
+  const db = new Database({
+    storageBackend: backend,
+    onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)),
+  });
   await db.init();
   return { db, backend, captures };
 }
@@ -60,7 +72,11 @@ test('local calendar helpers never derive Today through UTC and cover boundary a
   assert.equal(addCalendarDays('2024-02-28', 1), '2024-02-29');
   assert.equal(addCalendarDays('2026-12-31', 1), '2027-01-01');
   assert.equal(addCalendarMonths('2026-01-31', 1), '2026-02-28');
-  assert.equal(compareCalendarDates('2026-03-08', '2026-03-09'), -1, 'DST boundary compares tuples, not elapsed local hours');
+  assert.equal(
+    compareCalendarDates('2026-03-08', '2026-03-09'),
+    -1,
+    'DST boundary compares tuples, not elapsed local hours',
+  );
   assert.equal(isCalendarDate('2026-02-29'), false);
   assert.equal(monthPeriod('2026-08-20').days.length, 42);
   assert.deepEqual(buildDailyNote('2024-02-29'), {
@@ -73,9 +89,11 @@ test('local calendar helpers never derive Today through UTC and cover boundary a
 test('local Today resolves the same instant independently in multiple time zones', () => {
   const moduleUrl = new URL('../src/utils/local-date.js', import.meta.url).href;
   const script = `import { localDateKey } from ${JSON.stringify(moduleUrl)}; process.stdout.write(localDateKey(new Date('2026-03-08T04:30:00.000Z')));`;
-  const run = (timezone) => spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-    encoding: 'utf8', env: { ...process.env, TZ: timezone },
-  });
+  const run = (timezone) =>
+    spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+      encoding: 'utf8',
+      env: { ...process.env, TZ: timezone },
+    });
   const newYork = run('America/New_York');
   const kiritimati = run('Pacific/Kiritimati');
   assert.equal(newYork.status, 0, newYork.stderr);
@@ -86,7 +104,10 @@ test('local Today resolves the same instant independently in multiple time zones
 
 test('task due suffix parser accepts only valid terminal markers outside code and escapes', () => {
   assert.deepEqual(parseTaskDueText('Ship release @due(2026-08-21)'), {
-    text: 'Ship release', dueDate: '2026-08-21', separator: ' ', trailing: '',
+    text: 'Ship release',
+    dueDate: '2026-08-21',
+    separator: ' ',
+    trailing: '',
   });
   assert.equal(parseTaskDueText('Impossible @due(2026-02-30)').dueDate, null);
   assert.equal(parseTaskDueText('Escaped \\@due(2026-08-21)').dueDate, null);
@@ -103,15 +124,26 @@ test('task blocks preserve valid, invalid, nested, checked, whitespace, and CRLF
   ].join('\n');
   const blocks = parse(source);
   assert.equal(serialize(blocks), source);
-  assert.deepEqual(extractTasks(source).map((task) => task.dueDate), [
-    '2026-08-21', '2026-08-22', null, null,
-  ]);
-  assert.deepEqual(extractTasks('~~~md\n- [ ] Hidden @due(2026-08-24)\n~~~~\n- [ ] Visible after tilde fence')
-    .map((task) => task.text), ['Visible after tilde fence']);
+  assert.deepEqual(
+    extractTasks(source).map((task) => task.dueDate),
+    ['2026-08-21', '2026-08-22', null, null],
+  );
+  assert.deepEqual(
+    extractTasks('~~~md\n- [ ] Hidden @due(2026-08-24)\n~~~~\n- [ ] Visible after tilde fence').map(
+      (task) => task.text,
+    ),
+    ['Visible after tilde fence'],
+  );
   const fenced = '~~~md\r\n- [ ] Hidden\r\n~~~\r\n```md\r\n- [ ] Hidden too\r\n```\r\n- [ ] Visible';
   assert.equal(editorTaskOccurrence(fenced, extractTasks(fenced)[0]), 1);
   const crlfTasks = extractTasks('- [ ] One\r\n- [x] Two @due(2026-08-21)\r\n', { noteId: 'crlf' });
-  assert.deepEqual(crlfTasks.map((task) => [task.sourceStart, task.sourceEnd, task.checked]), [[0, 9, false], [11, 37, true]]);
+  assert.deepEqual(
+    crlfTasks.map((task) => [task.sourceStart, task.sourceEnd, task.checked]),
+    [
+      [0, 9, false],
+      [11, 37, true],
+    ],
+  );
 });
 
 test('exact task mutation distinguishes duplicate text and rejects ambiguous stale references', () => {
@@ -121,22 +153,35 @@ test('exact task mutation distinguishes duplicate text and rejects ambiguous sta
   assert.equal(toggled.content, '- [ ] Duplicate\n- [x] Duplicate\n- [ ] Unique @due(2026-08-21)');
   const moved = mutateTaskSource(`Heading\n${source}`, tasks[2], { dueDate: '2026-08-30' });
   assert.match(moved.content, /Unique @due\(2026-08-30\)$/);
-  assert.throws(() => mutateTaskSource(`Heading\n${source}`, tasks[0], { checked: true }), /changed after the dashboard loaded/);
+  assert.throws(
+    () => mutateTaskSource(`Heading\n${source}`, tasks[0], { checked: true }),
+    /changed after the dashboard loaded/,
+  );
   assert.equal(mutateTaskSource(source, tasks[2], { dueDate: null }).content.endsWith('- [ ] Unique'), true);
 });
 
 test('task grouping uses local date tuples and separates completed state', () => {
-  const tasks = extractTasks([
-    '- [ ] Today @due(2026-08-20)',
-    '- [ ] Late @due(2026-08-19)',
-    '- [ ] Later @due(2026-09-01)',
-    '- [ ] Someday',
-    '- [x] Finished @due(2026-08-20)',
-  ].join('\n'), { noteId: 'n', noteTitle: 'Tasks' });
+  const tasks = extractTasks(
+    [
+      '- [ ] Today @due(2026-08-20)',
+      '- [ ] Late @due(2026-08-19)',
+      '- [ ] Later @due(2026-09-01)',
+      '- [ ] Someday',
+      '- [x] Finished @due(2026-08-20)',
+    ].join('\n'),
+    { noteId: 'n', noteTitle: 'Tasks' },
+  );
   const groups = groupTasks(tasks, '2026-08-20');
-  assert.deepEqual(Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, value.map((task) => task.text)])), {
-    today: ['Today'], overdue: ['Late'], upcoming: ['Later'], noDate: ['Someday'], completed: ['Finished'],
-  });
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, value.map((task) => task.text)])),
+    {
+      today: ['Today'],
+      overdue: ['Late'],
+      upcoming: ['Later'],
+      noDate: ['Someday'],
+      completed: ['Finished'],
+    },
+  );
 });
 
 test('Daily resolver is idempotent across active, Archive, Trash, missing, and ambiguity states', () => {
@@ -148,7 +193,9 @@ test('Daily resolver is idempotent across active, Archive, Trash, missing, and a
 });
 
 test('GET share-target intake is allowlisted, bounded, URL-safe, and one-shot', () => {
-  const result = consumeShareTarget('https://example.test/noteforge/?source=share-target&title=Shared&text=Hello&url=https%3A%2F%2Fexample.com%2Fx&admin=true#keep');
+  const result = consumeShareTarget(
+    'https://example.test/noteforge/?source=share-target&title=Shared&text=Hello&url=https%3A%2F%2Fexample.com%2Fx&admin=true#keep',
+  );
   assert.equal(result.matched, true);
   assert.deepEqual(result.payload, { title: 'Shared', text: 'Hello', url: 'https://example.com/x' });
   assert.equal(result.cleanUrl, '/noteforge/#keep');
@@ -178,12 +225,15 @@ test('calendar aggregation combines Daily notes, date blocks, and due tasks whil
     note('trash', 'Trash', '- [ ] Hidden @due(2026-08-24)', { isTrashed: true }),
   ];
   const items = buildCalendarItems(notes);
-  assert.deepEqual(items.map((item) => [item.type, item.date, item.noteId]), [
-    ['daily', '2026-08-20', 'daily'],
-    ['task', '2026-08-20', 'daily'],
-    ['date', '2026-08-21', 'event'],
-    ['task', '2026-08-22', 'event'],
-  ]);
+  assert.deepEqual(
+    items.map((item) => [item.type, item.date, item.noteId]),
+    [
+      ['daily', '2026-08-20', 'daily'],
+      ['task', '2026-08-20', 'daily'],
+      ['date', '2026-08-21', 'event'],
+      ['task', '2026-08-22', 'event'],
+    ],
+  );
   assert.equal(calendarItemsByDate(items).get('2026-08-20').length, 2);
   assert.equal(calendarPeriod('week', '2026-08-20').days.length, 7);
   assert.equal(calendarPeriod('month', '2026-08-20').days.length, 42);
@@ -215,7 +265,10 @@ test('CaptureService reports failed persistence and refuses hidden Inbox ambigui
   const target = db.createNote({ id: 'target', title: 'Target' });
   await db.flush();
   backend.fail = true;
-  await assert.rejects(service.save({ destination: 'existing', noteId: target.id, markdown: 'Pending' }), /still pending/);
+  await assert.rejects(
+    service.save({ destination: 'existing', noteId: target.id, markdown: 'Pending' }),
+    /still pending/,
+  );
   assert.equal(db.getPersistenceStatus().pendingWrites > 0, true);
 });
 
@@ -231,7 +284,13 @@ test('TaskService excludes Archive/Trash and applies one exact task with a pre-c
   captures.length = 0;
   const service = new TaskService(db);
   const tasks = service.list();
-  assert.deepEqual(tasks.map((task) => [task.noteId, task.occurrence]), [['active', 0], ['active', 1]]);
+  assert.deepEqual(
+    tasks.map((task) => [task.noteId, task.occurrence]),
+    [
+      ['active', 0],
+      ['active', 1],
+    ],
+  );
   const result = await service.update(tasks[1], { checked: true, dueDate: '2026-08-30' });
   assert.equal(result.changed, true);
   assert.equal(db.getNote('active').content, '- [ ] Same\n- [x] Same @due(2026-08-30)');
@@ -241,7 +300,9 @@ test('TaskService excludes Archive/Trash and applies one exact task with a pre-c
 });
 
 test('1,000-note task derivation stays within the shared interaction budget', () => {
-  const notes = Array.from({ length: 1_000 }, (_, index) => note(`n-${index}`, `Note ${index}`, `# Work\n\n- [ ] Task ${index} @due(2026-08-21)`));
+  const notes = Array.from({ length: 1_000 }, (_, index) =>
+    note(`n-${index}`, `Note ${index}`, `# Work\n\n- [ ] Task ${index} @due(2026-08-21)`),
+  );
   const service = new TaskService({ getAllNotes: () => notes });
   const start = performance.now();
   const tasks = service.list();

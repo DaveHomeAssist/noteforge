@@ -9,7 +9,10 @@ import {
   updateSavedSearch,
 } from '../utils/saved-searches.js';
 
-export function createSavedSearchElements({ sidebarAnchor = document.getElementById('tag-filter'), root = document.body } = {}) {
+export function createSavedSearchElements({
+  sidebarAnchor = document.getElementById('tag-filter'),
+  root = document.body,
+} = {}) {
   const section = document.createElement('section');
   section.className = 'saved-searches';
   section.setAttribute('aria-labelledby', 'saved-searches-title');
@@ -62,7 +65,8 @@ export class SavedSearchesView {
       this.els.sectionStatus.textContent = 'Saved views were refreshed from the restored vault.';
     });
     this.render();
-    if (normalized.rejected.length) this.els.sectionStatus.textContent = `${normalized.rejected.length} malformed saved view${normalized.rejected.length === 1 ? '' : 's'} ignored.`;
+    if (normalized.rejected.length)
+      this.els.sectionStatus.textContent = `${normalized.rejected.length} malformed saved view${normalized.rejected.length === 1 ? '' : 's'} ignored.`;
   }
 
   get open() {
@@ -99,7 +103,12 @@ export class SavedSearchesView {
 
   render() {
     this.els.list.innerHTML = this.records.length
-      ? this.records.map((record) => `<button type="button" data-saved-run="${escapeHtml(record.id)}" title="${escapeHtml(record.query || 'All active notes')}"><span aria-hidden="true">${escapeHtml(record.icon)}</span><span>${escapeHtml(record.name)}</span></button>`).join('')
+      ? this.records
+          .map(
+            (record) =>
+              `<button type="button" data-saved-run="${escapeHtml(record.id)}" title="${escapeHtml(record.query || 'All active notes')}"><span aria-hidden="true">${escapeHtml(record.icon)}</span><span>${escapeHtml(record.name)}</span></button>`,
+          )
+          .join('')
       : '<p class="muted">No saved views yet.</p>';
     this.#renderManage();
   }
@@ -132,13 +141,16 @@ export class SavedSearchesView {
     event.preventDefault();
     const data = new FormData(this.els.form);
     try {
-      this.#persist(createSavedSearch(this.records, {
-        name: data.get('name'),
-        icon: data.get('icon'),
-        query: data.get('query'),
-        sortMode: data.get('sortMode'),
-        activeTag: data.get('activeTag') || null,
-      }), `Saved “${data.get('name')}”.`);
+      this.#persist(
+        createSavedSearch(this.records, {
+          name: data.get('name'),
+          icon: data.get('icon'),
+          query: data.get('query'),
+          sortMode: data.get('sortMode'),
+          activeTag: data.get('activeTag') || null,
+        }),
+        `Saved “${data.get('name')}”.`,
+      );
       this.els.form.elements.name.value = '';
       this.els.form.elements.name.focus();
     } catch (error) {
@@ -149,7 +161,12 @@ export class SavedSearchesView {
   #renderManage() {
     if (!this.els.manageList) return;
     this.els.manageList.innerHTML = this.records.length
-      ? this.records.map((record, index) => `<div class="saved-search-row" role="listitem" data-id="${escapeHtml(record.id)}"><span aria-hidden="true">${escapeHtml(record.icon)}</span><label><span class="sr-only">Name</span><input data-saved-name value="${escapeHtml(record.name)}" maxlength="80"></label><code>${escapeHtml(record.query || 'All active notes')}</code><div class="saved-search-row__actions"><button type="button" class="btn btn--ghost" data-saved-run-manage>Run</button><button type="button" class="btn btn--ghost" data-saved-up aria-label="Move ${escapeHtml(record.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="btn btn--ghost" data-saved-down aria-label="Move ${escapeHtml(record.name)} down" ${index === this.records.length - 1 ? 'disabled' : ''}>↓</button><button type="button" class="btn btn--danger-ghost" data-saved-delete>Delete</button></div></div>`).join('')
+      ? this.records
+          .map(
+            (record, index) =>
+              `<div class="saved-search-row" role="listitem" data-id="${escapeHtml(record.id)}"><span aria-hidden="true">${escapeHtml(record.icon)}</span><label><span class="sr-only">Name</span><input data-saved-name value="${escapeHtml(record.name)}" maxlength="80"></label><code>${escapeHtml(record.query || 'All active notes')}</code><div class="saved-search-row__actions"><button type="button" class="btn btn--ghost" data-saved-run-manage>Run</button><button type="button" class="btn btn--ghost" data-saved-up aria-label="Move ${escapeHtml(record.name)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" class="btn btn--ghost" data-saved-down aria-label="Move ${escapeHtml(record.name)} down" ${index === this.records.length - 1 ? 'disabled' : ''}>↓</button><button type="button" class="btn btn--danger-ghost" data-saved-delete>Delete</button></div></div>`,
+          )
+          .join('')
       : '<p class="muted">No saved views yet.</p>';
   }
 
@@ -157,16 +174,22 @@ export class SavedSearchesView {
     const row = event.target.closest('.saved-search-row');
     if (!row) return;
     if (event.target.closest('[data-saved-run-manage]')) this.run(row.dataset.id);
-    else if (event.target.closest('[data-saved-up]')) this.#persist(moveSavedSearch(this.records, row.dataset.id, -1), 'Saved view moved up.');
-    else if (event.target.closest('[data-saved-down]')) this.#persist(moveSavedSearch(this.records, row.dataset.id, 1), 'Saved view moved down.');
-    else if (event.target.closest('[data-saved-delete]')) this.#persist(removeSavedSearch(this.records, row.dataset.id), 'Saved view deleted.');
+    else if (event.target.closest('[data-saved-up]'))
+      this.#persist(moveSavedSearch(this.records, row.dataset.id, -1), 'Saved view moved up.');
+    else if (event.target.closest('[data-saved-down]'))
+      this.#persist(moveSavedSearch(this.records, row.dataset.id, 1), 'Saved view moved down.');
+    else if (event.target.closest('[data-saved-delete]'))
+      this.#persist(removeSavedSearch(this.records, row.dataset.id), 'Saved view deleted.');
   }
 
   #onManageChange(event) {
     const row = event.target.closest('.saved-search-row');
     if (!row || !event.target.matches('[data-saved-name]')) return;
     try {
-      this.#persist(updateSavedSearch(this.records, row.dataset.id, { name: event.target.value }), 'Saved view renamed.');
+      this.#persist(
+        updateSavedSearch(this.records, row.dataset.id, { name: event.target.value }),
+        'Saved view renamed.',
+      );
     } catch (error) {
       this.els.status.textContent = error?.message || String(error);
       this.#renderManage();

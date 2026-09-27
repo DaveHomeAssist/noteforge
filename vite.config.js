@@ -29,26 +29,28 @@ const CSP = {
     "object-src 'none'",
     "base-uri 'self'",
   ].join('; '),
-  prod: (scriptHashes = []) => [
-    "default-src 'self'",
-    ["script-src 'self'", ...scriptHashes].join(' '),
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    "font-src 'self' data:",
-    "connect-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'none'",
-    // NB: `frame-ancestors` is intentionally omitted — it's ignored when a CSP
-    // is delivered via <meta>. Set it (or X-Frame-Options) as an HTTP response
-    // header at the hosting layer for clickjacking protection.
-  ].join('; '),
+  prod: (scriptHashes = []) =>
+    [
+      "default-src 'self'",
+      ["script-src 'self'", ...scriptHashes].join(' '),
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'none'",
+      // NB: `frame-ancestors` is intentionally omitted — it's ignored when a CSP
+      // is delivered via <meta>. Set it (or X-Frame-Options) as an HTTP response
+      // header at the hosting layer for clickjacking protection.
+    ].join('; '),
 };
 
 /** CSP source expressions for every bare inline `<script>` in the final HTML. */
 function inlineScriptHashes(html) {
-  return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((match) => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`);
+  return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+    (match) => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`,
+  );
 }
 
 // Stamp a per-build id into the copied dist/sw.js CACHE name. Because the built
@@ -63,13 +65,22 @@ function swVersionPlugin() {
       const dist = resolve('dist');
       const swPath = resolve(dist, 'sw.js');
       let sw;
-      try { sw = readFileSync(swPath, 'utf8'); } catch { return; } // no SW emitted
+      try {
+        sw = readFileSync(swPath, 'utf8');
+      } catch {
+        return;
+      } // no SW emitted
       let assets = [];
-      try { assets = readdirSync(resolve(dist, 'assets')).sort(); } catch { /* none */ }
+      try {
+        assets = readdirSync(resolve(dist, 'assets')).sort();
+      } catch {
+        /* none */
+      }
       const hash = createHash('sha256').update(assets.join('|')).digest('hex').slice(0, 12);
-      writeFileSync(swPath, sw
-        .replace(/__BUILD_HASH__/g, hash)
-        .replace('/* __PRECACHE_ASSETS__ */ []', JSON.stringify(assets)));
+      writeFileSync(
+        swPath,
+        sw.replace(/__BUILD_HASH__/g, hash).replace('/* __PRECACHE_ASSETS__ */ []', JSON.stringify(assets)),
+      );
     },
   };
 }
@@ -85,7 +96,10 @@ function cspPlugin() {
       order: 'post',
       handler(html, ctx) {
         const content = ctx.server ? CSP.dev : CSP.prod(inlineScriptHashes(html));
-        return html.replace(/<head[^>]*>/i, (head) => `${head}<meta http-equiv=Content-Security-Policy content="${content}">`);
+        return html.replace(
+          /<head[^>]*>/i,
+          (head) => `${head}<meta http-equiv=Content-Security-Policy content="${content}">`,
+        );
       },
     },
   };
@@ -119,7 +133,9 @@ function buildStampPlugin() {
     transformIndexHtml(html) {
       const commit = resolveBuildCommit();
       if (!/^[0-9a-f]{40}$/.test(commit)) {
-        throw new Error('noteforge-build-stamp: cannot resolve the source commit; build inside the git checkout or set NOTEFORGE_BUILD_SHA to the 40-character SHA');
+        throw new Error(
+          'noteforge-build-stamp: cannot resolve the source commit; build inside the git checkout or set NOTEFORGE_BUILD_SHA to the 40-character SHA',
+        );
       }
       return {
         html,

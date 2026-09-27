@@ -67,7 +67,10 @@ function idbRequest(db, mode, run) {
     const store = tx.objectStore(STORE);
     let result;
     const req = run(store);
-    if (req) req.onsuccess = () => { result = req.result; };
+    if (req)
+      req.onsuccess = () => {
+        result = req.result;
+      };
     tx.oncomplete = () => resolve(result);
     tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
   });
@@ -90,7 +93,9 @@ function idbLoadMany(db, keys) {
     const values = new Array(keys.length);
     keys.forEach((key, index) => {
       const req = store.get(key);
-      req.onsuccess = () => { values[index] = req.result; };
+      req.onsuccess = () => {
+        values[index] = req.result;
+      };
     });
     tx.oncomplete = () => resolve(values);
     tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
@@ -185,20 +190,26 @@ const lockDelay = (milliseconds) => new Promise((resolve) => setTimeout(resolve,
 
 async function withDurableLease(db, name, operation) {
   const key = `${LOCK_PREFIX}${name}`;
-  const owner = globalThis.crypto?.randomUUID?.()
-    ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const owner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const deadline = Date.now() + LOCK_WAIT_MS;
-  while (!await idbTryAcquireLease(db, key, owner)) {
+  while (!(await idbTryAcquireLease(db, key, owner))) {
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for the ${name} storage lock`);
     await lockDelay(25 + Math.floor(Math.random() * 25));
   }
 
   let leaseLost = false;
-  const renewal = setInterval(() => {
-    void idbRenewLease(db, key, owner)
-      .then((renewed) => { if (!renewed) leaseLost = true; })
-      .catch(() => { leaseLost = true; });
-  }, Math.floor(LEASE_MS / 3));
+  const renewal = setInterval(
+    () => {
+      void idbRenewLease(db, key, owner)
+        .then((renewed) => {
+          if (!renewed) leaseLost = true;
+        })
+        .catch(() => {
+          leaseLost = true;
+        });
+    },
+    Math.floor(LEASE_MS / 3),
+  );
   try {
     const result = await operation();
     if (leaseLost) throw new Error(`Lost the ${name} storage lock before the operation completed`);
@@ -248,12 +259,18 @@ function legacySaveMany(entries) {
     // Clear the attempted batch first: the complete previous batch fit before
     // this write, while restoring a large old value beside a large new value may not.
     for (const [key] of previous) {
-      try { localStorage.removeItem(NS + key); } catch { /* continue best-effort rollback */ }
+      try {
+        localStorage.removeItem(NS + key);
+      } catch {
+        /* continue best-effort rollback */
+      }
     }
     for (const [key, raw] of previous) {
       try {
         if (raw !== null) localStorage.setItem(NS + key, raw);
-      } catch { /* the caller receives false and keeps the in-memory vault */ }
+      } catch {
+        /* the caller receives false and keeps the in-memory vault */
+      }
     }
     console.error('[storage] failed to save localStorage batch; previous values restored:', err);
     return false;
@@ -263,7 +280,9 @@ function legacySaveMany(entries) {
 function legacyRemove(key) {
   try {
     localStorage.removeItem(NS + key);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function legacyKeys(prefix = '') {
@@ -336,7 +355,11 @@ export const storage = {
       // Not in IndexedDB yet — migrate a legacy localStorage entry if present.
       const legacy = legacyLoad(key, undefined);
       if (legacy !== undefined) {
-        try { await idbSet(db, key, legacy); } catch { /* best-effort */ }
+        try {
+          await idbSet(db, key, legacy);
+        } catch {
+          /* best-effort */
+        }
         return legacy;
       }
       return fallback;
@@ -367,7 +390,9 @@ export const storage = {
       try {
         await idbDel(db, key);
         lastBackendError = null;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     legacyRemove(key); // drop the legacy copy too so it can't resurrect on reload
   },
@@ -397,13 +422,19 @@ export const storage = {
     try {
       const values = await idbLoadMany(db, requested);
       lastBackendError = null;
-      return Promise.all(values.map(async (value, index) => {
-        if (value !== undefined) return value;
-        const legacy = legacyLoad(requested[index], undefined);
-        if (legacy === undefined) return fallback;
-        try { await idbSet(db, requested[index], legacy); } catch { /* best-effort lazy migration */ }
-        return legacy;
-      }));
+      return Promise.all(
+        values.map(async (value, index) => {
+          if (value !== undefined) return value;
+          const legacy = legacyLoad(requested[index], undefined);
+          if (legacy === undefined) return fallback;
+          try {
+            await idbSet(db, requested[index], legacy);
+          } catch {
+            /* best-effort lazy migration */
+          }
+          return legacy;
+        }),
+      );
     } catch (err) {
       lastBackendError = err;
       console.error('[storage] IndexedDB batch read failed; refusing stale localStorage fallback:', err);
@@ -460,7 +491,11 @@ export const storage = {
     if (typeof operation !== 'function') throw new TypeError('Storage lock operation must be a function');
     const lockName = `noteforge:${DB_NAME}:${String(name)}`;
     let locks = null;
-    try { locks = typeof navigator !== 'undefined' ? navigator.locks : null; } catch { /* unavailable */ }
+    try {
+      locks = typeof navigator !== 'undefined' ? navigator.locks : null;
+    } catch {
+      /* unavailable */
+    }
     if (typeof locks?.request === 'function') {
       return locks.request(lockName, { mode: 'exclusive' }, operation);
     }
@@ -473,7 +508,7 @@ export const storage = {
   async getStatus() {
     const db = await openDB();
     const fallbackAvailable = hasLocalStorage();
-    const backend = db ? 'indexeddb' : (fallbackAvailable ? 'localstorage' : 'unavailable');
+    const backend = db ? 'indexeddb' : fallbackAvailable ? 'localstorage' : 'unavailable';
     return {
       backend,
       ready: Boolean(db || fallbackAvailable),

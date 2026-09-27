@@ -56,8 +56,9 @@ export class KnowledgeIndex {
     }
     this.sourceBacklinks.set(note.id, links);
 
-    const mentions = (scanner || createMentionScanner(candidates))(note.content, { sourceId: note.id })
-      .map((mention) => Object.freeze({ ...mention, sourceId: note.id, sourceTitle: note.title }));
+    const mentions = (scanner || createMentionScanner(candidates))(note.content, { sourceId: note.id }).map((mention) =>
+      Object.freeze({ ...mention, sourceId: note.id, sourceTitle: note.title }),
+    );
     this.sourceMentions.set(note.id, mentions);
     for (const occurrence of mentions) {
       const targetEntries = this.mentions.get(occurrence.targetId) || [];

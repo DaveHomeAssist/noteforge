@@ -98,7 +98,10 @@ function previewLine(value, limit = 800) {
 }
 
 function previewContent(value) {
-  return String(value ?? '').split('\n').map((line) => previewLine(line)).join('\n');
+  return String(value ?? '')
+    .split('\n')
+    .map((line) => previewLine(line))
+    .join('\n');
 }
 
 function unavailableReason(health) {
@@ -141,9 +144,10 @@ export function buildHistoryDiff(currentText, selectedText) {
   for (let i = current.length - 1; i >= 0; i -= 1) {
     for (let j = selected.length - 1; j >= 0; j -= 1) {
       const at = i * widths + j;
-      matrix[at] = current[i] === selected[j]
-        ? matrix[(i + 1) * widths + j + 1] + 1
-        : Math.max(matrix[(i + 1) * widths + j], matrix[i * widths + j + 1]);
+      matrix[at] =
+        current[i] === selected[j]
+          ? matrix[(i + 1) * widths + j + 1] + 1
+          : Math.max(matrix[(i + 1) * widths + j], matrix[i * widths + j + 1]);
     }
   }
 
@@ -255,9 +259,8 @@ export class HistoryView {
     const token = ++this.loadToken;
     this.#setStatus('Loading revision history…');
     try {
-      const health = typeof this.service.getStatus === 'function'
-        ? await this.service.getStatus(this.noteId)
-        : { available: true };
+      const health =
+        typeof this.service.getStatus === 'function' ? await this.service.getStatus(this.noteId) : { available: true };
       if (token !== this.loadToken) return;
       if (health?.available === false) {
         this.revisions = [];
@@ -267,7 +270,9 @@ export class HistoryView {
 
       const revisions = await this.service.listRevisions(this.noteId);
       if (token !== this.loadToken) return;
-      this.revisions = asArray(revisions).slice().sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
+      this.revisions = asArray(revisions)
+        .slice()
+        .sort((a, b) => dateValue(b.createdAt) - dateValue(a.createdAt));
       this.#renderList();
       if (this.revisions.length === 0) {
         this.#renderEmpty();
@@ -284,23 +289,27 @@ export class HistoryView {
   }
 
   #initialFocus() {
-    return this.els.list.querySelector('.history-revision[aria-current="true"]')
-      || this.els.list.querySelector('.history-revision')
-      || this.els.overlay.querySelector('button[data-close], [data-close][tabindex]:not([tabindex="-1"])')
-      || this.modal?.panel;
+    return (
+      this.els.list.querySelector('.history-revision[aria-current="true"]') ||
+      this.els.list.querySelector('.history-revision') ||
+      this.els.overlay.querySelector('button[data-close], [data-close][tabindex]:not([tabindex="-1"])') ||
+      this.modal?.panel
+    );
   }
 
   #renderLoading() {
     this.revisions = [];
     this.els.list.innerHTML = '<p class="muted history-view__empty">Loading revisions…</p>';
-    this.els.preview.innerHTML = '<p class="muted history-view__empty">Select a revision to compare it with the current note.</p>';
+    this.els.preview.innerHTML =
+      '<p class="muted history-view__empty">Select a revision to compare it with the current note.</p>';
     if (this.els.diff) this.els.diff.innerHTML = '';
     this.#setActionsEnabled(false);
   }
 
   #renderUnavailable(reason) {
     const detail = reason || 'Revision history requires durable IndexedDB storage.';
-    this.els.list.innerHTML = '<p class="muted history-view__empty">Revision history is unavailable in this storage mode.</p>';
+    this.els.list.innerHTML =
+      '<p class="muted history-view__empty">Revision history is unavailable in this storage mode.</p>';
     this.els.preview.innerHTML = `<div class="history-view__notice" role="note"><strong>Browser-local recovery is unavailable.</strong><p>${escapeHtml(detail)}</p><p>Download a JSON backup for portable recovery.</p></div>`;
     if (this.els.diff) this.els.diff.innerHTML = '';
     this.#setActionsEnabled(false);
@@ -308,8 +317,10 @@ export class HistoryView {
   }
 
   #renderEmpty() {
-    this.els.list.innerHTML = '<p class="muted history-view__empty">No revisions have been captured for this note yet.</p>';
-    this.els.preview.innerHTML = '<div class="history-view__notice" role="note"><strong>No recovery points yet.</strong><p>A revision is captured after a durable save and before destructive changes.</p><p>Revision history is stored in this browser and is not a portable backup.</p></div>';
+    this.els.list.innerHTML =
+      '<p class="muted history-view__empty">No revisions have been captured for this note yet.</p>';
+    this.els.preview.innerHTML =
+      '<div class="history-view__notice" role="note"><strong>No recovery points yet.</strong><p>A revision is captured after a durable save and before destructive changes.</p><p>Revision history is stored in this browser and is not a portable backup.</p></div>';
     if (this.els.diff) this.els.diff.innerHTML = '';
     this.#setActionsEnabled(false);
     this.#setStatus('No revisions found.');
@@ -317,17 +328,19 @@ export class HistoryView {
 
   #renderList() {
     if (this.revisions.length === 0) return;
-    this.els.list.innerHTML = `<ol class="history-list">${this.revisions.map((revision) => {
-      const selected = revision.id === this.selectedId;
-      const label = reasonLabel(revision.reason);
-      const when = formatDateTime(revision.createdAt);
-      return `<li class="history-list__item">
+    this.els.list.innerHTML = `<ol class="history-list">${this.revisions
+      .map((revision) => {
+        const selected = revision.id === this.selectedId;
+        const label = reasonLabel(revision.reason);
+        const when = formatDateTime(revision.createdAt);
+        return `<li class="history-list__item">
         <button type="button" class="history-revision" data-revision-id="${escapeHtml(revision.id)}"${selected ? ' aria-current="true"' : ''}>
           <span class="history-revision__reason">${escapeHtml(label)}</span>
           <time class="history-revision__time" datetime="${escapeHtml(revision.createdAt || '')}">${escapeHtml(when)}</time>
         </button>
       </li>`;
-    }).join('')}</ol>`;
+      })
+      .join('')}</ol>`;
   }
 
   async #select(revisionId, { focus = false } = {}) {
@@ -354,9 +367,7 @@ export class HistoryView {
           typeof this.service.getRevision === 'function'
             ? this.service.getRevision({ noteId: this.noteId, revisionId })
             : revision,
-          typeof this.service.getCurrentNote === 'function'
-            ? this.service.getCurrentNote(this.noteId)
-            : null,
+          typeof this.service.getCurrentNote === 'function' ? this.service.getCurrentNote(this.noteId) : null,
         ]);
         details = { revision: fullRevision || revision, currentNote };
       }
@@ -409,13 +420,16 @@ export class HistoryView {
       this.els.diff.innerHTML = changed
         ? `<section class="history-diff" aria-label="Content comparison">
             <p class="history-diff__legend"><span>Current only</span><span>Selected revision</span></p>
-            <div class="history-diff__lines">${diff.map((line) => {
-              const label = line.type === 'remove' ? 'Current only' : line.type === 'add' ? 'Selected revision' : 'Unchanged';
-              const mark = line.type === 'remove' ? '−' : line.type === 'add' ? '+' : ' ';
-              return `<div class="history-diff__line history-diff__line--${line.type}">
+            <div class="history-diff__lines">${diff
+              .map((line) => {
+                const label =
+                  line.type === 'remove' ? 'Current only' : line.type === 'add' ? 'Selected revision' : 'Unchanged';
+                const mark = line.type === 'remove' ? '−' : line.type === 'add' ? '+' : ' ';
+                return `<div class="history-diff__line history-diff__line--${line.type}">
                 <span class="history-diff__kind">${label}</span><span class="history-diff__mark" aria-hidden="true">${mark}</span><code>${escapeHtml(previewLine(line.text || ' '))}</code>
               </div>`;
-            }).join('')}</div>
+              })
+              .join('')}</div>
           </section>`
         : '<p class="muted history-diff__empty">The selected revision content matches the current note.</p>';
     }
@@ -438,13 +452,14 @@ export class HistoryView {
     const buttons = [...this.els.list.querySelectorAll('.history-revision[data-revision-id]')];
     if (buttons.length === 0) return;
     const current = Math.max(0, buttons.indexOf(document.activeElement));
-    const next = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? buttons.length - 1
-        : event.key === 'ArrowDown'
-          ? Math.min(current + 1, buttons.length - 1)
-          : Math.max(current - 1, 0);
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? buttons.length - 1
+          : event.key === 'ArrowDown'
+            ? Math.min(current + 1, buttons.length - 1)
+            : Math.max(current - 1, 0);
     event.preventDefault();
     this.#select(buttons[next].dataset.revisionId, { focus: true });
   }

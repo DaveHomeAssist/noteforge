@@ -16,14 +16,27 @@ async function loadFixture() {
   return (await fetch(FIXTURE_URL)).json();
 }
 
-export const slugify = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'untitled';
+export const slugify = (text) =>
+  String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'untitled';
 
 /** @returns {Promise<Array<{ slug: string, title: string, source: string }>>} */
 export async function goldenSources() {
   const fixture = await loadFixture();
   const pad = (n) => String(n).padStart(2, '0');
-  const seed = sampleNotes.map((note, i) => ({ slug: `seed-${pad(i + 1)}-${slugify(note.title)}`, title: note.title, source: note.content }));
-  const v3 = (fixture.notes || []).map((note, i) => ({ slug: `v3-${pad(i + 1)}-${slugify(note.title)}`, title: note.title, source: note.content }));
+  const seed = sampleNotes.map((note, i) => ({
+    slug: `seed-${pad(i + 1)}-${slugify(note.title)}`,
+    title: note.title,
+    source: note.content,
+  }));
+  const v3 = (fixture.notes || []).map((note, i) => ({
+    slug: `v3-${pad(i + 1)}-${slugify(note.title)}`,
+    title: note.title,
+    source: note.content,
+  }));
   return [...seed, ...v3];
 }
 

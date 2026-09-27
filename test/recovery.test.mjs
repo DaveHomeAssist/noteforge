@@ -9,7 +9,9 @@ function memoryStorage() {
   const values = new Map();
   return {
     values,
-    async ready() { return true; },
+    async ready() {
+      return true;
+    },
     async getStatus() {
       return {
         backend: 'indexeddb',
@@ -19,12 +21,21 @@ function memoryStorage() {
         quota: { usage: 1000, quota: 10_000_000 },
       };
     },
-    async load(key, fallback = null) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
-    async save(key, value) { values.set(key, structuredClone(value)); return true; },
-    async remove(key) { values.delete(key); },
-    async keys(prefix = '') { return [...values.keys()].filter((key) => key.startsWith(prefix)).sort(); },
+    async load(key, fallback = null) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
+    async save(key, value) {
+      values.set(key, structuredClone(value));
+      return true;
+    },
+    async remove(key) {
+      values.delete(key);
+    },
+    async keys(prefix = '') {
+      return [...values.keys()].filter((key) => key.startsWith(prefix)).sort();
+    },
     async loadMany(keys, fallback = null) {
-      return keys.map((key) => values.has(key) ? structuredClone(values.get(key)) : fallback);
+      return keys.map((key) => (values.has(key) ? structuredClone(values.get(key)) : fallback));
     },
     async saveMany(entries) {
       const next = new Map(values);
@@ -33,7 +44,10 @@ function memoryStorage() {
       next.forEach((value, key) => values.set(key, value));
       return true;
     },
-    async removeMany(keys) { keys.forEach((key) => values.delete(key)); return true; },
+    async removeMany(keys) {
+      keys.forEach((key) => values.delete(key));
+      return true;
+    },
   };
 }
 
@@ -60,7 +74,9 @@ function harness() {
     revisionStore,
     storage,
     downloads,
-    advance(hours = 1) { now = new Date(now.getTime() + hours * 60 * 60 * 1000); },
+    advance(hours = 1) {
+      now = new Date(now.getTime() + hours * 60 * 60 * 1000);
+    },
   };
 }
 
@@ -132,7 +148,10 @@ test('rolling local snapshots preserve notes, Trash, config, and are period-idem
   assert.equal(first.weekly.snapshot.id, second.weekly.snapshot.id);
   assert.equal((await h.recovery.listLocalSnapshots()).length, 2);
   const materialized = await h.revisionStore.materializeSnapshot(first.daily.snapshot.id);
-  assert.deepEqual(materialized.notes.map((note) => note.id), [live.id, trashed.id]);
+  assert.deepEqual(
+    materialized.notes.map((note) => note.id),
+    [live.id, trashed.id],
+  );
   assert.equal(materialized.notes.find((note) => note.id === trashed.id).deletedAt !== null, true);
   assert.deepEqual(materialized.config.unknownSetting, { kept: true });
   assert.equal(materialized.vaultSchemaVersion, CURRENT_SCHEMA_VERSION);
@@ -179,8 +198,10 @@ test('portable backup verifies, previews exact replacement, downloads safety, an
   assert.equal(result.restored, true);
   assert.equal(h.db.getNote('keep').content, 'portable');
   assert.deepEqual(h.db.getNote('keep').toJSON().futureMetadata, { kept: true, nested: { order: ['z', 'a'] } });
-  assert.deepEqual(h.storage.values.get('notes').find((note) => note.id === 'keep').futureMetadata,
-    { kept: true, nested: { order: ['z', 'a'] } });
+  assert.deepEqual(h.storage.values.get('notes').find((note) => note.id === 'keep').futureMetadata, {
+    kept: true,
+    nested: { order: ['z', 'a'] },
+  });
   assert.equal(h.db.getNote('remove-on-restore'), null);
   assert.equal(h.db.getTrash()[0].id, 'trashed');
   assert.equal(h.db.config.custom, 'preserved');
@@ -213,7 +234,11 @@ test('permanent purge removes single-note and empty-Trash revision history after
   await h.db.flush();
   assert.equal((await h.revisionStore.list(first.id)).length, 0);
   assert.equal((await h.revisionStore.list(second.id)).length, 1);
-  assert.equal((await h.revisionStore.listSnapshots()).length, 0, 'snapshots containing a permanently purged note are removed');
+  assert.equal(
+    (await h.revisionStore.listSnapshots()).length,
+    0,
+    'snapshots containing a permanently purged note are removed',
+  );
 
   assert.equal(h.db.emptyTrash(), 1);
   await h.db.flush();
@@ -234,7 +259,9 @@ test('startup reconciliation finishes interrupted permanent-purge cleanup', asyn
     kind: 'daily',
     createdAt: '2026-08-19T12:00:00.000Z',
   });
-  h.db.onNotesPurged = async () => { throw new Error('simulated cleanup interruption'); };
+  h.db.onNotesPurged = async () => {
+    throw new Error('simulated cleanup interruption');
+  };
   h.db.deleteNote(note.id);
   await h.db.flush();
   h.db.purgeNote(note.id);
