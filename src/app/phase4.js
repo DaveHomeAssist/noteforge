@@ -6,11 +6,17 @@ import { templateById } from './templates.js';
 // exact even when an earlier tilde fence contains task-looking text.
 export function editorTaskOccurrence(content, reference) {
   if (!Number.isInteger(reference?.sourceStart)) return Number(reference?.occurrence) || 0;
-  const lines = String(content ?? '').slice(0, reference.sourceStart).replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(content ?? '')
+    .slice(0, reference.sourceStart)
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
   let inBacktickFence = false;
   let occurrence = 0;
   for (const line of lines) {
-    if (/^```/.test(line)) { inBacktickFence = !inBacktickFence; continue; }
+    if (/^```/.test(line)) {
+      inBacktickFence = !inBacktickFence;
+      continue;
+    }
     if (!inBacktickFence && /^\s*[-*]\s+\[[ xX]\]\s+/.test(line)) occurrence += 1;
   }
   return occurrence;
@@ -41,7 +47,7 @@ export class Phase4Controller {
       import('../utils/local-date.js'),
     ]);
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     const dateKey = date || localDateKey();
     const resolution = resolveDailyNote([...this.db.notes.values()], dateKey);
     try {
@@ -62,7 +68,7 @@ export class Phase4Controller {
           return null;
         }
         const changed = archived ? this.db.unarchiveNote(resolution.note.id) : this.db.restoreNote(resolution.note.id);
-        if (!changed || !await this.db.flushCurrentWrites()) {
+        if (!changed || !(await this.db.flushCurrentWrites())) {
           this.showStorageError();
           return null;
         }
@@ -71,7 +77,7 @@ export class Phase4Controller {
         return this.db.getNote(resolution.note.id);
       }
       const note = this.db.createNote(templateById('daily').build({ date: dateKey }));
-      if (!await this.db.flushCurrentWrites()) {
+      if (!(await this.db.flushCurrentWrites())) {
         this.showStorageError();
         return null;
       }
@@ -90,15 +96,20 @@ export class Phase4Controller {
     this.quickCaptureReady = Promise.all([
       import('../components/quick-capture-view.js'),
       import('../core/capture-service.js'),
-    ]).then(([{ QuickCaptureView, createQuickCaptureElements }, { CaptureService }]) => {
-      this.quickCapture = new QuickCaptureView(createQuickCaptureElements(), this.db, new CaptureService(this.db), {
-        onSaved: ({ note }) => {
-          this.openNote(note.id, { discardPending: true });
-          this.announce(`Quick Capture saved to ${note.title}.`);
-        },
+    ])
+      .then(([{ QuickCaptureView, createQuickCaptureElements }, { CaptureService }]) => {
+        this.quickCapture = new QuickCaptureView(createQuickCaptureElements(), this.db, new CaptureService(this.db), {
+          onSaved: ({ note }) => {
+            this.openNote(note.id, { discardPending: true });
+            this.announce(`Quick Capture saved to ${note.title}.`);
+          },
+        });
+        return this.quickCapture;
+      })
+      .catch((error) => {
+        this.quickCaptureReady = null;
+        throw error;
       });
-      return this.quickCapture;
-    }).catch((error) => { this.quickCaptureReady = null; throw error; });
     return this.quickCaptureReady;
   }
 
@@ -108,28 +119,38 @@ export class Phase4Controller {
     this.taskDashboardReady = Promise.all([
       import('../components/task-dashboard-view.js'),
       import('../core/task-service.js'),
-    ]).then(([{ TaskDashboardView, createTaskDashboardElements }, { TaskService }]) => {
-      this.taskDashboard = new TaskDashboardView(createTaskDashboardElements(), this.db, new TaskService(this.db), {
-        onOpen: (task) => this.#openTask(task),
+    ])
+      .then(([{ TaskDashboardView, createTaskDashboardElements }, { TaskService }]) => {
+        this.taskDashboard = new TaskDashboardView(createTaskDashboardElements(), this.db, new TaskService(this.db), {
+          onOpen: (task) => this.#openTask(task),
+        });
+        return this.taskDashboard;
+      })
+      .catch((error) => {
+        this.taskDashboardReady = null;
+        throw error;
       });
-      return this.taskDashboard;
-    }).catch((error) => { this.taskDashboardReady = null; throw error; });
     return this.taskDashboardReady;
   }
 
   #ensureCalendar() {
     if (this.calendar) return Promise.resolve(this.calendar);
     if (this.calendarReady) return this.calendarReady;
-    this.calendarReady = import('../components/calendar-view.js').then(({ CalendarView, createCalendarElements }) => {
-      this.calendar = new CalendarView(createCalendarElements(), this.db, {
-        onOpenItem: (item) => {
-          if (item.task) this.#openTask(item.task);
-          else this.openNote(item.noteId);
-        },
-        onOpenDaily: (day) => void this.openDailyNote(day),
+    this.calendarReady = import('../components/calendar-view.js')
+      .then(({ CalendarView, createCalendarElements }) => {
+        this.calendar = new CalendarView(createCalendarElements(), this.db, {
+          onOpenItem: (item) => {
+            if (item.task) this.#openTask(item.task);
+            else this.openNote(item.noteId);
+          },
+          onOpenDaily: (day) => void this.openDailyNote(day),
+        });
+        return this.calendar;
+      })
+      .catch((error) => {
+        this.calendarReady = null;
+        throw error;
       });
-      return this.calendar;
-    }).catch((error) => { this.calendarReady = null; throw error; });
     return this.calendarReady;
   }
 
@@ -141,21 +162,21 @@ export class Phase4Controller {
   async showQuickCapture(options = {}) {
     const view = await this.#ensureQuickCapture();
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show(options);
   }
 
   async showTaskDashboard() {
     const view = await this.#ensureTaskDashboard();
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show();
   }
 
   async showCalendar(options = {}) {
     const view = await this.#ensureCalendar();
     this.editor?.flushPending();
-    if (!await this.db.flushCurrentWrites()) return this.showStorageError();
+    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show(options);
   }
 

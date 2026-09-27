@@ -10,9 +10,10 @@ export function makeSchemaV3LargeFixture() {
       title: `Large Note ${suffix}`,
       content: `# Large Note ${suffix}\n\nDeterministic performance fixture ${index}.\n\nSee [[${previous}|previous note]].\n\n- [ ] Indexed task ${index}${index === 0 ? '\n\n![One pixel](data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=)' : ''}`,
       tags: ['large', `bucket-${index % 10}`],
-      banner: index % 50 === 0
-        ? { type: 'gradient', value: 'linear-gradient(135deg, #3b6ef6, #8b5cf6)', position: index % 101 }
-        : null,
+      banner:
+        index % 50 === 0
+          ? { type: 'gradient', value: 'linear-gradient(135deg, #3b6ef6, #8b5cf6)', position: index % 101 }
+          : null,
       createdAt: new Date(Date.UTC(2026, 0, 1, 0, index % 60, index % 60)).toISOString(),
       updatedAt: new Date(Date.UTC(2026, 7, 1 + (index % 18), 12, index % 60, index % 60)).toISOString(),
       deletedAt: index > 0 && index % 20 === 0 ? '2026-08-19T00:00:00.000Z' : null,

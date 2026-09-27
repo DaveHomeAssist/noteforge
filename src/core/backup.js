@@ -85,14 +85,11 @@ function assertSchemaVersion(schemaVersion) {
   if (schemaVersion > CURRENT_SCHEMA_VERSION) {
     reject(
       'FUTURE_SCHEMA',
-      `This backup uses schema ${schemaVersion}; this NoteForge build supports through schema ${CURRENT_SCHEMA_VERSION}.`
+      `This backup uses schema ${schemaVersion}; this NoteForge build supports through schema ${CURRENT_SCHEMA_VERSION}.`,
     );
   }
   if (schemaVersion < MIN_BACKUP_SCHEMA_VERSION) {
-    reject(
-      'UNSUPPORTED_SCHEMA',
-      `Portable backups require schema ${MIN_BACKUP_SCHEMA_VERSION} or newer.`
-    );
+    reject('UNSUPPORTED_SCHEMA', `Portable backups require schema ${MIN_BACKUP_SCHEMA_VERSION} or newer.`);
   }
 }
 
@@ -199,9 +196,10 @@ function validateEnvelope(envelope) {
   if (!isRecord(envelope)) reject('INVALID_BACKUP', 'Backup must be a JSON object.');
   if (envelope.format !== BACKUP_FORMAT) reject('INVALID_FORMAT', 'File is not a NoteForge portable backup.');
   if (envelope.formatVersion !== BACKUP_FORMAT_VERSION) {
-    const code = Number.isInteger(envelope.formatVersion) && envelope.formatVersion > BACKUP_FORMAT_VERSION
-      ? 'FUTURE_FORMAT'
-      : 'INVALID_FORMAT_VERSION';
+    const code =
+      Number.isInteger(envelope.formatVersion) && envelope.formatVersion > BACKUP_FORMAT_VERSION
+        ? 'FUTURE_FORMAT'
+        : 'INVALID_FORMAT_VERSION';
     reject(code, `Unsupported NoteForge backup format version: ${String(envelope.formatVersion)}.`);
   }
   assertIsoTimestamp(envelope.createdAt, 'createdAt');
@@ -240,7 +238,7 @@ async function sha256Hex(text, cryptoProvider = globalThis.crypto) {
 /** Create a complete portable backup without mutating or retaining references to the supplied state. */
 export async function createBackup(
   { schemaVersion = CURRENT_SCHEMA_VERSION, notes, config },
-  { createdAt = new Date().toISOString(), cryptoProvider = globalThis.crypto } = {}
+  { createdAt = new Date().toISOString(), cryptoProvider = globalThis.crypto } = {},
 ) {
   const state = detachedCanonicalCopy({ schemaVersion, notes, config });
   validateVaultState(state);
@@ -283,9 +281,7 @@ export function parseBackup(text) {
 
 /** Verify an envelope or serialized backup and return a detached, trusted envelope. */
 export async function verifyBackup(input, { cryptoProvider = globalThis.crypto } = {}) {
-  const backup = typeof input === 'string'
-    ? parseBackup(input)
-    : detachedCanonicalCopy(input);
+  const backup = typeof input === 'string' ? parseBackup(input) : detachedCanonicalCopy(input);
   if (typeof input !== 'string') validateEnvelope(backup);
   const actualDigest = await sha256Hex(canonicalStringify(withoutIntegrity(backup)), cryptoProvider);
   if (actualDigest !== backup.integrity.digest) {

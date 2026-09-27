@@ -25,7 +25,10 @@ function rawNote(index) {
   const image = index % 97 === 0 ? '\n\n![pixel](data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==)' : '';
   const note = {
     id,
-    title: index % 31 === 0 ? `${2026 + (index % 4)}-08-${String((index % 28) + 1).padStart(2, '0')}` : `Random note ${index}`,
+    title:
+      index % 31 === 0
+        ? `${2026 + (index % 4)}-08-${String((index % 28) + 1).padStart(2, '0')}`
+        : `Random note ${index}`,
     content: `---\nstatus: ${index % 2 ? 'open' : 'done'}\npriority: ${index % 5}\n---\n# Random ${index}\n\n- [ ] Task ${index} @due(2026-08-${String((index % 28) + 1).padStart(2, '0')})\n\n[[Random note ${(index + 1) % 1_000}|next]]${image}`,
     tags: [`tag-${index % 12}`],
     banner: index % 101 === 0 ? { type: 'gradient', value: 'linear-gradient(90deg, #123, #456)', position: 50 } : null,
@@ -42,23 +45,46 @@ function rawNote(index) {
 }
 
 class MemoryStorage {
-  constructor(initial = {}) { this.data = new Map(Object.entries(structuredClone(initial))); }
-  async ready() { return true; }
-  async getStatus() {
-    return { backend: 'indexeddb', capabilities: { revisionHistory: true, localSnapshots: true, atomicBatch: true }, quota: null };
+  constructor(initial = {}) {
+    this.data = new Map(Object.entries(structuredClone(initial)));
   }
-  async load(key, fallback = null) { return this.data.has(key) ? structuredClone(this.data.get(key)) : fallback; }
-  async loadMany(keys, fallback = null) { return [...keys].map((key) => this.data.has(key) ? structuredClone(this.data.get(key)) : fallback); }
-  async keys(prefix = '') { return [...this.data.keys()].filter((key) => key.startsWith(prefix)).sort(); }
-  async save(key, value) { this.data.set(key, structuredClone(value)); return true; }
+  async ready() {
+    return true;
+  }
+  async getStatus() {
+    return {
+      backend: 'indexeddb',
+      capabilities: { revisionHistory: true, localSnapshots: true, atomicBatch: true },
+      quota: null,
+    };
+  }
+  async load(key, fallback = null) {
+    return this.data.has(key) ? structuredClone(this.data.get(key)) : fallback;
+  }
+  async loadMany(keys, fallback = null) {
+    return [...keys].map((key) => (this.data.has(key) ? structuredClone(this.data.get(key)) : fallback));
+  }
+  async keys(prefix = '') {
+    return [...this.data.keys()].filter((key) => key.startsWith(prefix)).sort();
+  }
+  async save(key, value) {
+    this.data.set(key, structuredClone(value));
+    return true;
+  }
   async saveMany(entries) {
     const next = new Map(this.data);
     for (const [key, value] of entries instanceof Map ? entries : entries) next.set(key, structuredClone(value));
     this.data = next;
     return true;
   }
-  async removeMany(keys) { keys.forEach((key) => this.data.delete(key)); return true; }
-  async remove(key) { this.data.delete(key); return true; }
+  async removeMany(keys) {
+    keys.forEach((key) => this.data.delete(key));
+    return true;
+  }
+  async remove(key) {
+    this.data.delete(key);
+    return true;
+  }
 }
 
 function percentile(values, ratio) {
@@ -77,7 +103,9 @@ async function waitFor(predicate, timeout = 1_000) {
 test('randomized 1,000-note schema-v3 chain preserves every authoritative byte and additive field', async () => {
   const notes = Array.from({ length: 1_000 }, (_, index) => rawNote(index));
   const config = {
-    themeMode: 'dark', editorWidth: 'wide', collapsedNoteIds: ['random-0001'],
+    themeMode: 'dark',
+    editorWidth: 'wide',
+    collapsedNoteIds: ['random-0001'],
     custom: { nested: ['keep', { exactly: true }] },
   };
   const input = { notes, config };
@@ -95,13 +123,19 @@ test('randomized 1,000-note schema-v3 chain preserves every authoritative byte a
   });
   assert.deepEqual(migration.data.config.custom, config.custom);
 
-  const envelope = await createBackup({
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    notes: migration.data.notes,
-    config: migration.data.config,
-  }, { createdAt: timestamp });
+  const envelope = await createBackup(
+    {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      notes: migration.data.notes,
+      config: migration.data.config,
+    },
+    { createdAt: timestamp },
+  );
   const verified = await verifyBackup(envelope);
-  const preview = await createRestorePreview({ schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} }, verified);
+  const preview = await createRestorePreview(
+    { schemaVersion: CURRENT_SCHEMA_VERSION, notes: [], config: {} },
+    verified,
+  );
   assert.deepEqual(preview.restoreState.notes, migration.data.notes);
   assert.deepEqual(preview.restoreState.config, migration.data.config);
   assert.equal(preview.summary.liveNoteCount + preview.summary.trashedNoteCount, 1_000);
@@ -117,7 +151,12 @@ test('schema migration leaves independently stored revision content materializab
   const captured = await revisions.capture(original, { reason: 'manual', force: true });
   assert.equal(captured.captured, true);
 
-  const backend = new MemoryStorage({ notes: [original], config: { themeMode: 'dark' }, schemaVersion: 3, persistenceStatus: {} });
+  const backend = new MemoryStorage({
+    notes: [original],
+    config: { themeMode: 'dark' },
+    schemaVersion: 3,
+    persistenceStatus: {},
+  });
   const db = await new Database({ storageBackend: backend }).init();
   await db.flush();
   const materialized = await revisions.materialize(captured.revision.id);
@@ -128,18 +167,26 @@ test('schema migration leaves independently stored revision content materializab
 });
 
 test('per-note derived index reparses only invalidated sources and repairs lifecycle removal', () => {
-  const notes = new Map(Array.from({ length: 1_000 }, (_, index) => {
-    const note = { ...rawNote(index), isTrashed: false, isArchived: false };
-    return [note.id, note];
-  }));
+  const notes = new Map(
+    Array.from({ length: 1_000 }, (_, index) => {
+      const note = { ...rawNote(index), isTrashed: false, isArchived: false };
+      return [note.id, note];
+    }),
+  );
   const listeners = new Set();
   const db = {
     getAllNotes: () => [...notes.values()],
     getNote: (id) => notes.get(id) || null,
-    subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
   let derived = 0;
-  const index = new NoteDerivedIndex(db, (note) => { derived += 1; return [{ id: note.id, content: note.content }]; });
+  const index = new NoteDerivedIndex(db, (note) => {
+    derived += 1;
+    return [{ id: note.id, content: note.content }];
+  });
   assert.equal(index.list().length, 1_000);
   assert.equal(derived, 1_000);
   const untouched = index.records.get('random-0500');
@@ -150,7 +197,10 @@ test('per-note derived index reparses only invalidated sources and repairs lifec
   assert.equal(index.records.get('random-0500'), untouched);
   notes.delete('random-0001');
   listeners.forEach((listener) => listener(db, ['random-0001']));
-  assert.equal(index.list().some((entry) => entry.id === 'random-0001'), false);
+  assert.equal(
+    index.list().some((entry) => entry.id === 'random-0001'),
+    false,
+  );
   assert.equal(derived, 1_001);
   index.destroy();
 });
@@ -166,7 +216,10 @@ test('full-vault replacement resets derived indexes and removes stale records', 
   });
   const db = await new Database({ storageBackend: storage }).init();
   const index = new NoteDerivedIndex(db, (note) => [{ id: note.id }]);
-  assert.deepEqual(index.list().map((entry) => entry.id), [first.id, second.id]);
+  assert.deepEqual(
+    index.list().map((entry) => entry.id),
+    [first.id, second.id],
+  );
 
   const restored = await db.replaceVault({
     notes: [first],
@@ -174,15 +227,28 @@ test('full-vault replacement resets derived indexes and removes stale records', 
     schemaVersion: CURRENT_SCHEMA_VERSION,
   });
   assert.equal(restored, true);
-  assert.deepEqual(index.list().map((entry) => entry.id), [first.id]);
+  assert.deepEqual(
+    index.list().map((entry) => entry.id),
+    [first.id],
+  );
   index.destroy();
 });
 
 test('task, calendar, and property updates stay incremental across a 1,000-note vault', async () => {
-  const notes = Array.from({ length: 1_000 }, (_, index) => ({ ...rawNote(index), aliases: [], deletedAt: null, archivedAt: null }));
-  const storage = new MemoryStorage({ notes, config: {
-    frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] },
-  }, schemaVersion: CURRENT_SCHEMA_VERSION, persistenceStatus: {} });
+  const notes = Array.from({ length: 1_000 }, (_, index) => ({
+    ...rawNote(index),
+    aliases: [],
+    deletedAt: null,
+    archivedAt: null,
+  }));
+  const storage = new MemoryStorage({
+    notes,
+    config: {
+      frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] },
+    },
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    persistenceStatus: {},
+  });
   const db = await new Database({ storageBackend: storage }).init();
   const tasks = new TaskService(db);
   const calendar = new NoteDerivedIndex(db, (note) => buildCalendarItems([note]));
@@ -191,11 +257,18 @@ test('task, calendar, and property updates stay incremental across a 1,000-note 
   const untouchedTask = tasks.index.records.get('random-0500');
   const untouchedCalendar = calendar.records.get('random-0500');
 
-  const properties = new Phase5Controller({ db, editor: null, ensureRecovery: async () => {}, refreshSearch: () => {} });
+  const properties = new Phase5Controller({
+    db,
+    editor: null,
+    ensureRecovery: async () => {},
+    refreshSearch: () => {},
+  });
   await properties.ready;
   const untouchedProperty = db.getNote('random-0500')._propertySearchIndex;
   const edited = db.getNote('random-0001');
-  edited.update({ content: edited.content.replace('status: open', 'status: reviewed').replace('Task 1', 'Task 1 updated') });
+  edited.update({
+    content: edited.content.replace('status: open', 'status: reviewed').replace('Task 1', 'Task 1 updated'),
+  });
   const started = performance.now();
   db.saveNote(edited, { captureRevision: false });
   const updatedTasks = tasks.list();
@@ -217,13 +290,32 @@ test('task, calendar, and property updates stay incremental across a 1,000-note 
 test('search p95 stays below 150 ms across twenty representative 1,000-note queries', () => {
   const notes = Array.from({ length: 1_000 }, (_, index) => ({
     ...rawNote(index),
-    _propertySearchIndex: new Map([['status', [index % 2 ? 'open' : 'done']], ['priority', [String(index % 5)]]]),
+    _propertySearchIndex: new Map([
+      ['status', [index % 2 ? 'open' : 'done']],
+      ['priority', [String(index % 5)]],
+    ]),
   }));
   const queries = [
-    'Random note 99', 'Task 500', 'tag:tag-3', 'in:title Random 750', 'has:banner',
-    'prop:status=open', 'property:priority=3', 'is:pinned', 'next', 'data:image',
-    'Random note 1', 'Task 12', 'tag:tag-9', 'in:title 2027', 'prop:status=done',
-    'property:priority=4', 'Legacy', 'due(2026-08-20)', 'Random 999', 'missing phrase',
+    'Random note 99',
+    'Task 500',
+    'tag:tag-3',
+    'in:title Random 750',
+    'has:banner',
+    'prop:status=open',
+    'property:priority=3',
+    'is:pinned',
+    'next',
+    'data:image',
+    'Random note 1',
+    'Task 12',
+    'tag:tag-9',
+    'in:title 2027',
+    'prop:status=done',
+    'property:priority=4',
+    'Legacy',
+    'due(2026-08-20)',
+    'Random 999',
+    'missing phrase',
   ];
   queries.forEach((query) => rankNotes(query, notes));
   const timings = queries.map((query) => {
@@ -236,16 +328,26 @@ test('search p95 stays below 150 ms across twenty representative 1,000-note quer
 });
 
 test('maximum workspace restore is bounded and repairs duplicate, missing, Archive, and Trash IDs', () => {
-  const notes = Array.from({ length: 25 }, (_, index) => ({ ...rawNote(index), deletedAt: index === 23 ? timestamp : null }));
+  const notes = Array.from({ length: 25 }, (_, index) => ({
+    ...rawNote(index),
+    deletedAt: index === 23 ? timestamp : null,
+  }));
   const started = performance.now();
-  const state = normalizeWorkspaceState({
-    activePane: 'secondary',
-    panes: {
-      primary: { tabs: notes.slice(0, 15).map((note) => note.id), activeNoteId: notes[0].id, scrollTop: 40 },
-      secondary: { tabs: [notes[0].id, ...notes.slice(15).map((note) => note.id), 'missing'], activeNoteId: notes[20].id, scrollTop: 80 },
+  const state = normalizeWorkspaceState(
+    {
+      activePane: 'secondary',
+      panes: {
+        primary: { tabs: notes.slice(0, 15).map((note) => note.id), activeNoteId: notes[0].id, scrollTop: 40 },
+        secondary: {
+          tabs: [notes[0].id, ...notes.slice(15).map((note) => note.id), 'missing'],
+          activeNoteId: notes[20].id,
+          scrollTop: 80,
+        },
+      },
+      split: { enabled: true, ratio: 0.6 },
     },
-    split: { enabled: true, ratio: 0.6 },
-  }, notes);
+    notes,
+  );
   const elapsed = performance.now() - started;
   const all = [...state.panes.primary.tabs, ...state.panes.secondary.tabs];
   assert.ok(all.length <= WORKSPACE_MAX_TABS);
@@ -266,7 +368,10 @@ test('adversarial YAML, URL, path, CSP, service-worker, and prototype boundaries
   for (const path of ['../escape.md', '/absolute.md', 'C:\\escape.md', 'safe//escape.md']) {
     assert.throws(() => normalizeVaultPath(path));
   }
-  assert.throws(() => consumeClipperIntake(`https://app.test/?capture=clipper&selection=${'x'.repeat(CLIPPER_MAX_INTAKE_URL)}`), /too large/);
+  assert.throws(
+    () => consumeClipperIntake(`https://app.test/?capture=clipper&selection=${'x'.repeat(CLIPPER_MAX_INTAKE_URL)}`),
+    /too large/,
+  );
 
   const sw = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   const vite = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');

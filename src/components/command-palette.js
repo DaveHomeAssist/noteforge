@@ -98,8 +98,11 @@ export class CommandPalette {
     const cmds = this.getCommands();
     if (!q) {
       const persistedRecent = this.getRecentNotes();
-      const recent = (persistedRecent.length ? persistedRecent : [...notes]
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
+      const recent = (
+        persistedRecent.length
+          ? persistedRecent
+          : [...notes].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      )
         .slice(0, RECENT_LIMIT)
         .map((n) => this.#noteItem(n, [], 'Recent note'));
       return recent.concat(cmds.map((c) => this.#cmdItem(c, [])));
@@ -197,7 +200,7 @@ export class CommandPalette {
           <span class="palette__icon">${escapeHtml(it.icon)}</span>
           <span class="palette__label">${it.labelHtml}</span>
           <span class="palette__sub">${escapeHtml(it.sub)}</span>
-        </button>`
+        </button>`,
       )
       .join('');
     this.els.input.setAttribute('aria-activedescendant', `palette-opt-${this.active}`);
@@ -217,11 +220,22 @@ export class CommandPalette {
   }
 
   #onKey(e) {
-    if (e.key === 'ArrowDown') { e.preventDefault(); this.#setActive(Math.min(this.active + 1, this.items.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); this.#setActive(Math.max(this.active - 1, 0)); }
-    else if (e.key === 'Home') { e.preventDefault(); this.#setActive(0); }
-    else if (e.key === 'End') { e.preventDefault(); this.#setActive(this.items.length - 1); }
-    else if (e.key === 'Enter') { e.preventDefault(); this.#activate(this.active); }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.#setActive(Math.min(this.active + 1, this.items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.#setActive(Math.max(this.active - 1, 0));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      this.#setActive(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      this.#setActive(this.items.length - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      this.#activate(this.active);
+    }
   }
 
   #activate(i) {

@@ -10,13 +10,24 @@ function cleanRecord(input) {
   const icon = typeof input.icon === 'string' ? [...input.icon.trim()].slice(0, 4).join('') : '';
   const query = typeof input.query === 'string' ? input.query.trim().slice(0, 500) : null;
   const sortMode = SAVED_SEARCH_SORTS.includes(input.sortMode) ? input.sortMode : null;
-  const activeTag = input.activeTag === null || input.activeTag === undefined
-    ? null
-    : typeof input.activeTag === 'string'
-      ? input.activeTag.trim().slice(0, 80) || null
-      : false;
+  const activeTag =
+    input.activeTag === null || input.activeTag === undefined
+      ? null
+      : typeof input.activeTag === 'string'
+        ? input.activeTag.trim().slice(0, 80) || null
+        : false;
   const order = Number.isSafeInteger(input.order) && input.order >= 0 ? input.order : null;
-  if (!id || id.length > 100 || !name || name.length > 80 || query === null || !sortMode || activeTag === false || order === null) return null;
+  if (
+    !id ||
+    id.length > 100 ||
+    !name ||
+    name.length > 80 ||
+    query === null ||
+    !sortMode ||
+    activeTag === false ||
+    order === null
+  )
+    return null;
   return { id, name, icon: icon || '🔎', query, sortMode, activeTag, order };
 }
 
@@ -51,7 +62,8 @@ export function createSavedSearch(records, input, { createId = uid } = {}) {
     activeTag: input?.activeTag ?? null,
     order: current.length,
   });
-  if (!candidate || current.some((record) => record.id === candidate.id)) throw new Error('The saved search is malformed or has a duplicate ID.');
+  if (!candidate || current.some((record) => record.id === candidate.id))
+    throw new Error('The saved search is malformed or has a duplicate ID.');
   return [...current, candidate];
 }
 
@@ -61,7 +73,7 @@ export function updateSavedSearch(records, id, patch) {
   if (index < 0) throw new Error('The saved search no longer exists.');
   const next = cleanRecord({ ...current[index], ...patch, id: current[index].id, order: current[index].order });
   if (!next) throw new Error('The saved search update is malformed.');
-  return current.map((record, position) => position === index ? next : record);
+  return current.map((record, position) => (position === index ? next : record));
 }
 
 export function moveSavedSearch(records, id, direction) {
@@ -75,7 +87,7 @@ export function moveSavedSearch(records, id, direction) {
 }
 
 export function removeSavedSearch(records, id) {
-  return normalizeSavedSearches(records).records
-    .filter((record) => record.id !== id)
+  return normalizeSavedSearches(records)
+    .records.filter((record) => record.id !== id)
     .map((record, order) => ({ ...record, order }));
 }

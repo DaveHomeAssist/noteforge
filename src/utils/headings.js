@@ -48,15 +48,17 @@ export function extractHeadings(markdown) {
       const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
       if (match) {
         const text = visibleHeadingText(match[2]);
-        headings.push(Object.freeze({
-          level: match[1].length,
-          text,
-          rawText: match[2],
-          anchor: nextHeadingAnchor(text, counts),
-          start: offset,
-          end: offset + line.length,
-          line: index + 1,
-        }));
+        headings.push(
+          Object.freeze({
+            level: match[1].length,
+            text,
+            rawText: match[2],
+            anchor: nextHeadingAnchor(text, counts),
+            start: offset,
+            end: offset + line.length,
+            line: index + 1,
+          }),
+        );
       }
     }
     offset += line.length + (index < lines.length - 1 ? 1 : 0);
@@ -74,11 +76,15 @@ export function headingContextAt(headings, offset) {
 }
 
 export function resolveHeadingAnchor(headings, fragment) {
-  const raw = String(fragment ?? '').trim().replace(/^#/, '');
+  const raw = String(fragment ?? '')
+    .trim()
+    .replace(/^#/, '');
   if (!raw || raw.startsWith('^')) return null;
   const key = normalizeTitle(raw);
-  return (headings || []).find((heading) => (
-    normalizeTitle(heading.text) === key
-    || normalizeTitle(heading.anchor.replace(/^heading-/, '')) === key
-  ))?.anchor ?? null;
+  return (
+    (headings || []).find(
+      (heading) =>
+        normalizeTitle(heading.text) === key || normalizeTitle(heading.anchor.replace(/^heading-/, '')) === key,
+    )?.anchor ?? null
+  );
 }

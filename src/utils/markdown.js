@@ -53,8 +53,10 @@ const wikilinkExtension = {
   },
   renderer(token) {
     if (token.embedded && token.fragment?.startsWith('^')) {
-      return transclusionRenderer?.(token, renderContexts.at(-1))
-        || `<aside class="transclusion transclusion--unavailable" role="note" contenteditable="false">Embedded block ${escapeHtml(token.target)}#${escapeHtml(token.fragment)}</aside>`;
+      return (
+        transclusionRenderer?.(token, renderContexts.at(-1)) ||
+        `<aside class="transclusion transclusion--unavailable" role="note" contenteditable="false">Embedded block ${escapeHtml(token.target)}#${escapeHtml(token.fragment)}</aside>`
+      );
     }
     const exists = knownTitles.has(normalizeTitle(token.target));
     const cls = exists ? 'wikilink' : 'wikilink wikilink--missing';
@@ -140,5 +142,8 @@ export function deriveTitle(content) {
     .map((l) => l.trim())
     .find((l) => l.length > 0);
   if (!line) return '';
-  return line.replace(/^#+\s*/, '').replace(/[*_`]/g, '').slice(0, 120);
+  return line
+    .replace(/^#+\s*/, '')
+    .replace(/[*_`]/g, '')
+    .slice(0, 120);
 }

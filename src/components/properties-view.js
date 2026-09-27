@@ -32,7 +32,11 @@ export function createPropertiesElements(root = document.body) {
 
 function displayValue(value) {
   if (typeof value === 'string') return value;
-  try { return JSON.stringify(value); } catch { return String(value); }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 export class PropertiesView {
@@ -48,7 +52,9 @@ export class PropertiesView {
     els.form.elements.type.addEventListener('change', () => this.#syncValueControl());
   }
 
-  get open() { return this.modal.isOpen; }
+  get open() {
+    return this.modal.isOpen;
+  }
 
   async show(noteId) {
     this.noteId = noteId;
@@ -67,7 +73,10 @@ export class PropertiesView {
       const issue = parsed.diagnostics[0];
       this.els.status.textContent = `${issue?.message || 'Invalid YAML'}${issue?.line ? ` (line ${issue.line}${issue.column ? `, column ${issue.column}` : ''})` : ''}. Fix the raw source before editing properties.`;
     } else {
-      this.els.status.textContent = parsed.status === 'none' ? 'This note has no frontmatter yet.' : `${parsed.properties.size} propert${parsed.properties.size === 1 ? 'y' : 'ies'}.`;
+      this.els.status.textContent =
+        parsed.status === 'none'
+          ? 'This note has no frontmatter yet.'
+          : `${parsed.properties.size} propert${parsed.properties.size === 1 ? 'y' : 'ies'}.`;
     }
     this.#renderList();
     if (focusKey && !invalid) this.els.form.elements.key.focus();
@@ -75,11 +84,15 @@ export class PropertiesView {
 
   #renderList() {
     const entries = this.parsed?.status === 'valid' ? [...this.parsed.properties] : [];
-    this.els.list.innerHTML = entries.length ? entries.map(([key, value]) => {
-      const type = inferPropertyType(value, String(key));
-      const immutable = key === 'noteforge_id';
-      return `<div class="properties-row" role="listitem"><div><strong>${escapeHtml(key)}</strong><span class="properties-row__type">${escapeHtml(type)}</span><code>${escapeHtml(displayValue(value))}</code></div><div class="properties-row__actions">${type === 'unsupported' || immutable ? '' : `<button type="button" class="btn btn--ghost" data-property-edit="${escapeHtml(key)}">Edit</button>`}<button type="button" class="btn btn--danger-ghost" data-property-delete="${escapeHtml(key)}" ${immutable ? 'disabled title="noteforge_id is immutable"' : ''}>Remove</button></div></div>`;
-    }).join('') : '<p class="muted">No editable properties.</p>';
+    this.els.list.innerHTML = entries.length
+      ? entries
+          .map(([key, value]) => {
+            const type = inferPropertyType(value, String(key));
+            const immutable = key === 'noteforge_id';
+            return `<div class="properties-row" role="listitem"><div><strong>${escapeHtml(key)}</strong><span class="properties-row__type">${escapeHtml(type)}</span><code>${escapeHtml(displayValue(value))}</code></div><div class="properties-row__actions">${type === 'unsupported' || immutable ? '' : `<button type="button" class="btn btn--ghost" data-property-edit="${escapeHtml(key)}">Edit</button>`}<button type="button" class="btn btn--danger-ghost" data-property-delete="${escapeHtml(key)}" ${immutable ? 'disabled title="noteforge_id is immutable"' : ''}>Remove</button></div></div>`;
+          })
+          .join('')
+      : '<p class="muted">No editable properties.</p>';
   }
 
   async #save(event) {
@@ -106,7 +119,8 @@ export class PropertiesView {
     try {
       await this.service.replaceRaw(this.noteId, this.els.rawForm.elements.raw.value);
       await this.refresh();
-      this.els.status.textContent = this.parsed.status === 'invalid' ? this.els.status.textContent : 'Raw YAML source saved.';
+      this.els.status.textContent =
+        this.parsed.status === 'invalid' ? this.els.status.textContent : 'Raw YAML source saved.';
     } catch (error) {
       this.els.status.textContent = error?.message || String(error);
       this.els.rawForm.elements.raw.focus();

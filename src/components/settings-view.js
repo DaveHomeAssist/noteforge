@@ -58,21 +58,57 @@ export class SettingsView {
   #render() {
     const s = normalizeSettings(this.db.config);
     this.els.form.innerHTML =
-      field('set-theme', 'Theme', [
-        { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'system', label: 'System' },
-      ], s.themeMode) +
-      field('set-font', 'Editor font size', [
-        { value: 's', label: 'Small' }, { value: 'm', label: 'Medium' }, { value: 'l', label: 'Large' },
-      ], s.fontScale) +
-      field('set-width', 'Editor width', [
-        { value: 'normal', label: 'Normal' }, { value: 'wide', label: 'Wide' }, { value: 'full', label: 'Full width' },
-      ], s.editorWidth) +
-      field('set-autosave', 'Autosave delay', [
-        { value: '250', label: 'Fast (0.25s)' }, { value: '400', label: 'Normal (0.4s)' }, { value: '800', label: 'Relaxed (0.8s)' },
-      ], String(s.autosaveMs)) +
-      field('set-template', 'Default new note', [
-        { value: 'none', label: 'Blank' }, { value: 'daily', label: 'Daily note' }, { value: 'meeting', label: 'Meeting note' }, { value: 'project', label: 'Project note' },
-      ], s.defaultTemplate);
+      field(
+        'set-theme',
+        'Theme',
+        [
+          { value: 'light', label: 'Light' },
+          { value: 'dark', label: 'Dark' },
+          { value: 'system', label: 'System' },
+        ],
+        s.themeMode,
+      ) +
+      field(
+        'set-font',
+        'Editor font size',
+        [
+          { value: 's', label: 'Small' },
+          { value: 'm', label: 'Medium' },
+          { value: 'l', label: 'Large' },
+        ],
+        s.fontScale,
+      ) +
+      field(
+        'set-width',
+        'Editor width',
+        [
+          { value: 'normal', label: 'Normal' },
+          { value: 'wide', label: 'Wide' },
+          { value: 'full', label: 'Full width' },
+        ],
+        s.editorWidth,
+      ) +
+      field(
+        'set-autosave',
+        'Autosave delay',
+        [
+          { value: '250', label: 'Fast (0.25s)' },
+          { value: '400', label: 'Normal (0.4s)' },
+          { value: '800', label: 'Relaxed (0.8s)' },
+        ],
+        String(s.autosaveMs),
+      ) +
+      field(
+        'set-template',
+        'Default new note',
+        [
+          { value: 'none', label: 'Blank' },
+          { value: 'daily', label: 'Daily note' },
+          { value: 'meeting', label: 'Meeting note' },
+          { value: 'project', label: 'Project note' },
+        ],
+        s.defaultTemplate,
+      );
   }
 
   #apply() {

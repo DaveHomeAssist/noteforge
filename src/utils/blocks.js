@@ -67,10 +67,21 @@ function splitTableRow(line) {
   let closedAtPipe = false; // the last char processed was an unescaped cell boundary
   for (let k = 0; k < s.length; k++) {
     const ch = s[k];
-    if (ch === '\\' && (s[k + 1] === '|' || s[k + 1] === '\\')) { cur += s[k + 1]; k++; closedAtPipe = false; }
-    else if (ch === '\\') { cur += '\\'; closedAtPipe = false; }
-    else if (ch === '|') { cells.push(cur); cur = ''; closedAtPipe = true; }
-    else { cur += ch; closedAtPipe = false; }
+    if (ch === '\\' && (s[k + 1] === '|' || s[k + 1] === '\\')) {
+      cur += s[k + 1];
+      k++;
+      closedAtPipe = false;
+    } else if (ch === '\\') {
+      cur += '\\';
+      closedAtPipe = false;
+    } else if (ch === '|') {
+      cells.push(cur);
+      cur = '';
+      closedAtPipe = true;
+    } else {
+      cur += ch;
+      closedAtPipe = false;
+    }
   }
   cells.push(cur);
   if (cells.length > 1 && s.startsWith('|')) cells.shift(); // leading border pipe
@@ -86,12 +97,18 @@ function alignOf(cell) {
   return l && r ? 'center' : r ? 'right' : l ? 'left' : '';
 }
 
-const escCell = (c) => String(c ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const escCell = (c) =>
+  String(c ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, ' ');
 const alignSep = (a) => (a === 'center' ? ':---:' : a === 'right' ? '---:' : a === 'left' ? ':---' : '---');
 
 /** Markdown string -> Block[]. Always returns at least one block. */
 export function parse(md) {
-  const lines = String(md ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(md ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
   const blocks = [];
   let i = 0;
   let para = null; // buffer for consecutive plain lines
@@ -153,7 +170,8 @@ export function parse(md) {
       i++;
       let depth = 1;
       while (i < lines.length && depth > 0) {
-        if (RE.fence.test(lines[i])) { // consume a fenced code block verbatim
+        if (RE.fence.test(lines[i])) {
+          // consume a fenced code block verbatim
           buf.push(lines[i++]);
           while (i < lines.length && !RE.fence.test(lines[i])) buf.push(lines[i++]);
           if (i < lines.length) buf.push(lines[i++]); // closing fence
@@ -178,9 +196,15 @@ export function parse(md) {
         body.push(splitTableRow(lines[i++]));
       }
       const cols = Math.max(header.length, align.length, ...body.map((r) => r.length), 1);
-      const pad = (r) => { const a = r.slice(0, cols); while (a.length < cols) a.push(''); return a; };
+      const pad = (r) => {
+        const a = r.slice(0, cols);
+        while (a.length < cols) a.push('');
+        return a;
+      };
       const rows = [pad(header), ...body.map(pad)];
-      const alignN = pad(align.map((a) => (a === 'center' || a === 'right' || a === 'left' ? a : ''))).map((a) => a || '');
+      const alignN = pad(align.map((a) => (a === 'center' || a === 'right' || a === 'left' ? a : ''))).map(
+        (a) => a || '',
+      );
       push(makeBlock('table', '', { rows, align: alignN }));
       continue;
     }
@@ -230,7 +254,7 @@ export function parse(md) {
         makeBlock('todo', todo[3], {
           indent: indentOf(todo[1]),
           checked: todo[2].toLowerCase() === 'x',
-        })
+        }),
       );
       i++;
       continue;
@@ -319,8 +343,7 @@ export function serialize(blocks) {
   blocks.forEach((block, idx) => {
     if (idx > 0) {
       const prev = blocks[idx - 1];
-      const tightList =
-        LIST_TYPES.has(prev.type) && LIST_TYPES.has(block.type) && !block.meta?.blankBefore;
+      const tightList = LIST_TYPES.has(prev.type) && LIST_TYPES.has(block.type) && !block.meta?.blankBefore;
       out += tightList ? '\n' : '\n\n';
     }
     out += parts[idx];
@@ -330,9 +353,10 @@ export function serialize(blocks) {
 
 function renderBlockToMd(block, numbers) {
   const indent = '  '.repeat(block.meta?.indent || 0);
-  const text = blockSupportsId(block) && block.meta?.blockId
-    ? `${block.text}${block.text ? ' ' : ''}^${block.meta.blockId}`
-    : block.text;
+  const text =
+    blockSupportsId(block) && block.meta?.blockId
+      ? `${block.text}${block.text ? ' ' : ''}^${block.meta.blockId}`
+      : block.text;
   switch (block.type) {
     case 'heading':
       return '#'.repeat(block.meta?.level || 1) + ' ' + text;

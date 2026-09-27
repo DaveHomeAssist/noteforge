@@ -9,9 +9,7 @@ import { markdownExclusionRanges, parseWikilinks } from './wikilinks.js';
 const WORD_RE = /[\p{L}\p{N}_]/u;
 
 function mergeRanges(ranges) {
-  const sorted = ranges
-    .filter((range) => range.end > range.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const sorted = ranges.filter((range) => range.end > range.start).sort((a, b) => a.start - b.start || a.end - b.end);
   const result = [];
   for (const range of sorted) {
     const previous = result[result.length - 1];
@@ -28,7 +26,8 @@ export function occurrenceContext(content, start, end) {
   const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
   const nextBreak = source.indexOf('\n', end);
   const lineEnd = nextBreak < 0 ? source.length : nextBreak;
-  let snippet = source.slice(lineStart, lineEnd)
+  let snippet = source
+    .slice(lineStart, lineEnd)
     .replace(/^#{1,6}\s+/, '')
     .replace(/\s+/gu, ' ')
     .trim();
@@ -51,17 +50,16 @@ function rangeOverlaps(ranges, start, end) {
 
 function normalizedSourceEntries(source) {
   const entries = [];
-  const segmenter = typeof Intl?.Segmenter === 'function'
-    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-    : null;
+  const segmenter =
+    typeof Intl?.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
   const segments = segmenter
     ? [...segmenter.segment(source)].map((entry) => ({ segment: entry.segment, index: entry.index }))
     : [...source].reduce((result, segment) => {
-      const previous = result[result.length - 1];
-      if (/^\p{M}$/u.test(segment) && previous) previous.segment += segment;
-      else result.push({ segment, index: previous ? previous.index + previous.segment.length : 0 });
-      return result;
-    }, []);
+        const previous = result[result.length - 1];
+        if (/^\p{M}$/u.test(segment) && previous) previous.segment += segment;
+        else result.push({ segment, index: previous ? previous.index + previous.segment.length : 0 });
+        return result;
+      }, []);
   for (const item of segments) {
     const originalEnd = item.index + item.segment.length;
     const normalized = item.segment.normalize('NFKC').toLowerCase();
@@ -108,7 +106,7 @@ export function createMentionScanner(candidates) {
     ]);
     const results = [];
     const normalized = normalizedSourceEntries(source);
-    for (let index = 0; index < normalized.length;) {
+    for (let index = 0; index < normalized.length; ) {
       let node = root;
       let cursor = index;
       let best = null;
@@ -117,7 +115,10 @@ export function createMentionScanner(candidates) {
         cursor += 1;
         if (node.candidate && node.candidate.targetId !== sourceId) best = { candidate: node.candidate, end: cursor };
       }
-      if (!best) { index += 1; continue; }
+      if (!best) {
+        index += 1;
+        continue;
+      }
       const start = normalized[index].start;
       const end = normalized[best.end - 1].end;
       const before = normalized[index - 1]?.char || '';
@@ -127,14 +128,16 @@ export function createMentionScanner(candidates) {
         continue;
       }
       const candidate = best.candidate;
-      results.push(Object.freeze({
-        start,
-        end,
-        text: source.slice(start, end),
-        targetId: candidate.targetId,
-        targetTitle: candidate.targetTitle,
-        ...occurrenceContext(source, start, end),
-      }));
+      results.push(
+        Object.freeze({
+          start,
+          end,
+          text: source.slice(start, end),
+          targetId: candidate.targetId,
+          targetTitle: candidate.targetTitle,
+          ...occurrenceContext(source, start, end),
+        }),
+      );
       index = best.end;
     }
     return results;

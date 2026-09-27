@@ -5,18 +5,22 @@ import { extractTasks, mutateTaskSource } from '../utils/tasks.js';
 export class TaskService {
   constructor(db) {
     this.db = db;
-    this.index = new NoteDerivedIndex(db, (note) => extractTasks(note.content, {
-      noteId: note.id,
-      noteTitle: note.title,
-      noteTags: note.tags,
-    }));
+    this.index = new NoteDerivedIndex(db, (note) =>
+      extractTasks(note.content, {
+        noteId: note.id,
+        noteTitle: note.title,
+        noteTags: note.tags,
+      }),
+    );
   }
 
   list() {
     return this.index.list();
   }
 
-  destroy() { this.index.destroy(); }
+  destroy() {
+    this.index.destroy();
+  }
 
   async update(reference, patch) {
     const current = this.db.getNote(reference?.noteId);
@@ -26,8 +30,10 @@ export class TaskService {
     const next = Note.fromJSON(current.toJSON());
     next.update({ content: mutation.content });
     await this.db.commitPlannedNotes([next.toJSON()], [current], 'pre_task_change');
-    const task = extractTasks(next.content, { noteId: next.id, noteTitle: next.title, noteTags: next.tags })
-      .find((candidate) => candidate.occurrence === reference.occurrence) || null;
+    const task =
+      extractTasks(next.content, { noteId: next.id, noteTitle: next.title, noteTags: next.tags }).find(
+        (candidate) => candidate.occurrence === reference.occurrence,
+      ) || null;
     return { changed: true, note: this.db.getNote(next.id), task };
   }
 }

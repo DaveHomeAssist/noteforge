@@ -39,15 +39,17 @@ export class Editor {
   async enableOutline() {
     if (this.OutlineView) return this.outline;
     if (this.outlineReady) return this.outlineReady;
-    this.outlineReady = import('./outline-view.js').then(({ OutlineView }) => {
-      this.OutlineView = OutlineView;
-      const note = this.currentId ? this.db.getNote(this.currentId) : null;
-      if (note) this.#mountOutline(note.content);
-      return this.outline;
-    }).catch((error) => {
-      this.outlineReady = null;
-      throw error;
-    });
+    this.outlineReady = import('./outline-view.js')
+      .then(({ OutlineView }) => {
+        this.OutlineView = OutlineView;
+        const note = this.currentId ? this.db.getNote(this.currentId) : null;
+        if (note) this.#mountOutline(note.content);
+        return this.outline;
+      })
+      .catch((error) => {
+        this.outlineReady = null;
+        throw error;
+      });
     return this.outlineReady;
   }
 
@@ -68,7 +70,10 @@ export class Editor {
     this.#render(note);
     if (focus === 'title') {
       const el = this.container.querySelector('.editor__title');
-      if (el) { el.focus(); el.select(); }
+      if (el) {
+        el.focus();
+        el.select();
+      }
     } else if (focus === 'content') {
       this.blockEditor?.focusFirst();
     } else if (blockId) {
@@ -162,9 +167,7 @@ export class Editor {
   #render(note) {
     // Carry the block editor's undo/redo history across a re-render of the SAME
     // note (metadata edits trigger refresh()), so it isn't silently wiped.
-    const history = this.blockEditor && this._blockEditorNoteId === note.id
-      ? this.blockEditor.exportHistory()
-      : null;
+    const history = this.blockEditor && this._blockEditorNoteId === note.id ? this.blockEditor.exportHistory() : null;
     this.#teardown();
     const backlinks = this.db.backlinkOccurrencesFor(note.id);
     const mentions = this.db.unlinkedMentionsFor(note.id);
@@ -184,9 +187,13 @@ export class Editor {
       </div>
 
       <div class="editor__tags">
-        ${note.tags.map((t) => `
+        ${note.tags
+          .map(
+            (t) => `
           <span class="chip">#${escapeHtml(t)}<button class="chip__x" data-tag="${escapeHtml(t)}" title="Remove tag">×</button></span>
-        `).join('')}
+        `,
+          )
+          .join('')}
         <input type="text" class="editor__tag-input" placeholder="+ add tag" />
       </div>
 
@@ -196,27 +203,37 @@ export class Editor {
 
           <section class="backlinks" aria-labelledby="backlinks-title">
             <h3 class="backlinks__title" id="backlinks-title">🔗 Backlinks <span class="muted">(${backlinks.length})</span></h3>
-            ${backlinks.length === 0
-              ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
-              : `<ul class="backlinks__list">${backlinks.map((b) => `
+            ${
+              backlinks.length === 0
+                ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
+                : `<ul class="backlinks__list">${backlinks
+                    .map(
+                      (b) => `
                   <li><a href="#" class="backlinks__item" data-id="${escapeHtml(b.sourceId)}" data-context-anchor="${escapeHtml(b.headingAnchor || '')}" aria-label="Open ${escapeHtml(b.sourceTitle)}${b.heading ? ` at ${escapeHtml(b.heading)}` : ''}">
                     <strong>${escapeHtml(b.sourceTitle)}</strong>
                     ${b.heading ? `<span class="backlinks__heading">${escapeHtml(b.heading)}</span>` : ''}
                     <span class="backlinks__snippet">${escapeHtml(b.snippet || b.target)}</span>
                   </a></li>
-                `).join('')}</ul>`
+                `,
+                    )
+                    .join('')}</ul>`
             }
           </section>
 
           <section class="mentions" aria-labelledby="mentions-title">
             <h3 class="backlinks__title" id="mentions-title">💬 Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
-            ${mentions.length === 0
-              ? `<p class="muted backlinks__empty">No unlinked mentions found.</p>`
-              : `<ul class="mentions__list">${mentions.map((mention, index) => `
+            ${
+              mentions.length === 0
+                ? `<p class="muted backlinks__empty">No unlinked mentions found.</p>`
+                : `<ul class="mentions__list">${mentions
+                    .map(
+                      (mention, index) => `
                   <li class="mentions__item">
                     <div><strong>${escapeHtml(mention.sourceTitle)}</strong>${mention.heading ? `<span class="mentions__heading">${escapeHtml(mention.heading)}</span>` : ''}<p>${escapeHtml(mention.snippet || mention.text)}</p></div>
                     <button type="button" class="btn btn--ghost mention-convert" data-mention-index="${index}" aria-label="Preview converting mention in ${escapeHtml(mention.sourceTitle)} to a wikilink">Convert</button>
-                  </li>`).join('')}</ul>`
+                  </li>`,
+                    )
+                    .join('')}</ul>`
             }
           </section>
 
@@ -275,7 +292,9 @@ export class Editor {
     const anc = this.db.ancestorsOf(note.id);
     if (!anc.length) return '';
     const sep = '<span class="crumb-sep">›</span>';
-    const crumbs = anc.map((a) => `<a href="#" class="crumb" data-id="${escapeHtml(a.id)}">${escapeHtml(a.title || 'Untitled')}</a>`).join(sep);
+    const crumbs = anc
+      .map((a) => `<a href="#" class="crumb" data-id="${escapeHtml(a.id)}">${escapeHtml(a.title || 'Untitled')}</a>`)
+      .join(sep);
     return `<nav class="editor__breadcrumb" aria-label="Breadcrumb">${crumbs}${sep}<span class="crumb crumb--current">${escapeHtml(note.title || 'Untitled')}</span></nav>`;
   }
 
@@ -283,7 +302,10 @@ export class Editor {
 
   #wire(note) {
     for (const a of this.container.querySelectorAll('.editor__breadcrumb .crumb[data-id]')) {
-      a.addEventListener('click', (e) => { e.preventDefault(); this.actions.openNote(a.dataset.id); });
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.actions.openNote(a.dataset.id);
+      });
     }
 
     const titleInput = this.container.querySelector('.editor__title');
@@ -294,8 +316,14 @@ export class Editor {
       this.reflectTitle(note.id);
     });
     titleInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') { event.preventDefault(); titleInput.blur(); }
-      else if (event.key === 'Escape') { event.preventDefault(); this.reflectTitle(note.id); titleInput.blur(); }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        titleInput.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        this.reflectTitle(note.id);
+        titleInput.blur();
+      }
     });
 
     this.container.querySelector('.editor__pin').addEventListener('click', () => {
@@ -374,7 +402,7 @@ export class Editor {
 
   getSourceMarkdown() {
     if (this.blockEditor) return this.blockEditor.serialize();
-    return this.currentId ? this.db.getNote(this.currentId)?.content ?? '' : '';
+    return this.currentId ? (this.db.getNote(this.currentId)?.content ?? '') : '';
   }
 
   selectFindRange(blockId, start, end) {

@@ -37,7 +37,12 @@ const SLASH_ITEMS = [
   { key: 'image', label: 'Image', hint: 'Upload a picture', apply: { type: 'image' } },
   { key: 'callout', label: 'Callout', hint: 'Highlighted note box', apply: { type: 'quote', text: '[!note] ' } },
   { key: 'table', label: 'Table', hint: 'Editable table', apply: { type: 'table' } },
-  { key: 'toggle', label: 'Toggle', hint: 'Collapsible section', apply: { type: 'raw', text: '<details>\n<summary>Toggle</summary>\n\nHidden content\n\n</details>' } },
+  {
+    key: 'toggle',
+    label: 'Toggle',
+    hint: 'Collapsible section',
+    apply: { type: 'raw', text: '<details>\n<summary>Toggle</summary>\n\nHidden content\n\n</details>' },
+  },
 ];
 
 const CALLOUTS = {
@@ -85,8 +90,11 @@ const formatDateLabel = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
   const d = m && new Date(`${iso}T00:00:00`);
   if (
-    !m || Number.isNaN(d.getTime()) ||
-    d.getFullYear() !== +m[1] || d.getMonth() + 1 !== +m[2] || d.getDate() !== +m[3]
+    !m ||
+    Number.isNaN(d.getTime()) ||
+    d.getFullYear() !== +m[1] ||
+    d.getMonth() + 1 !== +m[2] ||
+    d.getDate() !== +m[3]
   ) {
     return iso || 'No date';
   }
@@ -150,14 +158,21 @@ export class BlockEditor {
     this.#syncFocused();
     if (!this.sourceDirty) return this.originalMarkdown;
     const body = serialize(this.blocks);
-    return this.frontmatter
-      ? `${this.frontmatter.raw}${this.frontmatter.separator}${body}`
-      : body;
+    return this.frontmatter ? `${this.frontmatter.raw}${this.frontmatter.separator}${body}` : body;
   }
 
   /** True while an edit/selection is in flight — editor.js must not re-render then. */
   isEditing() {
-    return !!this.focusedId || !!this.selectedId || this.selectedIds.size > 0 || this.isComposing || !!this.menu || this.datePickerOpen || this.imageBusy || this.tableEditing;
+    return (
+      !!this.focusedId ||
+      !!this.selectedId ||
+      this.selectedIds.size > 0 ||
+      this.isComposing ||
+      !!this.menu ||
+      this.datePickerOpen ||
+      this.imageBusy ||
+      this.tableEditing
+    );
   }
 
   /** Snapshot the undo/redo stacks so a same-note re-render can carry history over. */
@@ -205,9 +220,7 @@ export class BlockEditor {
     const split = splitFrontmatterSource(source);
     this.originalMarkdown = source;
     this.sourceDirty = false;
-    this.frontmatter = split.hasFrontmatter
-      ? { raw: split.raw, separator: split.separator }
-      : null;
+    this.frontmatter = split.hasFrontmatter ? { raw: split.raw, separator: split.separator } : null;
     this.blocks = parse(split.body);
   }
 
@@ -276,8 +289,9 @@ export class BlockEditor {
   }
 
   jumpToHeading(anchor, { focus = true } = {}) {
-    const row = [...this.host.querySelectorAll('[data-heading-anchor]')]
-      .find((element) => element.dataset.headingAnchor === anchor);
+    const row = [...this.host.querySelectorAll('[data-heading-anchor]')].find(
+      (element) => element.dataset.headingAnchor === anchor,
+    );
     if (!row) return false;
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     row.scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
@@ -290,8 +304,9 @@ export class BlockEditor {
 
   jumpToBlock(blockId, { focus = true } = {}) {
     const id = String(blockId ?? '').replace(/^\^/, '');
-    const matches = [...this.host.querySelectorAll('[data-block-id]')]
-      .filter((element) => element.dataset.blockId === id);
+    const matches = [...this.host.querySelectorAll('[data-block-id]')].filter(
+      (element) => element.dataset.blockId === id,
+    );
     if (matches.length !== 1) return false;
     const row = matches[0];
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -313,8 +328,14 @@ export class BlockEditor {
   }
 
   #cleanupImagePicker() {
-    if (this.__imgOnFocus) { window.removeEventListener('focus', this.__imgOnFocus); this.__imgOnFocus = null; }
-    if (this.__imgInput) { this.__imgInput.remove(); this.__imgInput = null; }
+    if (this.__imgOnFocus) {
+      window.removeEventListener('focus', this.__imgOnFocus);
+      this.__imgOnFocus = null;
+    }
+    if (this.__imgInput) {
+      this.__imgInput.remove();
+      this.__imgInput = null;
+    }
   }
 
   // === rendering ==========================================================
@@ -333,10 +354,11 @@ export class BlockEditor {
       this.headingAnchors = new Map();
       for (const block of this.blocks) {
         const heading = blockHeading(block);
-        if (heading) this.headingAnchors.set(block.id, {
-          ...heading,
-          anchor: nextHeadingAnchor(heading.text, headingCounts),
-        });
+        if (heading)
+          this.headingAnchors.set(block.id, {
+            ...heading,
+            anchor: nextHeadingAnchor(heading.text, headingCounts),
+          });
       }
       this.host.innerHTML = '';
       this.enhancer?.prepend?.(this.host, this);
@@ -459,7 +481,10 @@ export class BlockEditor {
       // A blockquote beginning with `[!kind]` renders as a Notion-style callout.
       if (block.type === 'quote') {
         const callout = parseCallout(block.text);
-        if (callout) { this.#fillCallout(content, callout); return; }
+        if (callout) {
+          this.#fillCallout(content, callout);
+          return;
+        }
       }
       content.innerHTML = block.text ? renderInline(block.text, this.#renderOptions()) : '';
     }
@@ -505,7 +530,13 @@ export class BlockEditor {
   /** Render an editable table grid into the (non-editable) block shell. */
   #fillTable(content, block) {
     const meta = block.meta || {};
-    const rows = (Array.isArray(meta.rows) && meta.rows.length) ? meta.rows : [['', ''], ['', '']];
+    const rows =
+      Array.isArray(meta.rows) && meta.rows.length
+        ? meta.rows
+        : [
+            ['', ''],
+            ['', ''],
+          ];
     const align = Array.isArray(meta.align) ? meta.align : [];
 
     const wrap = el('div', 'blk-table-wrap');
@@ -552,13 +583,17 @@ export class BlockEditor {
     table.addEventListener('keydown', (e) => this.#tableKeydown(e, block, content));
     table.addEventListener('focusin', () => {
       this.tableEditing = true;
-      if (this.selectedId) { // editing a cell cancels a pending block-level selection
+      if (this.selectedId) {
+        // editing a cell cancels a pending block-level selection
         this.selectedId = null;
         content.closest('.blk-row')?.classList.remove('blk-row--selected');
       }
     });
     table.addEventListener('focusout', (e) => {
-      if (this.rendering) { this.tableEditing = false; return; } // a re-render detached us
+      if (this.rendering) {
+        this.tableEditing = false;
+        return;
+      } // a re-render detached us
       if (content.contains(e.relatedTarget)) return; // moving between cells — stay in edit mode
       this.tableEditing = false;
       this.#commitTable(block, content);
@@ -580,7 +615,8 @@ export class BlockEditor {
     const table = content.querySelector('table.blk-table');
     if (!table) return;
     const rows = [...table.querySelectorAll('tr')].map((tr) =>
-      [...tr.children].map((td) => td.textContent.replace(/\r?\n/g, ' ')));
+      [...tr.children].map((td) => td.textContent.replace(/\r?\n/g, ' ')),
+    );
     if (!rows.length) return;
     block.meta = { ...block.meta, rows, align: (block.meta?.align || []).slice(0, rows[0].length) };
     this.#snapshot(/*coalesce*/ true); // folds rapid typing; also fires onChange
@@ -588,13 +624,19 @@ export class BlockEditor {
 
   /** Add/remove the last row or column, then re-render the grid. */
   #tableMutate(act, block, content) {
-    const rows = (Array.isArray(block.meta?.rows) && block.meta.rows.length ? block.meta.rows : [['', '']]).map((r) => [...r]);
+    const rows = (Array.isArray(block.meta?.rows) && block.meta.rows.length ? block.meta.rows : [['', '']]).map((r) => [
+      ...r,
+    ]);
     const cols = rows[0]?.length || 1;
     if (act === 'addrow') rows.push(Array(cols).fill(''));
     else if (act === 'addcol') for (const r of rows) r.push('');
-    else if (act === 'delrow') { if (rows.length <= 1) return; rows.pop(); }
-    else if (act === 'delcol') { if (cols <= 1) return; for (const r of rows) r.pop(); }
-    else return;
+    else if (act === 'delrow') {
+      if (rows.length <= 1) return;
+      rows.pop();
+    } else if (act === 'delcol') {
+      if (cols <= 1) return;
+      for (const r of rows) r.pop();
+    } else return;
     const align = (block.meta?.align || []).slice(0, rows[0].length);
     block.meta = { ...block.meta, rows, align };
     this.#fillTable(content, block);
@@ -610,7 +652,8 @@ export class BlockEditor {
       const i = list.indexOf(document.activeElement);
       if (i < 0) return;
       let next = i + (e.shiftKey ? -1 : 1);
-      if (next >= list.length) { // past the last cell -> append a row, land on its first cell
+      if (next >= list.length) {
+        // past the last cell -> append a row, land on its first cell
         this.#tableMutate('addrow', block, content);
         this.#focusCell(cells()[i + 1]);
         return;
@@ -627,7 +670,8 @@ export class BlockEditor {
       if (i < 0) return;
       const cols = block.meta?.rows?.[0]?.length || 1;
       const below = i + cols;
-      if (below >= list.length) { // last row -> add one and drop into the same column
+      if (below >= list.length) {
+        // last row -> add one and drop into the same column
         this.#tableMutate('addrow', block, content);
         this.#focusCell(cells()[below]);
       } else {
@@ -870,9 +914,12 @@ export class BlockEditor {
     const heading = /^(#{1,3})\s$/.exec(before);
     if (heading) return set({ type: 'heading', meta: { level: heading[1].length } }, heading[0].length);
     if (/^[-*]\s$/.test(before)) return set({ type: 'bullet', meta: { indent: block.meta?.indent || 0 } }, 2);
-    if (/^\d+\.\s$/.test(before)) return set({ type: 'numbered', meta: { indent: block.meta?.indent || 0 } }, before.length);
-    if (/^\[[ ]?\]\s$/.test(before)) return set({ type: 'todo', meta: { checked: false, indent: block.meta?.indent || 0 } }, before.length);
-    if (/^\[x\]\s$/i.test(before)) return set({ type: 'todo', meta: { checked: true, indent: block.meta?.indent || 0 } }, before.length);
+    if (/^\d+\.\s$/.test(before))
+      return set({ type: 'numbered', meta: { indent: block.meta?.indent || 0 } }, before.length);
+    if (/^\[[ ]?\]\s$/.test(before))
+      return set({ type: 'todo', meta: { checked: false, indent: block.meta?.indent || 0 } }, before.length);
+    if (/^\[x\]\s$/i.test(before))
+      return set({ type: 'todo', meta: { checked: true, indent: block.meta?.indent || 0 } }, before.length);
     if (/^>\s$/.test(before)) return set({ type: 'quote' }, 2);
 
     // Divider: whole block is exactly ---, ***, or ___
@@ -901,7 +948,11 @@ export class BlockEditor {
     // content; the model is already authoritative, so suppress that stale commit
     // (same guard #render uses) — otherwise it clobbers block.text just set here.
     this.rendering = true;
-    try { row.replaceWith(fresh); } finally { this.rendering = false; }
+    try {
+      row.replaceWith(fresh);
+    } finally {
+      this.rendering = false;
+    }
     this.#renumber();
   }
 
@@ -926,8 +977,16 @@ export class BlockEditor {
     if (this.selectedIds.size && this.#multiSelectKeydown(e)) return;
 
     const mod = e.ctrlKey || e.metaKey;
-    if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); this.#undo(); return; }
-    if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); this.#redo(); return; }
+    if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      this.#undo();
+      return;
+    }
+    if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this.#redo();
+      return;
+    }
 
     // Divider selected: allow deletion.
     if (this.selectedId && (e.key === 'Backspace' || e.key === 'Delete')) {
@@ -1189,7 +1248,9 @@ export class BlockEditor {
     if (this.selectedIds.size && !e.target.closest('.blk-gutter')) this.#clearMultiSelect();
     // Clicking a non-text block (divider/date/image) selects it — but a click on
     // the date chip opens its picker, and the gutter has its own handlers.
-    const ntRow = e.target.closest('.blk-row[data-type="divider"], .blk-row[data-type="date"], .blk-row[data-type="image"]');
+    const ntRow = e.target.closest(
+      '.blk-row[data-type="divider"], .blk-row[data-type="date"], .blk-row[data-type="image"]',
+    );
     if (ntRow && !e.target.closest('.blk-gutter') && !e.target.closest('.blk-date')) {
       e.preventDefault();
       this.selectedId = ntRow.dataset.id;
@@ -1264,7 +1325,11 @@ export class BlockEditor {
     this.datePickerOpen = true; // keep isEditing() true so a refresh won't tear us down
     input.focus();
     if (input.showPicker) {
-      try { input.showPicker(); } catch { /* not supported / blocked */ }
+      try {
+        input.showPicker();
+      } catch {
+        /* not supported / blocked */
+      }
     }
     let restored = false;
     const restore = () => {
@@ -1360,7 +1425,7 @@ export class BlockEditor {
         <button class="blk-menu__item ${i === m.index ? 'is-active' : ''}" data-i="${i}" tabindex="-1">
           <span class="blk-menu__label">${escapeHtml(it.label)}</span>
           ${it.hint ? `<span class="blk-menu__hint">${escapeHtml(it.hint)}</span>` : ''}
-        </button>`
+        </button>`,
       )
       .join('');
     // Keep focus in the editable block: prevent the menu from stealing it.
@@ -1458,7 +1523,13 @@ export class BlockEditor {
     if (spec.type === 'table') {
       block.type = 'table';
       block.text = '';
-      block.meta = { rows: [['', ''], ['', '']], align: ['', ''] };
+      block.meta = {
+        rows: [
+          ['', ''],
+          ['', ''],
+        ],
+        align: ['', ''],
+      };
       // Guarantee a trailing paragraph so there's somewhere to type below the table.
       if (this.#indexOf(block.id) === this.blocks.length - 1) this.blocks.push(makeBlock('paragraph', ''));
       this.focusedId = null;
@@ -1507,7 +1578,9 @@ export class BlockEditor {
   #imageFileFrom(dt) {
     if (!dt) return null;
     const files = dt.files ? [...dt.files] : [];
-    const fromItems = dt.items ? [...dt.items].filter((it) => it.kind === 'file' && /^image\//.test(it.type)).map((it) => it.getAsFile()) : [];
+    const fromItems = dt.items
+      ? [...dt.items].filter((it) => it.kind === 'file' && /^image\//.test(it.type)).map((it) => it.getAsFile())
+      : [];
     return files.concat(fromItems).find((f) => f && /^image\//.test(f.type)) || null;
   }
 
@@ -1522,18 +1595,28 @@ export class BlockEditor {
     this.__imgInput = input;
     this.imageBusy = true; // keep isEditing() true so a background refresh won't tear us down
 
-    const done = () => { this.imageBusy = false; this.#cleanupImagePicker(); };
+    const done = () => {
+      this.imageBusy = false;
+      this.#cleanupImagePicker();
+    };
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      if (!file) { done(); return; }
+      if (!file) {
+        done();
+        return;
+      }
       this.#insertImageFromFile(file, block).finally(done);
     });
     // Modern browsers fire 'cancel' on a dismissed file dialog; the window 'focus'
     // fallback covers browsers that don't. Either way imageBusy is released.
     input.addEventListener('cancel', () => done());
     this.__imgOnFocus = () => {
-      if (this.__imgOnFocus) { window.removeEventListener('focus', this.__imgOnFocus); }
-      setTimeout(() => { if (this.imageBusy && (!input.files?.length)) done(); }, 400);
+      if (this.__imgOnFocus) {
+        window.removeEventListener('focus', this.__imgOnFocus);
+      }
+      setTimeout(() => {
+        if (this.imageBusy && !input.files?.length) done();
+      }, 400);
     };
     window.addEventListener('focus', this.__imgOnFocus);
     input.click();
@@ -1556,7 +1639,9 @@ export class BlockEditor {
   #insertImageBlock(block, src, alt) {
     if (this.destroyed) return;
     // Alt must survive RE.image on reload: strip ] and newlines (they'd break the round-trip).
-    const cleanAlt = String(alt || '').replace(/[\]\r\n]+/g, ' ').trim();
+    const cleanAlt = String(alt || '')
+      .replace(/[\]\r\n]+/g, ' ')
+      .trim();
     const img = makeBlock('image', '', { src, alt: cleanAlt });
     const idx = this.#indexOf(block.id);
     if (idx < 0) {
@@ -1717,10 +1802,27 @@ export class BlockEditor {
 
   #multiSelectKeydown(e) {
     const mod = e.ctrlKey || e.metaKey;
-    if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); this.#deleteSelected(); return true; }
-    if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); this.#copySelected(); return true; }
-    if (mod && e.key.toLowerCase() === 'x') { e.preventDefault(); this.#copySelected(); this.#deleteSelected(); return true; }
-    if (e.key === 'Escape') { e.preventDefault(); this.#clearMultiSelect(); return true; }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      this.#deleteSelected();
+      return true;
+    }
+    if (mod && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      this.#copySelected();
+      return true;
+    }
+    if (mod && e.key.toLowerCase() === 'x') {
+      e.preventDefault();
+      this.#copySelected();
+      this.#deleteSelected();
+      return true;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.#clearMultiSelect();
+      return true;
+    }
     if (mod || e.key.startsWith('Arrow') || e.key === 'Shift') return false; // let modifiers/arrows pass
     // Any other key clears the selection and proceeds normally.
     this.#clearMultiSelect();

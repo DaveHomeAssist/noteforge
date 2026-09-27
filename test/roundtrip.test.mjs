@@ -21,13 +21,20 @@ import nodeAssert from 'node:assert/strict';
 // Every check registers as its own node:test case so the JUnit report and the
 // case floor in test/run-node-tests.mjs count each one. The condition is
 // evaluated where ok() is called, so the sequential flow below is unchanged.
-const ok = (name, cond, extra = '') => test(name, () => { nodeAssert.ok(cond, extra ? `${name}\n      ${extra}` : name); });
+const ok = (name, cond, extra = '') =>
+  test(name, () => {
+    nodeAssert.ok(cond, extra ? `${name}\n      ${extra}` : name);
+  });
 
 const strip = (blocks) => blocks.map((b) => ({ type: b.type, text: b.text, meta: b.meta || {} }));
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const inertStorage = {
-  async load(_key, fallback) { return fallback; },
-  async save() { return true; },
+  async load(_key, fallback) {
+    return fallback;
+  },
+  async save() {
+    return true;
+  },
 };
 
 // --- fixed point + block-stability over the seed corpus ---
@@ -44,19 +51,41 @@ for (const note of sampleNotes) {
 
 // --- structural expectations ---
 const cheat = parse(sampleNotes.find((n) => n.title === 'Markdown Cheatsheet').content);
-ok('table becomes a first-class table block', cheat.some((b) => b.type === 'table' && Array.isArray(b.meta.rows) && b.meta.rows[0].includes('Syntax')));
-ok('js code block preserved with template literal',
-  cheat.some((b) => b.type === 'code' && b.meta.lang === 'js' && b.text.includes('${name}')));
+ok(
+  'table becomes a first-class table block',
+  cheat.some((b) => b.type === 'table' && Array.isArray(b.meta.rows) && b.meta.rows[0].includes('Syntax')),
+);
+ok(
+  'js code block preserved with template literal',
+  cheat.some((b) => b.type === 'code' && b.meta.lang === 'js' && b.text.includes('${name}')),
+);
 
 const welcome = parse(sampleNotes.find((n) => n.title === 'Welcome').content);
-ok('welcome has an h1 heading', welcome.some((b) => b.type === 'heading' && b.meta.level === 1));
-ok('welcome has unchecked todo', welcome.some((b) => b.type === 'todo' && b.meta.checked === false));
-ok('welcome has checked todo', welcome.some((b) => b.type === 'todo' && b.meta.checked === true));
-ok('welcome preserves nested todo indent', welcome.some((b) => b.type === 'todo' && (b.meta.indent || 0) >= 1));
-ok('welcome has a blockquote', welcome.some((b) => b.type === 'quote'));
-ok('welcome keeps [[wikilinks]] in text',
+ok(
+  'welcome has an h1 heading',
+  welcome.some((b) => b.type === 'heading' && b.meta.level === 1),
+);
+ok(
+  'welcome has unchecked todo',
+  welcome.some((b) => b.type === 'todo' && b.meta.checked === false),
+);
+ok(
+  'welcome has checked todo',
+  welcome.some((b) => b.type === 'todo' && b.meta.checked === true),
+);
+ok(
+  'welcome preserves nested todo indent',
+  welcome.some((b) => b.type === 'todo' && (b.meta.indent || 0) >= 1),
+);
+ok(
+  'welcome has a blockquote',
+  welcome.some((b) => b.type === 'quote'),
+);
+ok(
+  'welcome keeps [[wikilinks]] in text',
   welcome.some((b) => b.text.includes('[[Markdown Cheatsheet]]')) &&
-  welcome.some((b) => b.text.includes('[[Wikilinks & Backlinks]]')));
+    welcome.some((b) => b.text.includes('[[Wikilinks & Backlinks]]')),
+);
 
 // --- edge cases ---
 ok('empty -> single empty paragraph', eq(strip(parse('')), [{ type: 'paragraph', text: '', meta: {} }]));
@@ -88,7 +117,10 @@ const nested = '- item\n  - [ ] sub a\n  - [x] sub b';
 ok('tight nested list stays tight', serialize(parse(nested)) === nested);
 
 const div = parse('a\n\n---\n\nb');
-ok('divider parsed', div.some((b) => b.type === 'divider'));
+ok(
+  'divider parsed',
+  div.some((b) => b.type === 'divider'),
+);
 ok('divider round-trips', serialize(div) === 'a\n\n---\n\nb');
 // divider variants all normalize to ---
 ok('*** is a divider', parse('***')[0].type === 'divider');
@@ -113,59 +145,100 @@ ok('date fixed point', serialize(parse(dCtx)) === serialize(parse(serialize(pars
 // --- first-class tables ---
 const tbl = parse('| A | B |\n| :-- | --: |\n| 1 | 2 |\n| 3 | 4 |');
 ok('table parses to a table block', tbl.length === 1 && tbl[0].type === 'table');
-ok('table rows captured', JSON.stringify(tbl[0].meta.rows) === JSON.stringify([['A', 'B'], ['1', '2'], ['3', '4']]));
+ok(
+  'table rows captured',
+  JSON.stringify(tbl[0].meta.rows) ===
+    JSON.stringify([
+      ['A', 'B'],
+      ['1', '2'],
+      ['3', '4'],
+    ]),
+);
 ok('table alignment captured', JSON.stringify(tbl[0].meta.align) === JSON.stringify(['left', 'right']));
 ok('table round-trips (fixed point)', serialize(parse(serialize(tbl))) === serialize(tbl));
 ok('table block stability', JSON.stringify(strip(tbl)) === JSON.stringify(strip(parse(serialize(tbl)))));
-ok('table escapes a pipe inside a cell', (() => {
-  const t = parse('| a | b |\n| --- | --- |\n| x\\|y | z |');
-  return t[0].meta.rows[1][0] === 'x|y' && serialize(t).includes('x\\|y');
-})());
+ok(
+  'table escapes a pipe inside a cell',
+  (() => {
+    const t = parse('| a | b |\n| --- | --- |\n| x\\|y | z |');
+    return t[0].meta.rows[1][0] === 'x|y' && serialize(t).includes('x\\|y');
+  })(),
+);
 // Regression: escCell escapes backslashes; splitTableRow must decode them symmetrically,
 // else a cell with a backslash (Windows paths, regex, LaTeX) doubles it on every save.
-ok('table cell with a backslash is a fixed point', (() => {
-  const t = parse('| a | b |\n| --- | --- |\n| C:\\\\path | \\\\alpha |');
-  const cell = t[0].meta.rows[1][0];
-  if (cell !== 'C:\\path') return false; // one backslash, not two
-  const t2 = parse(serialize(t)); // serialize -> parse must not grow the backslash run
-  return t2[0].meta.rows[1][0] === 'C:\\path' && t2[0].meta.rows[1][1] === '\\alpha' &&
-    serialize(t2) === serialize(t); // fixed point
-})());
-ok('table cell ending in a literal backslash keeps its columns', (() => {
-  const t = parse('| a | b |\n| --- | --- |\n| x\\\\ | y |');
-  // the trailing border pipe must not be eaten by the escaped backslash
-  return t[0].meta.rows[1].length === 2 && t[0].meta.rows[1][0] === 'x\\' && t[0].meta.rows[1][1] === 'y';
-})());
+ok(
+  'table cell with a backslash is a fixed point',
+  (() => {
+    const t = parse('| a | b |\n| --- | --- |\n| C:\\\\path | \\\\alpha |');
+    const cell = t[0].meta.rows[1][0];
+    if (cell !== 'C:\\path') return false; // one backslash, not two
+    const t2 = parse(serialize(t)); // serialize -> parse must not grow the backslash run
+    return (
+      t2[0].meta.rows[1][0] === 'C:\\path' && t2[0].meta.rows[1][1] === '\\alpha' && serialize(t2) === serialize(t)
+    ); // fixed point
+  })(),
+);
+ok(
+  'table cell ending in a literal backslash keeps its columns',
+  (() => {
+    const t = parse('| a | b |\n| --- | --- |\n| x\\\\ | y |');
+    // the trailing border pipe must not be eaten by the escaped backslash
+    return t[0].meta.rows[1].length === 2 && t[0].meta.rows[1][0] === 'x\\' && t[0].meta.rows[1][1] === 'y';
+  })(),
+);
 ok('table among prose round-trips', serialize(parse('intro\n\n| A |\n| --- |\n| 1 |\n\nafter')).includes('| A |'));
 
 // --- collapsible toggle (<details>) stays one raw block ---
 const tog = parse('<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>');
 ok('details collapses into a single raw block', tog.length === 1 && tog[0].type === 'raw');
-ok('details round-trips verbatim', serialize(tog) === '<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>');
-ok('details open attribute preserved', parse('<details open>\n<summary>S</summary>\n\nb\n\n</details>')[0].text.includes('<details open>'));
-ok('details among prose stays one block', parse('before\n\n<details>\n<summary>S</summary>\n\nx\n\n</details>\n\nafter').filter((b) => b.type === 'raw').length === 1);
+ok(
+  'details round-trips verbatim',
+  serialize(tog) === '<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>',
+);
+ok(
+  'details open attribute preserved',
+  parse('<details open>\n<summary>S</summary>\n\nb\n\n</details>')[0].text.includes('<details open>'),
+);
+ok(
+  'details among prose stays one block',
+  parse('before\n\n<details>\n<summary>S</summary>\n\nx\n\n</details>\n\nafter').filter((b) => b.type === 'raw')
+    .length === 1,
+);
 // Regression: a NESTED toggle must close on its own </details>, not the first one,
 // else the outer body leaks out as separate blocks and corrupts the note.
-const nestTog = '<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\nOuter body\n\n</details>';
-ok('nested details collapses into a single raw block', (() => {
-  const b = parse(nestTog);
-  return b.length === 1 && b[0].type === 'raw' && b[0].text === nestTog;
-})());
+const nestTog =
+  '<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\nOuter body\n\n</details>';
+ok(
+  'nested details collapses into a single raw block',
+  (() => {
+    const b = parse(nestTog);
+    return b.length === 1 && b[0].type === 'raw' && b[0].text === nestTog;
+  })(),
+);
 ok('nested details round-trips verbatim (fixed point)', serialize(parse(nestTog)) === nestTog);
 // Regression: a code fence inside a toggle containing the literal </details> must
 // not split the toggle mid-fence.
 const fenceTog = '<details>\n<summary>Code</summary>\n\n```html\n</details>\n```\n\n</details>';
-ok('details with a </details> inside a code fence stays one block', (() => {
-  const b = parse(fenceTog);
-  return b.length === 1 && b[0].type === 'raw' && b[0].text === fenceTog;
-})());
+ok(
+  'details with a </details> inside a code fence stays one block',
+  (() => {
+    const b = parse(fenceTog);
+    return b.length === 1 && b[0].type === 'raw' && b[0].text === fenceTog;
+  })(),
+);
 
 // --- image blocks ---
 const imgOnly = parse('![a cat](https://example.com/cat.jpg)');
 ok('image line parses to an image block', imgOnly.length === 1 && imgOnly[0].type === 'image');
-ok('image block captures alt + src', imgOnly[0].meta.alt === 'a cat' && imgOnly[0].meta.src === 'https://example.com/cat.jpg');
+ok(
+  'image block captures alt + src',
+  imgOnly[0].meta.alt === 'a cat' && imgOnly[0].meta.src === 'https://example.com/cat.jpg',
+);
 ok('image block round-trips', serialize(imgOnly) === '![a cat](https://example.com/cat.jpg)');
-ok('image data URL round-trips', serialize(parse('![](data:image/png;base64,AAAA)')) === '![](data:image/png;base64,AAAA)');
+ok(
+  'image data URL round-trips',
+  serialize(parse('![](data:image/png;base64,AAAA)')) === '![](data:image/png;base64,AAAA)',
+);
 const imgCtx = 'Before\n\n![x](https://e.com/x.png)\n\nAfter';
 ok('image among paragraphs round-trips', serialize(parse(imgCtx)) === imgCtx);
 ok('image is its own block', parse(imgCtx).filter((b) => b.type === 'image').length === 1);
@@ -215,25 +288,47 @@ for (const t of ['heading', 'paragraph', 'bullet', 'numbered', 'todo', 'quote', 
   ok(`everything-doc contains ${t}`, eTypes.has(t));
 }
 ok('everything-doc fixed point', serialize(eBlocks) === serialize(parse(serialize(eBlocks))));
-ok('everything-doc block stability', JSON.stringify(strip(eBlocks)) === JSON.stringify(strip(parse(serialize(eBlocks)))));
+ok(
+  'everything-doc block stability',
+  JSON.stringify(strip(eBlocks)) === JSON.stringify(strip(parse(serialize(eBlocks)))),
+);
 
 // --- banner metadata (note cover) ---
 const GRAD = 'linear-gradient(120deg, #6366f1 0%, #d946ef 100%)';
 const IMG = 'https://example.com/cover.jpg';
-ok('normalizeBanner keeps a valid gradient', JSON.stringify(normalizeBanner({ type: 'gradient', value: GRAD, position: 50 })) === JSON.stringify({ type: 'gradient', value: GRAD, position: 50 }));
+ok(
+  'normalizeBanner keeps a valid gradient',
+  JSON.stringify(normalizeBanner({ type: 'gradient', value: GRAD, position: 50 })) ===
+    JSON.stringify({ type: 'gradient', value: GRAD, position: 50 }),
+);
 ok('normalizeBanner defaults position to 50', normalizeBanner({ type: 'image', value: IMG }).position === 50);
-ok('normalizeBanner clamps position high', normalizeBanner({ type: 'image', value: IMG, position: 250 }).position === 100);
+ok(
+  'normalizeBanner clamps position high',
+  normalizeBanner({ type: 'image', value: IMG, position: 250 }).position === 100,
+);
 ok('normalizeBanner clamps position low', normalizeBanner({ type: 'image', value: IMG, position: -5 }).position === 0);
 ok('normalizeBanner rejects null', normalizeBanner(null) === null);
 ok('normalizeBanner rejects missing value', normalizeBanner({ type: 'gradient' }) === null);
 ok('normalizeBanner rejects bad type', normalizeBanner({ type: 'video', value: IMG }) === null);
 // value allowlist (security): reject CSS url() beacons and odd schemes
-ok('rejects gradient containing url()', normalizeBanner({ type: 'gradient', value: 'url(https://evil.com/track.gif)' }) === null);
-ok('rejects gradient that is not a gradient function', normalizeBanner({ type: 'gradient', value: 'red; position:fixed' }) === null);
+ok(
+  'rejects gradient containing url()',
+  normalizeBanner({ type: 'gradient', value: 'url(https://evil.com/track.gif)' }) === null,
+);
+ok(
+  'rejects gradient that is not a gradient function',
+  normalizeBanner({ type: 'gradient', value: 'red; position:fixed' }) === null,
+);
 ok('rejects image with javascript: scheme', normalizeBanner({ type: 'image', value: 'javascript:alert(1)' }) === null);
-ok('rejects image with non-image data URL', normalizeBanner({ type: 'image', value: 'data:text/html,<script>1</script>' }) === null);
+ok(
+  'rejects image with non-image data URL',
+  normalizeBanner({ type: 'image', value: 'data:text/html,<script>1</script>' }) === null,
+);
 ok('accepts image data URL', normalizeBanner({ type: 'image', value: 'data:image/jpeg;base64,AAAA' }).type === 'image');
-ok('accepts repeating/radial gradients', normalizeBanner({ type: 'gradient', value: 'radial-gradient(circle, #000, #fff)' }).type === 'gradient');
+ok(
+  'accepts repeating/radial gradients',
+  normalizeBanner({ type: 'gradient', value: 'radial-gradient(circle, #000, #fff)' }).type === 'gradient',
+);
 
 const nb = new Note({ title: 'B', content: 'x', banner: { type: 'gradient', value: GRAD, position: 30 } });
 ok('Note stores normalized banner', nb.banner && nb.banner.type === 'gradient' && nb.banner.position === 30);
@@ -245,21 +340,31 @@ ok('setBanner(null) clears the banner', nb.banner === null && nb.toJSON().banner
 const legacy = Note.fromJSON({ id: '1', title: 't', content: 'c', tags: [] }); // no banner field
 ok('legacy note (no banner field) loads with banner=null', legacy.banner === null);
 // a crafted imported banner is neutralized on load
-ok('crafted url() banner is dropped on import', Note.fromJSON({ id: '2', title: 't', content: 'c', banner: { type: 'gradient', value: 'url(https://evil/x.gif)' } }).banner === null);
+ok(
+  'crafted url() banner is dropped on import',
+  Note.fromJSON({ id: '2', title: 't', content: 'c', banner: { type: 'gradient', value: 'url(https://evil/x.gif)' } })
+    .banner === null,
+);
 
 // --- soft-delete field on the note model ---
 const liveNote = new Note({ title: 'L', content: 'c' });
 ok('new note is live (deletedAt null, isTrashed false)', liveNote.deletedAt === null && liveNote.isTrashed === false);
 const updatedBefore = liveNote.updatedAt;
 liveNote.markTrashed('2026-05-05T00:00:00.000Z');
-ok('markTrashed sets deletedAt + isTrashed', liveNote.isTrashed === true && liveNote.deletedAt === '2026-05-05T00:00:00.000Z');
+ok(
+  'markTrashed sets deletedAt + isTrashed',
+  liveNote.isTrashed === true && liveNote.deletedAt === '2026-05-05T00:00:00.000Z',
+);
 ok('markTrashed does not touch updatedAt (restore is lossless)', liveNote.updatedAt === updatedBefore);
 liveNote.restore();
 ok('restore clears deletedAt', liveNote.deletedAt === null && liveNote.isTrashed === false);
 const tn = new Note({ title: 'T', content: 'c', deletedAt: '2026-05-05T00:00:00.000Z' });
 ok('toJSON includes deletedAt', tn.toJSON().deletedAt === '2026-05-05T00:00:00.000Z');
 ok('deletedAt round-trips through JSON', Note.fromJSON(tn.toJSON()).deletedAt === '2026-05-05T00:00:00.000Z');
-ok('legacy note (no deletedAt field) loads as null', Note.fromJSON({ id: 'x', title: 't', content: 'c' }).deletedAt === null);
+ok(
+  'legacy note (no deletedAt field) loads as null',
+  Note.fromJSON({ id: 'x', title: 't', content: 'c' }).deletedAt === null,
+);
 ok('non-string deletedAt is coerced to null', new Note({ deletedAt: 12345 }).deletedAt === null);
 
 // --- schema versioning + migration runner ---
@@ -278,12 +383,21 @@ ok('migration preserves an existing deletedAt', mig.data.notes[1].deletedAt === 
 ok('migration preserves other note fields', mig.data.notes[0].title === 'A' && mig.data.notes[0].content === 'x');
 ok('migration preserves config', mig.data.config.theme === 'dark');
 ok('migration does not mutate the input payload', legacyPayload.notes[0].deletedAt === undefined);
-const already = runMigrations({ notes: [{ id: '1', title: 'A', content: 'x', deletedAt: null }], config: {} }, CURRENT_SCHEMA_VERSION);
-ok('running at the current version is a no-op', already.migrated === false && already.version === CURRENT_SCHEMA_VERSION);
+const already = runMigrations(
+  { notes: [{ id: '1', title: 'A', content: 'x', deletedAt: null }], config: {} },
+  CURRENT_SCHEMA_VERSION,
+);
+ok(
+  'running at the current version is a no-op',
+  already.migrated === false && already.version === CURRENT_SCHEMA_VERSION,
+);
 const once = runMigrations(legacyPayload, 0).data;
 const twice = runMigrations(once, CURRENT_SCHEMA_VERSION).data;
 ok('migration is idempotent', JSON.stringify(once) === JSON.stringify(twice));
-ok('migration tolerates a payload with no notes array', runMigrations({ config: {} }, 0).version === CURRENT_SCHEMA_VERSION);
+ok(
+  'migration tolerates a payload with no notes array',
+  runMigrations({ config: {} }, 0).version === CURRENT_SCHEMA_VERSION,
+);
 ok('detectVersion: undefined -> 0', detectVersion(undefined) === 0);
 ok('detectVersion: null -> 0', detectVersion(null) === 0);
 ok('detectVersion: passes a valid integer through', detectVersion(1) === 1);
@@ -296,62 +410,187 @@ ok('setPinned(true) pins', p0.pinned === true);
 const pUpdated = p0.updatedAt;
 p0.setPinned(false);
 ok('setPinned(false) unpins without touching updatedAt', p0.pinned === false && p0.updatedAt === pUpdated);
-ok('pinned round-trips through JSON', Note.fromJSON(new Note({ title: 'x', content: 'y', pinned: true }).toJSON()).pinned === true);
-ok('legacy note (no pinned field) loads as false', Note.fromJSON({ id: 'z', title: 't', content: 'c' }).pinned === false);
-const migP = runMigrations({ notes: [{ id: '1', title: 'A', content: 'x' }, { id: '2', title: 'B', content: 'y', pinned: true }], config: {} }, 0);
+ok(
+  'pinned round-trips through JSON',
+  Note.fromJSON(new Note({ title: 'x', content: 'y', pinned: true }).toJSON()).pinned === true,
+);
+ok(
+  'legacy note (no pinned field) loads as false',
+  Note.fromJSON({ id: 'z', title: 't', content: 'c' }).pinned === false,
+);
+const migP = runMigrations(
+  {
+    notes: [
+      { id: '1', title: 'A', content: 'x' },
+      { id: '2', title: 'B', content: 'y', pinned: true },
+    ],
+    config: {},
+  },
+  0,
+);
 ok('migration reaches the current version', migP.version === CURRENT_SCHEMA_VERSION);
 ok('v2 migration adds pinned:false where missing', migP.data.notes[0].pinned === false);
 ok('v2 migration preserves an existing pinned:true', migP.data.notes[1].pinned === true);
-ok('v1+v2 together add both deletedAt and pinned', migP.data.notes[0].deletedAt === null && migP.data.notes[0].pinned === false);
+ok(
+  'v1+v2 together add both deletedAt and pinned',
+  migP.data.notes[0].deletedAt === null && migP.data.notes[0].pinned === false,
+);
 
 // --- fuzzy matcher ---
-ok('fuzzy: empty query matches with score 0', JSON.stringify(fuzzyMatch('', 'abc')) === JSON.stringify({ score: 0, positions: [] }));
+ok(
+  'fuzzy: empty query matches with score 0',
+  JSON.stringify(fuzzyMatch('', 'abc')) === JSON.stringify({ score: 0, positions: [] }),
+);
 ok('fuzzy: non-subsequence returns null', fuzzyMatch('abz', 'abc') === null);
 ok('fuzzy: query longer than text returns null', fuzzyMatch('abcd', 'abc') === null);
-ok('fuzzy: subsequence records matched positions', JSON.stringify(fuzzyMatch('ac', 'abc').positions) === JSON.stringify([0, 2]));
-ok('fuzzy: consecutive/prefix outranks scattered', fuzzyMatch('note', 'Notebook').score > fuzzyMatch('note', 'No tame edge').score);
-ok('fuzzy: word-start outranks mid-word', fuzzyMatch('proj', 'My Project').score > fuzzyMatch('proj', 'improject').score);
-ok('fuzzy: shorter target outranks longer for same query', fuzzyMatch('cat', 'cat').score > fuzzyMatch('cat', 'category theory notes').score);
+ok(
+  'fuzzy: subsequence records matched positions',
+  JSON.stringify(fuzzyMatch('ac', 'abc').positions) === JSON.stringify([0, 2]),
+);
+ok(
+  'fuzzy: consecutive/prefix outranks scattered',
+  fuzzyMatch('note', 'Notebook').score > fuzzyMatch('note', 'No tame edge').score,
+);
+ok(
+  'fuzzy: word-start outranks mid-word',
+  fuzzyMatch('proj', 'My Project').score > fuzzyMatch('proj', 'improject').score,
+);
+ok(
+  'fuzzy: shorter target outranks longer for same query',
+  fuzzyMatch('cat', 'cat').score > fuzzyMatch('cat', 'category theory notes').score,
+);
 ok('fuzzyHighlight wraps matched chars', fuzzyHighlight('abc', [0, 2]) === '<mark>a</mark>b<mark>c</mark>');
 ok('fuzzyHighlight escapes + no positions', fuzzyHighlight('<x>', []) === '&lt;x&gt;');
 ok('fuzzyHighlight escapes matched chars too', fuzzyHighlight('<b>', [0]) === '<mark>&lt;</mark>b&gt;');
 
 // --- scoped search parsing ---
-ok('parseQuery: plain text', JSON.stringify(parseQuery('hello world')) === JSON.stringify({ text: 'hello world', filters: { tags: [], properties: [], inTitle: false, hasBanner: null, pinned: null, archived: null } }));
-ok('parseQuery: tag filter extracted', (() => { const p = parseQuery('tag:work notes'); return p.text === 'notes' && p.filters.tags.length === 1 && p.filters.tags[0] === 'work'; })());
-ok('parseQuery: multiple tags', (() => { const p = parseQuery('tag:a tag:b'); return p.text === '' && p.filters.tags.join(',') === 'a,b'; })());
+ok(
+  'parseQuery: plain text',
+  JSON.stringify(parseQuery('hello world')) ===
+    JSON.stringify({
+      text: 'hello world',
+      filters: { tags: [], properties: [], inTitle: false, hasBanner: null, pinned: null, archived: null },
+    }),
+);
+ok(
+  'parseQuery: tag filter extracted',
+  (() => {
+    const p = parseQuery('tag:work notes');
+    return p.text === 'notes' && p.filters.tags.length === 1 && p.filters.tags[0] === 'work';
+  })(),
+);
+ok(
+  'parseQuery: multiple tags',
+  (() => {
+    const p = parseQuery('tag:a tag:b');
+    return p.text === '' && p.filters.tags.join(',') === 'a,b';
+  })(),
+);
 ok('parseQuery: in:title', parseQuery('in:title foo').filters.inTitle === true);
 ok('parseQuery: has:banner', parseQuery('has:banner').filters.hasBanner === true);
 ok('parseQuery: is:pinned', parseQuery('is:pinned x').filters.pinned === true);
 ok('parseQuery: unknown filter value kept as text', parseQuery('in:body foo').text.includes('in:body'));
-ok('parseQuery: unrelated colon token kept as text', parseQuery('http://example.com').text.includes('http://example.com'));
+ok(
+  'parseQuery: unrelated colon token kept as text',
+  parseQuery('http://example.com').text.includes('http://example.com'),
+);
 
 // --- filter predicate + scoring + ranking ---
-const mkNote = (o) => ({ title: '', content: '', tags: [], banner: null, pinned: false, updatedAt: '2026-01-01T00:00:00.000Z', ...o });
-ok('noteMatchesFilters: tag match', noteMatchesFilters(mkNote({ tags: ['Work'] }), { tags: ['work'], hasBanner: null, pinned: null }) === true);
-ok('noteMatchesFilters: tag miss', noteMatchesFilters(mkNote({ tags: ['home'] }), { tags: ['work'], hasBanner: null, pinned: null }) === false);
-ok('noteMatchesFilters: has:banner true needs a banner', noteMatchesFilters(mkNote({ banner: null }), { tags: [], hasBanner: true, pinned: null }) === false);
-ok('noteMatchesFilters: is:pinned true needs pinned', noteMatchesFilters(mkNote({ pinned: true }), { tags: [], hasBanner: null, pinned: true }) === true);
-ok('scoreNote: title match beats body-only match', scoreNote('alpha', mkNote({ title: 'Alpha', content: 'zzz' })).score > scoreNote('alpha', mkNote({ title: 'zzz', content: 'contains alpha here' })).score);
+const mkNote = (o) => ({
+  title: '',
+  content: '',
+  tags: [],
+  banner: null,
+  pinned: false,
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...o,
+});
+ok(
+  'noteMatchesFilters: tag match',
+  noteMatchesFilters(mkNote({ tags: ['Work'] }), { tags: ['work'], hasBanner: null, pinned: null }) === true,
+);
+ok(
+  'noteMatchesFilters: tag miss',
+  noteMatchesFilters(mkNote({ tags: ['home'] }), { tags: ['work'], hasBanner: null, pinned: null }) === false,
+);
+ok(
+  'noteMatchesFilters: has:banner true needs a banner',
+  noteMatchesFilters(mkNote({ banner: null }), { tags: [], hasBanner: true, pinned: null }) === false,
+);
+ok(
+  'noteMatchesFilters: is:pinned true needs pinned',
+  noteMatchesFilters(mkNote({ pinned: true }), { tags: [], hasBanner: null, pinned: true }) === true,
+);
+ok(
+  'scoreNote: title match beats body-only match',
+  scoreNote('alpha', mkNote({ title: 'Alpha', content: 'zzz' })).score >
+    scoreNote('alpha', mkNote({ title: 'zzz', content: 'contains alpha here' })).score,
+);
 ok('scoreNote: no match returns null', scoreNote('zzz', mkNote({ title: 'abc', content: 'def' })) === null);
-ok('scoreNote: in:title ignores body', scoreNote('alpha', mkNote({ title: 'zzz', content: 'alpha' }), { inTitle: true }) === null);
+ok(
+  'scoreNote: in:title ignores body',
+  scoreNote('alpha', mkNote({ title: 'zzz', content: 'alpha' }), { inTitle: true }) === null,
+);
 ok('scoreNote: empty query matches all', scoreNote('', mkNote({ title: 'anything' })).score === 0);
-const ranked = rankNotes('al', [mkNote({ title: 'Beta', content: 'no' }), mkNote({ title: 'Alpha', content: 'x' }), mkNote({ title: 'Val', content: 'x' })]);
+const ranked = rankNotes('al', [
+  mkNote({ title: 'Beta', content: 'no' }),
+  mkNote({ title: 'Alpha', content: 'x' }),
+  mkNote({ title: 'Val', content: 'x' }),
+]);
 ok('rankNotes: drops non-matches and ranks title matches', ranked.length === 2 && ranked[0].note.title === 'Alpha');
-ok('rankNotes: applies filters', rankNotes('tag:x foo', [mkNote({ title: 'foo', tags: ['x'] }), mkNote({ title: 'foo', tags: ['y'] })]).length === 1);
+ok(
+  'rankNotes: applies filters',
+  rankNotes('tag:x foo', [mkNote({ title: 'foo', tags: ['x'] }), mkNote({ title: 'foo', tags: ['y'] })]).length === 1,
+);
 
 // --- settings (normalize + theme resolution) ---
-ok('normalizeSettings returns defaults for empty config', JSON.stringify(normalizeSettings({})) === JSON.stringify(DEFAULT_SETTINGS));
-ok('normalizeSettings keeps all valid values', (() => {
-  const s = normalizeSettings({ themeMode: 'dark', fontScale: 'l', editorWidth: 'wide', autosaveMs: 800, defaultTemplate: 'daily' });
-  return s.themeMode === 'dark' && s.fontScale === 'l' && s.editorWidth === 'wide' && s.autosaveMs === 800 && s.defaultTemplate === 'daily';
-})());
-ok('normalizeSettings rejects invalid values back to defaults', (() => {
-  const s = normalizeSettings({ themeMode: 'x', fontScale: 'xl', editorWidth: 'huge', autosaveMs: 9999, defaultTemplate: 'nope' });
-  return s.themeMode === 'light' && s.fontScale === 'm' && s.editorWidth === 'normal' && s.autosaveMs === 400 && s.defaultTemplate === 'none';
-})());
+ok(
+  'normalizeSettings returns defaults for empty config',
+  JSON.stringify(normalizeSettings({})) === JSON.stringify(DEFAULT_SETTINGS),
+);
+ok(
+  'normalizeSettings keeps all valid values',
+  (() => {
+    const s = normalizeSettings({
+      themeMode: 'dark',
+      fontScale: 'l',
+      editorWidth: 'wide',
+      autosaveMs: 800,
+      defaultTemplate: 'daily',
+    });
+    return (
+      s.themeMode === 'dark' &&
+      s.fontScale === 'l' &&
+      s.editorWidth === 'wide' &&
+      s.autosaveMs === 800 &&
+      s.defaultTemplate === 'daily'
+    );
+  })(),
+);
+ok(
+  'normalizeSettings rejects invalid values back to defaults',
+  (() => {
+    const s = normalizeSettings({
+      themeMode: 'x',
+      fontScale: 'xl',
+      editorWidth: 'huge',
+      autosaveMs: 9999,
+      defaultTemplate: 'nope',
+    });
+    return (
+      s.themeMode === 'light' &&
+      s.fontScale === 'm' &&
+      s.editorWidth === 'normal' &&
+      s.autosaveMs === 400 &&
+      s.defaultTemplate === 'none'
+    );
+  })(),
+);
 ok('normalizeSettings falls back to legacy theme key', normalizeSettings({ theme: 'dark' }).themeMode === 'dark');
-ok('normalizeSettings prefers themeMode over legacy theme', normalizeSettings({ theme: 'dark', themeMode: 'light' }).themeMode === 'light');
+ok(
+  'normalizeSettings prefers themeMode over legacy theme',
+  normalizeSettings({ theme: 'dark', themeMode: 'light' }).themeMode === 'light',
+);
 ok('normalizeSettings coerces string autosaveMs', normalizeSettings({ autosaveMs: '800' }).autosaveMs === 800);
 ok('resolveTheme: system + prefersDark -> dark', resolveTheme('system', true) === 'dark');
 ok('resolveTheme: system + light -> light', resolveTheme('system', false) === 'light');
@@ -361,43 +600,85 @@ ok('resolveTheme: explicit light ignores system', resolveTheme('light', true) ==
 // hard-codes a theme, so any persisted choice — including an explicit 'system'
 // — or a legacy `theme` key wins over that default.
 ok('DEFAULT_SETTINGS.themeMode is light (WEB-1)', DEFAULT_SETTINGS.themeMode === 'light');
-ok('fresh Database config has no hardcoded theme key', !('theme' in new Database().config) && !('themeMode' in new Database().config));
+ok(
+  'fresh Database config has no hardcoded theme key',
+  !('theme' in new Database().config) && !('themeMode' in new Database().config),
+);
 ok('fresh install normalizes to themeMode: light', normalizeSettings(new Database().config).themeMode === 'light');
 ok('an explicit system choice is preserved', normalizeSettings({ themeMode: 'system' }).themeMode === 'system');
-ok('a legacy stored theme still wins on upgrade', normalizeSettings({ ...new Database().config, theme: 'dark' }).themeMode === 'dark');
+ok(
+  'a legacy stored theme still wins on upgrade',
+  normalizeSettings({ ...new Database().config, theme: 'dark' }).themeMode === 'dark',
+);
 // Migration-safe: running any older payload forward never rewrites a theme choice.
 for (const from of [undefined, 3, CURRENT_SCHEMA_VERSION - 1]) {
   const upgraded = runMigrations({ notes: [], config: { themeMode: 'system' } }, from);
-  ok(`migration from v${from ?? 0} keeps an explicit system theme`,
-    upgraded.data.config.themeMode === 'system' && normalizeSettings(upgraded.data.config).themeMode === 'system');
+  ok(
+    `migration from v${from ?? 0} keeps an explicit system theme`,
+    upgraded.data.config.themeMode === 'system' && normalizeSettings(upgraded.data.config).themeMode === 'system',
+  );
 }
-ok('migration from legacy keeps the old theme key for normalizeSettings',
-  normalizeSettings(runMigrations({ notes: [], config: { theme: 'dark' } }, undefined).data.config).themeMode === 'dark');
+ok(
+  'migration from legacy keeps the old theme key for normalizeSettings',
+  normalizeSettings(runMigrations({ notes: [], config: { theme: 'dark' } }, undefined).data.config).themeMode ===
+    'dark',
+);
 
 // --- pre-paint theme boot + theme surfaces (index.html / styles.css) ---
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const cssVar = (block, name) => new RegExp(`${block}\\s*\\{[^}]*--${name}:\\s*(#[0-9a-f]{3,8})`, 'i').exec(stylesCss)?.[1];
+const cssVar = (block, name) =>
+  new RegExp(`${block}\\s*\\{[^}]*--${name}:\\s*(#[0-9a-f]{3,8})`, 'i').exec(stylesCss)?.[1];
 const lightSurface = cssVar(':root', 'bg-elev');
 const darkSurface = cssVar(':root\\[data-theme="dark"\\]', 'bg-elev');
 ok('index.html defaults to the light theme before any script runs', /<html[^>]*\sdata-theme="light"/.test(indexHtml));
 const bootScripts = [...indexHtml.matchAll(/<script>([^<]*)<\/script>/g)].map((m) => m[1]);
 const boot = bootScripts[0] || '';
 ok('index.html has exactly one bare inline script (the theme boot)', bootScripts.length === 1);
-ok('theme boot runs in <head> before the stylesheet and the module entry',
-  indexHtml.indexOf('<script>') < indexHtml.indexOf('<link rel="stylesheet"') && indexHtml.indexOf('<script>') < indexHtml.indexOf('<script type="module"'));
-ok('theme boot reads the localStorage mirror key theme.js writes', boot.includes(`localStorage.getItem('${THEME_MIRROR_KEY}')`));
-ok('theme boot resolves a system choice via prefers-color-scheme', boot.includes('prefers-color-scheme') && boot.includes("'dark'") && boot.includes("'light'"));
+ok(
+  'theme boot runs in <head> before the stylesheet and the module entry',
+  indexHtml.indexOf('<script>') < indexHtml.indexOf('<link rel="stylesheet"') &&
+    indexHtml.indexOf('<script>') < indexHtml.indexOf('<script type="module"'),
+);
+ok(
+  'theme boot reads the localStorage mirror key theme.js writes',
+  boot.includes(`localStorage.getItem('${THEME_MIRROR_KEY}')`),
+);
+ok(
+  'theme boot resolves a system choice via prefers-color-scheme',
+  boot.includes('prefers-color-scheme') && boot.includes("'dark'") && boot.includes("'light'"),
+);
 ok('theme boot sets data-theme on <html>', boot.includes('document.documentElement.dataset.theme'));
-ok('theme boot is single-line, quote-safe, and guarded (stable CSP hash through the HTML minifier)',
-  !boot.includes('\n') && !boot.includes('"') && !/[<>]/.test(boot) && boot.startsWith('try{') && boot.endsWith('catch(e){}'));
-ok('static theme-color meta matches the light --bg-elev', !!lightSurface && indexHtml.includes(`<meta name="theme-color" content="${lightSurface}"`));
+ok(
+  'theme boot is single-line, quote-safe, and guarded (stable CSP hash through the HTML minifier)',
+  !boot.includes('\n') &&
+    !boot.includes('"') &&
+    !/[<>]/.test(boot) &&
+    boot.startsWith('try{') &&
+    boot.endsWith('catch(e){}'),
+);
+ok(
+  'static theme-color meta matches the light --bg-elev',
+  !!lightSurface && indexHtml.includes(`<meta name="theme-color" content="${lightSurface}"`),
+);
 ok('theme boot switches theme-color to the dark --bg-elev', !!darkSurface && boot.includes(`content='${darkSurface}'`));
-const mobileBar = indexHtml.slice(indexHtml.indexOf('<div class="mobile-bar">'), indexHtml.indexOf('<div class="sidebar-backdrop"'));
-ok('mobile top bar contains the theme toggle', /<button id="mobile-theme-btn"[^>]*aria-label="Toggle theme"/.test(mobileBar));
-ok('sidebar header keeps the desktop theme toggle', /<button id="theme-btn"[^>]*aria-label="Toggle theme"/.test(indexHtml));
-ok('color-scheme follows [data-theme] in styles.css',
-  /:root\s*\{[^}]*color-scheme:\s*light/.test(stylesCss) && /:root\[data-theme="dark"\]\s*\{[^}]*color-scheme:\s*dark/.test(stylesCss));
+const mobileBar = indexHtml.slice(
+  indexHtml.indexOf('<div class="mobile-bar">'),
+  indexHtml.indexOf('<div class="sidebar-backdrop"'),
+);
+ok(
+  'mobile top bar contains the theme toggle',
+  /<button id="mobile-theme-btn"[^>]*aria-label="Toggle theme"/.test(mobileBar),
+);
+ok(
+  'sidebar header keeps the desktop theme toggle',
+  /<button id="theme-btn"[^>]*aria-label="Toggle theme"/.test(indexHtml),
+);
+ok(
+  'color-scheme follows [data-theme] in styles.css',
+  /:root\s*\{[^}]*color-scheme:\s*light/.test(stylesCss) &&
+    /:root\[data-theme="dark"\]\s*\{[^}]*color-scheme:\s*dark/.test(stylesCss),
+);
 
 // --- PWA manifest is valid + installable-shaped ---
 const manifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
@@ -406,23 +687,45 @@ ok('manifest display is standalone', manifest.display === 'standalone');
 // Relative (./) so the manifest resolves correctly under any deploy base — root
 // in dev, and the /noteforge/ sub-path in production.
 ok('manifest has relative start_url + scope', manifest.start_url === './' && manifest.scope === './');
-ok('manifest has at least one typed icon', Array.isArray(manifest.icons) && manifest.icons.length >= 1 && manifest.icons.every((i) => i.src && i.type));
-ok('manifest icons use relative paths', manifest.icons.every((i) => i.src.startsWith('./')));
-ok('manifest has a maskable icon', manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')));
-ok('manifest has theme + background colors', /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color));
-ok('manifest splash colours match the light default (WEB-1)', manifest.background_color === cssVar(':root', 'bg') && manifest.theme_color === lightSurface);
-ok('manifest share target is relative, GET-only, and allowlists title/text/url', (() => {
-  const target = manifest.share_target;
-  return target?.action === './?source=share-target'
-    && target.method === 'GET'
-    && eq(target.params, { title: 'title', text: 'text', url: 'url' })
-    && !('enctype' in target)
-    && !('files' in target.params);
-})());
+ok(
+  'manifest has at least one typed icon',
+  Array.isArray(manifest.icons) && manifest.icons.length >= 1 && manifest.icons.every((i) => i.src && i.type),
+);
+ok(
+  'manifest icons use relative paths',
+  manifest.icons.every((i) => i.src.startsWith('./')),
+);
+ok(
+  'manifest has a maskable icon',
+  manifest.icons.some((i) => /\bmaskable\b/.test(i.purpose || '')),
+);
+ok(
+  'manifest has theme + background colors',
+  /^#[0-9a-f]{3,8}$/i.test(manifest.theme_color) && /^#[0-9a-f]{3,8}$/i.test(manifest.background_color),
+);
+ok(
+  'manifest splash colours match the light default (WEB-1)',
+  manifest.background_color === cssVar(':root', 'bg') && manifest.theme_color === lightSurface,
+);
+ok(
+  'manifest share target is relative, GET-only, and allowlists title/text/url',
+  (() => {
+    const target = manifest.share_target;
+    return (
+      target?.action === './?source=share-target' &&
+      target.method === 'GET' &&
+      eq(target.params, { title: 'title', text: 'text', url: 'url' }) &&
+      !('enctype' in target) &&
+      !('files' in target.params)
+    );
+  })(),
+);
 const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 ok('service worker has a build-time emitted-asset precache hook', serviceWorkerSource.includes('__PRECACHE_ASSETS__'));
-ok('service worker matches same-origin static precache entries across host-added Vary headers',
-  serviceWorkerSource.includes('caches.match(req, { ignoreVary: true })'));
+ok(
+  'service worker matches same-origin static precache entries across host-added Vary headers',
+  serviceWorkerSource.includes('caches.match(req, { ignoreVary: true })'),
+);
 const serviceWorkerHandlers = {};
 const deletedCaches = [];
 runInNewContext(serviceWorkerSource.replaceAll('__BUILD_HASH__', 'phase0test'), {
@@ -431,16 +734,32 @@ runInNewContext(serviceWorkerSource.replaceAll('__BUILD_HASH__', 'phase0test'), 
     location: new URL('https://example.test/noteforge/sw.js'),
     clients: { claim: async () => {} },
     skipWaiting: async () => {},
-    addEventListener(type, handler) { serviceWorkerHandlers[type] = handler; },
+    addEventListener(type, handler) {
+      serviceWorkerHandlers[type] = handler;
+    },
   },
   caches: {
-    keys: async () => ['noteforge-oldbuild', 'noteforge-phase0test', 'system-by-dave-shell', 'release-check-unrelated-cache'],
-    delete: async (key) => { deletedCaches.push(key); return true; },
+    keys: async () => [
+      'noteforge-oldbuild',
+      'noteforge-phase0test',
+      'system-by-dave-shell',
+      'release-check-unrelated-cache',
+    ],
+    delete: async (key) => {
+      deletedCaches.push(key);
+      return true;
+    },
   },
-  fetch: async () => { throw new Error('not used by activation test'); },
+  fetch: async () => {
+    throw new Error('not used by activation test');
+  },
 });
 let activation;
-serviceWorkerHandlers.activate({ waitUntil(promise) { activation = promise; } });
+serviceWorkerHandlers.activate({
+  waitUntil(promise) {
+    activation = promise;
+  },
+});
 await activation;
 ok('service worker activation prunes only stale NoteForge caches', eq(deletedCaches, ['noteforge-oldbuild']));
 
@@ -448,9 +767,22 @@ ok('service worker activation prunes only stale NoteForge caches', eq(deletedCac
 const tN = (id, parentId = null) => ({ id, parentId, title: id, updatedAt: '2026-01-01T00:00:00Z' });
 const tnotes = [tN('a'), tN('b', 'a'), tN('c', 'a'), tN('d', 'b'), tN('e')]; // a > {b > {d}, c}, e
 const forest = buildForest(tnotes);
-ok('buildForest: two roots (a, e)', forest.length === 2 && forest.map((f) => f.note.id).sort().join() === 'a,e');
+ok(
+  'buildForest: two roots (a, e)',
+  forest.length === 2 &&
+    forest
+      .map((f) => f.note.id)
+      .sort()
+      .join() === 'a,e',
+);
 const aNode = forest.find((f) => f.note.id === 'a');
-ok('buildForest: a has children b, c', aNode.children.map((c) => c.note.id).sort().join() === 'b,c');
+ok(
+  'buildForest: a has children b, c',
+  aNode.children
+    .map((c) => c.note.id)
+    .sort()
+    .join() === 'b,c',
+);
 ok('buildForest: grandchild d under b', aNode.children.find((c) => c.note.id === 'b').children[0].note.id === 'd');
 ok('buildForest: missing parent -> promoted to root', buildForest([tN('x', 'ghost')]).length === 1);
 ok('buildForest: self-parent -> root', buildForest([tN('s', 's')]).length === 1);
@@ -458,16 +790,33 @@ const cyc = [tN('p', 'q'), tN('q', 'p')];
 ok('buildForest: pure cycle is safe and loses no note', buildForest(cyc).length === 2);
 const flat = flattenForest(forest);
 ok('flattenForest: all rows when expanded', flat.length === 5);
-ok('flattenForest: depth is correct', flat.find((r) => r.note.id === 'd').depth === 2 && flat.find((r) => r.note.id === 'a').depth === 0);
-ok('flattenForest: hasChildren flag', flat.find((r) => r.note.id === 'a').hasChildren === true && flat.find((r) => r.note.id === 'd').hasChildren === false);
+ok(
+  'flattenForest: depth is correct',
+  flat.find((r) => r.note.id === 'd').depth === 2 && flat.find((r) => r.note.id === 'a').depth === 0,
+);
+ok(
+  'flattenForest: hasChildren flag',
+  flat.find((r) => r.note.id === 'a').hasChildren === true && flat.find((r) => r.note.id === 'd').hasChildren === false,
+);
 const collapsedRows = flattenForest(forest, new Set(['a']));
-ok('flattenForest: collapsing a hides its subtree', collapsedRows.map((r) => r.note.id).sort().join() === 'a,e');
+ok(
+  'flattenForest: collapsing a hides its subtree',
+  collapsedRows
+    .map((r) => r.note.id)
+    .sort()
+    .join() === 'a,e',
+);
 ok('flattenForest: collapsed flag set', collapsedRows.find((r) => r.note.id === 'a').collapsed === true);
 ok('isDescendant: grandchild d under a', isDescendant(tnotes, 'a', 'd') === true);
 ok('isDescendant: sibling is not', isDescendant(tnotes, 'b', 'c') === false);
 ok('isDescendant: self is not', isDescendant(tnotes, 'a', 'a') === false);
 ok('isDescendant: cycle-safe', typeof isDescendant(cyc, 'p', 'q') === 'boolean');
-ok('ancestorChain: d -> [a, b]', ancestorChain(tnotes, 'd').map((n) => n.id).join() === 'a,b');
+ok(
+  'ancestorChain: d -> [a, b]',
+  ancestorChain(tnotes, 'd')
+    .map((n) => n.id)
+    .join() === 'a,b',
+);
 ok('ancestorChain: root -> empty', ancestorChain(tnotes, 'a').length === 0);
 ok('ancestorChain: cycle-safe', Array.isArray(ancestorChain(cyc, 'p')));
 // A very deep outline must not overflow the stack or go O(n^2) (iterative build/flatten).
@@ -477,17 +826,26 @@ const deepForest = buildForest(deep);
 ok('buildForest handles a very deep chain', deepForest.length === 1);
 const deepFlat = flattenForest(deepForest);
 ok('flattenForest handles a very deep chain', deepFlat.length === 4000 && deepFlat[3999].depth === 3999);
-ok('cycle-stranded nodes flatten without looping', flattenForest(buildForest([tN('p', 'q'), tN('q', 'p')])).length === 2);
+ok(
+  'cycle-stranded nodes flatten without looping',
+  flattenForest(buildForest([tN('p', 'q'), tN('q', 'p')])).length === 2,
+);
 
 // --- parentId model + migration v3 + db.setParent/childrenOf ---
 ok('new note parentId defaults to null', new Note({ title: 'x' }).parentId === null);
-ok('parentId round-trips through JSON', Note.fromJSON(new Note({ title: 'x', parentId: 'p1' }).toJSON()).parentId === 'p1');
+ok(
+  'parentId round-trips through JSON',
+  Note.fromJSON(new Note({ title: 'x', parentId: 'p1' }).toJSON()).parentId === 'p1',
+);
 ok('self parentId coerced to null', new Note({ id: 'z', parentId: 'z' }).parentId === null);
 ok('legacy note (no parentId) loads null', Note.fromJSON({ id: 'q', title: 't', content: 'c' }).parentId === null);
 const migT = runMigrations({ notes: [{ id: '1', title: 'A', content: 'x' }], config: {} }, 0);
 ok('migration reaches v6', migT.version === 6 && CURRENT_SCHEMA_VERSION === 6);
 ok('v3 migration adds parentId:null', migT.data.notes[0].parentId === null);
-ok('v3 migration preserves an existing parentId', runMigrations({ notes: [{ id: '2', parentId: 'p' }], config: {} }, 2).data.notes[0].parentId === 'p');
+ok(
+  'v3 migration preserves an existing parentId',
+  runMigrations({ notes: [{ id: '2', parentId: 'p' }], config: {} }, 2).data.notes[0].parentId === 'p',
+);
 ok('v4 migration adds aliases:[]', migT.data.notes[0].aliases.length === 0);
 ok('v5 migration adds archivedAt:null', migT.data.notes[0].archivedAt === null);
 
@@ -495,42 +853,90 @@ const dbt = new Database({ storageBackend: inertStorage });
 const pa = dbt.createNote({ title: 'Parent', content: '' });
 const ch = dbt.createNote({ title: 'Child', content: '' });
 ok('setParent nests a note', dbt.setParent(ch.id, pa.id) === true && dbt.getNote(ch.id).parentId === pa.id);
-ok('childrenOf returns the child', dbt.childrenOf(pa.id).map((n) => n.id).join() === ch.id);
+ok(
+  'childrenOf returns the child',
+  dbt
+    .childrenOf(pa.id)
+    .map((n) => n.id)
+    .join() === ch.id,
+);
 ok('setParent rejects self-parent', dbt.setParent(pa.id, pa.id) === false);
-ok('setParent rejects a cycle (parent under its own child)', dbt.setParent(pa.id, ch.id) === false && dbt.getNote(pa.id).parentId === null);
+ok(
+  'setParent rejects a cycle (parent under its own child)',
+  dbt.setParent(pa.id, ch.id) === false && dbt.getNote(pa.id).parentId === null,
+);
 ok('setParent rejects a missing/absent parent', dbt.setParent(ch.id, 'ghost') === false);
-ok('ancestorsOf reflects the nesting', dbt.ancestorsOf(ch.id).map((n) => n.id).join() === pa.id);
-ok('setParent(null) detaches to top level', dbt.setParent(ch.id, null) === true && dbt.getNote(ch.id).parentId === null);
+ok(
+  'ancestorsOf reflects the nesting',
+  dbt
+    .ancestorsOf(ch.id)
+    .map((n) => n.id)
+    .join() === pa.id,
+);
+ok(
+  'setParent(null) detaches to top level',
+  dbt.setParent(ch.id, null) === true && dbt.getNote(ch.id).parentId === null,
+);
 dbt.setParent(ch.id, pa.id);
 dbt.deleteNote(pa.id); // trashing the parent must not lose the child
 ok('child survives when parent is trashed', dbt.getNote(ch.id) !== null);
-ok('child is promoted to a tree root when its parent is trashed', buildForest(dbt.getAllNotes()).some((r) => r.note.id === ch.id));
+ok(
+  'child is promoted to a tree root when its parent is trashed',
+  buildForest(dbt.getAllNotes()).some((r) => r.note.id === ch.id),
+);
 
 // --- note export (shareable HTML + filename) ---
 ok('noteFileStem slugifies a title', noteFileStem('My Great Note!') === 'my-great-note');
-ok('noteFileStem falls back to "note"', noteFileStem('') === 'note' && noteFileStem('   ') === 'note' && noteFileStem('***') === 'note');
+ok(
+  'noteFileStem falls back to "note"',
+  noteFileStem('') === 'note' && noteFileStem('   ') === 'note' && noteFileStem('***') === 'note',
+);
 ok('noteFileStem collapses separators', noteFileStem('  A / B  ') === 'a-b');
-ok('export doc has a doctype, title, and the inner html', (() => {
-  const d = buildNoteHtmlDoc('My Note', '<p>hello</p>');
-  return d.startsWith('<!doctype html>') && d.includes('<title>My Note</title>') && d.includes('<h1>My Note</h1>') && d.includes('<p>hello</p>');
-})());
-ok('export doc escapes the title (no injection)', (() => {
-  const d = buildNoteHtmlDoc('<script>alert(1)</script>', '');
-  return d.includes('&lt;script&gt;') && !d.includes('<script>alert(1)</script>');
-})());
-ok('export doc is self-contained (inline style, no external refs)', (() => {
-  const d = buildNoteHtmlDoc('t', '<p>b</p>');
-  return d.includes('<style>') && !/\b(?:src|href)\s*=|https?:\/\//i.test(d);
-})());
+ok(
+  'export doc has a doctype, title, and the inner html',
+  (() => {
+    const d = buildNoteHtmlDoc('My Note', '<p>hello</p>');
+    return (
+      d.startsWith('<!doctype html>') &&
+      d.includes('<title>My Note</title>') &&
+      d.includes('<h1>My Note</h1>') &&
+      d.includes('<p>hello</p>')
+    );
+  })(),
+);
+ok(
+  'export doc escapes the title (no injection)',
+  (() => {
+    const d = buildNoteHtmlDoc('<script>alert(1)</script>', '');
+    return d.includes('&lt;script&gt;') && !d.includes('<script>alert(1)</script>');
+  })(),
+);
+ok(
+  'export doc is self-contained (inline style, no external refs)',
+  (() => {
+    const d = buildNoteHtmlDoc('t', '<p>b</p>');
+    return d.includes('<style>') && !/\b(?:src|href)\s*=|https?:\/\//i.test(d);
+  })(),
+);
 
 // --- vault export (save-to-folder filenames) ---
 ok('vaultFileName keeps spaces (Obsidian-compatible)', vaultFileName('My Note', new Set()) === 'My Note.md');
 ok('vaultFileName replaces illegal chars with -', vaultFileName('A/B*C:D', new Set()) === 'A-B-C-D.md');
-ok('vaultFileName de-dups collisions case-insensitively', (() => {
-  const u = new Set();
-  return vaultFileName('Note', u) === 'Note.md' && vaultFileName('Note', u) === 'Note 2.md' && vaultFileName('note', u) === 'note 3.md';
-})());
-ok('vaultFileName falls back to Untitled for empty/dot titles', vaultFileName('   ', new Set()) === 'Untitled.md' && vaultFileName('...', new Set()) === 'Untitled.md');
+ok(
+  'vaultFileName de-dups collisions case-insensitively',
+  (() => {
+    const u = new Set();
+    return (
+      vaultFileName('Note', u) === 'Note.md' &&
+      vaultFileName('Note', u) === 'Note 2.md' &&
+      vaultFileName('note', u) === 'note 3.md'
+    );
+  })(),
+);
+ok(
+  'vaultFileName falls back to Untitled for empty/dot titles',
+  vaultFileName('   ', new Set()) === 'Untitled.md' && vaultFileName('...', new Set()) === 'Untitled.md',
+);
 
 // --- schema-v3 preservation fixtures + current merge-import boundaries ---
 const comprehensiveRaw = readFileSync(new URL('./fixtures/schema-v3-comprehensive.json', import.meta.url), 'utf8');
@@ -538,53 +944,110 @@ const comprehensive = JSON.parse(comprehensiveRaw);
 const comprehensiveBefore = JSON.stringify(comprehensive);
 const comprehensivePayload = { notes: comprehensive.notes, config: comprehensive.config };
 const comprehensiveMigration = runMigrations(comprehensivePayload, comprehensive.schemaVersion);
-ok('schema-v3 fixture remains the immutable pre-alias contract', comprehensive.schemaVersion === 3 && CURRENT_SCHEMA_VERSION === 6);
-ok('schema-v3 migration advances to the current schema', comprehensiveMigration.migrated === true && comprehensiveMigration.version === 6);
-ok('schema-v3 migration preserves the complete payload while adding aliases and Archive state', comprehensiveMigration.data.notes.every((note, index) => (
-  note.aliases.length === 0 && note.archivedAt === null
-    && eq({ ...note, aliases: undefined, archivedAt: undefined }, { ...comprehensive.notes[index], aliases: undefined, archivedAt: undefined })
-)) && eq(comprehensiveMigration.data.config, { ...comprehensive.config, frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] } }));
+ok(
+  'schema-v3 fixture remains the immutable pre-alias contract',
+  comprehensive.schemaVersion === 3 && CURRENT_SCHEMA_VERSION === 6,
+);
+ok(
+  'schema-v3 migration advances to the current schema',
+  comprehensiveMigration.migrated === true && comprehensiveMigration.version === 6,
+);
+ok(
+  'schema-v3 migration preserves the complete payload while adding aliases and Archive state',
+  comprehensiveMigration.data.notes.every(
+    (note, index) =>
+      note.aliases.length === 0 &&
+      note.archivedAt === null &&
+      eq(
+        { ...note, aliases: undefined, archivedAt: undefined },
+        { ...comprehensive.notes[index], aliases: undefined, archivedAt: undefined },
+      ),
+  ) &&
+    eq(comprehensiveMigration.data.config, {
+      ...comprehensive.config,
+      frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] },
+    }),
+);
 ok('schema-v3 migration does not mutate its fixture', JSON.stringify(comprehensive) === comprehensiveBefore);
-ok('schema-v3 canonical notes hydrate losslessly with additive defaults', comprehensive.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })));
-ok('schema-v3 Markdown contents are exact fixed points', comprehensive.notes.every((note) => serialize(parse(note.content)) === note.content));
-ok('schema-v3 fixture preserves stable unique note IDs', new Set(comprehensive.notes.map((note) => note.id)).size === comprehensive.notes.length);
-ok('schema-v3 fixture parent IDs resolve without self-parenting', (() => {
-  const ids = new Set(comprehensive.notes.map((note) => note.id));
-  return comprehensive.notes.every((note) => note.parentId === null || (note.parentId !== note.id && ids.has(note.parentId)));
-})());
-ok('schema-v3 fixture covers Trash, blank Markdown, nesting, image Markdown, banners, and display aliases', (() => {
-  const contents = comprehensive.notes.map((note) => note.content).join('\n');
-  return comprehensive.notes.some((note) => note.deletedAt !== null)
-    && comprehensive.notes.some((note) => note.content === '')
-    && comprehensive.notes.some((note) => note.parentId !== null)
-    && contents.includes('data:image/gif;base64,')
-    && comprehensive.notes.some((note) => note.banner?.type === 'gradient')
-    && comprehensive.notes.some((note) => note.banner?.type === 'image')
-    && /\[\[[^\]]+\|[^\]]+\]\]/.test(contents);
-})());
-ok('schema-v3 fixture preserves non-default settings exactly', comprehensive.config.themeMode === 'dark'
-  && comprehensive.config.fontScale === 'l'
-  && comprehensive.config.editorWidth === 'wide'
-  && comprehensive.config.autosaveMs === 800
-  && comprehensive.config.defaultTemplate === 'project'
-  && comprehensive.config.sortMode === 'title'
-  && eq(comprehensive.config.collapsed, ['v3-root', 'v3-child']));
+ok(
+  'schema-v3 canonical notes hydrate losslessly with additive defaults',
+  comprehensive.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })),
+);
+ok(
+  'schema-v3 Markdown contents are exact fixed points',
+  comprehensive.notes.every((note) => serialize(parse(note.content)) === note.content),
+);
+ok(
+  'schema-v3 fixture preserves stable unique note IDs',
+  new Set(comprehensive.notes.map((note) => note.id)).size === comprehensive.notes.length,
+);
+ok(
+  'schema-v3 fixture parent IDs resolve without self-parenting',
+  (() => {
+    const ids = new Set(comprehensive.notes.map((note) => note.id));
+    return comprehensive.notes.every(
+      (note) => note.parentId === null || (note.parentId !== note.id && ids.has(note.parentId)),
+    );
+  })(),
+);
+ok(
+  'schema-v3 fixture covers Trash, blank Markdown, nesting, image Markdown, banners, and display aliases',
+  (() => {
+    const contents = comprehensive.notes.map((note) => note.content).join('\n');
+    return (
+      comprehensive.notes.some((note) => note.deletedAt !== null) &&
+      comprehensive.notes.some((note) => note.content === '') &&
+      comprehensive.notes.some((note) => note.parentId !== null) &&
+      contents.includes('data:image/gif;base64,') &&
+      comprehensive.notes.some((note) => note.banner?.type === 'gradient') &&
+      comprehensive.notes.some((note) => note.banner?.type === 'image') &&
+      /\[\[[^\]]+\|[^\]]+\]\]/.test(contents)
+    );
+  })(),
+);
+ok(
+  'schema-v3 fixture preserves non-default settings exactly',
+  comprehensive.config.themeMode === 'dark' &&
+    comprehensive.config.fontScale === 'l' &&
+    comprehensive.config.editorWidth === 'wide' &&
+    comprehensive.config.autosaveMs === 800 &&
+    comprehensive.config.defaultTemplate === 'project' &&
+    comprehensive.config.sortMode === 'title' &&
+    eq(comprehensive.config.collapsed, ['v3-root', 'v3-child']),
+);
 const fixtureStorage = new Map([
   ['schemaVersion', comprehensive.schemaVersion],
   ['notes', comprehensive.notes],
   ['config', comprehensive.config],
 ]);
 const fixtureBackend = {
-  async load(key, fallback) { return fixtureStorage.has(key) ? fixtureStorage.get(key) : fallback; },
-  async save(key, value) { fixtureStorage.set(key, value); return true; },
+  async load(key, fallback) {
+    return fixtureStorage.has(key) ? fixtureStorage.get(key) : fallback;
+  },
+  async save(key, value) {
+    fixtureStorage.set(key, value);
+    return true;
+  },
 };
 const loadedV3 = await new Database({ storageBackend: fixtureBackend }).init();
-ok('Database.init loads every canonical schema-v3 note without loss', eq(
-  [...loadedV3.notes.values()].map((note) => note.toJSON()),
-  comprehensive.notes.map((note) => ({ ...note, aliases: [], archivedAt: null })),
-));
-ok('Database.init preserves schema-v3 config and Trash state', eq(loadedV3.config, { ...comprehensive.config, frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] } })
-  && loadedV3.getTrash().map((note) => note.id).join() === 'v3-trash');
+ok(
+  'Database.init loads every canonical schema-v3 note without loss',
+  eq(
+    [...loadedV3.notes.values()].map((note) => note.toJSON()),
+    comprehensive.notes.map((note) => ({ ...note, aliases: [], archivedAt: null })),
+  ),
+);
+ok(
+  'Database.init preserves schema-v3 config and Trash state',
+  eq(loadedV3.config, {
+    ...comprehensive.config,
+    frontmatterAliasMigration: { version: 0, status: 'pending', blocked: [] },
+  }) &&
+    loadedV3
+      .getTrash()
+      .map((note) => note.id)
+      .join() === 'v3-trash',
+);
 
 const largeRaw = readFileSync(new URL('./fixtures/schema-v3-large.json', import.meta.url), 'utf8');
 const large = JSON.parse(largeRaw);
@@ -593,26 +1056,47 @@ const largeBefore = JSON.stringify(large);
 const largeMigration = runMigrations({ notes: large.notes, config: large.config }, large.schemaVersion);
 ok('large schema-v3 fixture regenerates byte-for-byte', largeRaw === regeneratedLarge);
 ok('large schema-v3 fixture contains exactly 1,000 notes', large.notes.length === 1000);
-ok('large schema-v3 fixture migrates additively without mutation', largeMigration.migrated === true
-  && largeMigration.data.notes.every((note) => Array.isArray(note.aliases) && note.aliases.length === 0)
-  && largeMigration.data.notes.every((note) => note.archivedAt === null)
-  && JSON.stringify(large) === largeBefore);
-ok('large schema-v3 notes hydrate losslessly with additive defaults', large.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })));
-ok('large schema-v3 Markdown contents are exact fixed points', large.notes.every((note) => serialize(parse(note.content)) === note.content));
-ok('large schema-v3 IDs are unique and every parent exists', (() => {
-  const ids = new Set(large.notes.map((note) => note.id));
-  return ids.size === large.notes.length && large.notes.every((note) => note.parentId === null || ids.has(note.parentId));
-})());
-ok('large schema-v3 fixture covers Trash, pins, banners, images, and display aliases', (() => {
-  const contents = large.notes.map((note) => note.content).join('\n');
-  return large.notes.some((note) => note.deletedAt !== null)
-    && large.notes.some((note) => note.pinned)
-    && large.notes.some((note) => note.banner !== null)
-    && contents.includes('data:image/gif;base64,')
-    && /\[\[[^\]]+\|previous note\]\]/.test(contents);
-})());
+ok(
+  'large schema-v3 fixture migrates additively without mutation',
+  largeMigration.migrated === true &&
+    largeMigration.data.notes.every((note) => Array.isArray(note.aliases) && note.aliases.length === 0) &&
+    largeMigration.data.notes.every((note) => note.archivedAt === null) &&
+    JSON.stringify(large) === largeBefore,
+);
+ok(
+  'large schema-v3 notes hydrate losslessly with additive defaults',
+  large.notes.every((note) => eq(Note.fromJSON(note).toJSON(), { ...note, aliases: [], archivedAt: null })),
+);
+ok(
+  'large schema-v3 Markdown contents are exact fixed points',
+  large.notes.every((note) => serialize(parse(note.content)) === note.content),
+);
+ok(
+  'large schema-v3 IDs are unique and every parent exists',
+  (() => {
+    const ids = new Set(large.notes.map((note) => note.id));
+    return (
+      ids.size === large.notes.length && large.notes.every((note) => note.parentId === null || ids.has(note.parentId))
+    );
+  })(),
+);
+ok(
+  'large schema-v3 fixture covers Trash, pins, banners, images, and display aliases',
+  (() => {
+    const contents = large.notes.map((note) => note.content).join('\n');
+    return (
+      large.notes.some((note) => note.deletedAt !== null) &&
+      large.notes.some((note) => note.pinned) &&
+      large.notes.some((note) => note.banner !== null) &&
+      contents.includes('data:image/gif;base64,') &&
+      /\[\[[^\]]+\|previous note\]\]/.test(contents)
+    );
+  })(),
+);
 
-const malformedImports = JSON.parse(readFileSync(new URL('./fixtures/malformed-imports.json', import.meta.url), 'utf8'));
+const malformedImports = JSON.parse(
+  readFileSync(new URL('./fixtures/malformed-imports.json', import.meta.url), 'utf8'),
+);
 for (const fixtureCase of malformedImports.cases) {
   let parsed = null;
   let error = null;
@@ -630,8 +1114,7 @@ for (const fixtureCase of malformedImports.cases) {
   ok(`merge import accepts: ${fixtureCase.name}`, error === null && selected.length === fixtureCase.acceptedNotes);
   ok(`merge import selection does not mutate: ${fixtureCase.name}`, JSON.stringify(parsed) === parsedBefore);
 }
-const unsafeImport = selectImportableNotes(parseNoteMergeImport(
-  malformedImports.cases.find((fixtureCase) => fixtureCase.name === 'unsafe banner').json,
-))[0];
+const unsafeImport = selectImportableNotes(
+  parseNoteMergeImport(malformedImports.cases.find((fixtureCase) => fixtureCase.name === 'unsafe banner').json),
+)[0];
 ok('merge import model normalization removes an unsafe banner', Note.fromJSON(unsafeImport).banner === null);
-

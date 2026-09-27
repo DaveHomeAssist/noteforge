@@ -1,16 +1,48 @@
-// Biome lint configuration (Phase 0 · Sprint 2). The formatter is deliberately
-// off: a whole-tree format sweep must land in a window when no other session
-// holds the checkout. `npm run lint` must report zero errors.
+// Biome lint and format configuration. Lint landed in Phase 0 · Sprint 2; the
+// formatter was switched on in Sprint 3 after one whole-tree sweep, with settings
+// chosen to match the existing style (2-space indent, single quotes in JavaScript, double quotes in CSS, semicolons,
+// 120 columns). CI runs `biome ci`, so unformatted code and lint errors both fail.
+// Golden outputs and JSON fixtures are frozen bytes and are never formatted.
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["src/**", "vite.config.js", "test/run-node-tests.mjs", "test/typecheck-ratchet.mjs", "test/bundle-budget.mjs"]
+    "includes": [
+      "src/**",
+      "vite.config.js",
+      "biome.jsonc",
+      "test/**/*.mjs",
+      "!test/golden/render/**",
+      "!test/golden/blocks/**",
+      "!test/fixtures/**/*.json"
+    ]
   },
-  "formatter": { "enabled": false },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "semicolons": "always"
+    }
+  },
+  "css": { "formatter": { "enabled": true, "quoteStyle": "double" } },
   "assist": { "enabled": false },
   "linter": {
     "enabled": true,
+    // Lint covers the application, the build config, the gate scripts, and the
+    // Playwright suite. The older node:test files are formatted but not linted:
+    // they deliberately build prototype-pollution payloads and side-effecting
+    // callbacks that the recommended rules reject.
+    "includes": [
+      "src/**",
+      "vite.config.js",
+      "playwright.config.mjs",
+      "test/e2e/**",
+      "test/run-node-tests.mjs",
+      "test/typecheck-ratchet.mjs",
+      "test/bundle-budget.mjs"
+    ],
     "rules": {
       "style": {
         // Concatenation is used deliberately in HTML-building code; not a defect.

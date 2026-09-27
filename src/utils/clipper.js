@@ -7,9 +7,8 @@ export const CLIPPER_MAX_SELECTION = 60_000;
 export const CLIPPER_MAX_ARTICLE = 100_000;
 export const CLIPPER_MAX_INTAKE_URL = 8_000;
 
-const bounded = (value, max) => typeof value === 'string'
-  ? value.replace(/\0/g, '').replace(/\r\n?/g, '\n').slice(0, max).trim()
-  : '';
+const bounded = (value, max) =>
+  typeof value === 'string' ? value.replace(/\0/g, '').replace(/\r\n?/g, '\n').slice(0, max).trim() : '';
 
 export function normalizeClipperPayload(payload = {}) {
   const title = bounded(payload.title, CLIPPER_MAX_TITLE);
@@ -18,8 +17,13 @@ export function normalizeClipperPayload(payload = {}) {
   let url = bounded(payload.url, CLIPPER_MAX_URL);
   if (url) {
     let parsed;
-    try { parsed = new URL(url); } catch { throw new TypeError('The clipped page URL is invalid.'); }
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new TypeError('Only http and https pages can be clipped.');
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new TypeError('The clipped page URL is invalid.');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol))
+      throw new TypeError('Only http and https pages can be clipped.');
     url = parsed.href;
   }
   const text = [selection, article && article !== selection ? article : ''].filter(Boolean).join('\n\n');
@@ -29,10 +33,12 @@ export function normalizeClipperPayload(payload = {}) {
 export function consumeClipperIntake(input) {
   const url = input instanceof URL ? new URL(input.href) : new URL(String(input), 'https://noteforge.invalid/');
   const mode = url.searchParams.get('capture');
-  if (mode !== 'clipper' && mode !== 'clipboard') return { matched: false, clipboardFallback: false, payload: null, cleanUrl: null };
+  if (mode !== 'clipper' && mode !== 'clipboard')
+    return { matched: false, clipboardFallback: false, payload: null, cleanUrl: null };
   const cleanUrl = `${url.pathname}${url.hash}`;
   if (mode === 'clipboard') return { matched: true, clipboardFallback: true, payload: null, cleanUrl };
-  if (url.href.length > CLIPPER_MAX_INTAKE_URL) throw new TypeError('This clip is too large for a URL. Copy it to the clipboard and use Quick Capture instead.');
+  if (url.href.length > CLIPPER_MAX_INTAKE_URL)
+    throw new TypeError('This clip is too large for a URL. Copy it to the clipboard and use Quick Capture instead.');
   return {
     matched: true,
     clipboardFallback: false,
@@ -53,7 +59,8 @@ function javascriptString(value) {
 /** Generate a self-contained bookmarklet with an explicit large-payload fallback. */
 export function buildClipperBookmarklet(appUrl) {
   const base = new URL(String(appUrl));
-  if (!['http:', 'https:'].includes(base.protocol)) throw new TypeError('The NoteForge clipper URL must use http or https.');
+  if (!['http:', 'https:'].includes(base.protocol))
+    throw new TypeError('The NoteForge clipper URL must use http or https.');
   base.search = '';
   base.hash = '';
   const app = javascriptString(base.href);

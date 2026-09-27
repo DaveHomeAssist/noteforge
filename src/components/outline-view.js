@@ -66,8 +66,12 @@ export class OutlineView {
   #syncActiveFromScroll() {
     if (!this.headings.length || !this.scrollRoot) return;
     const rootTop = this.scrollRoot.getBoundingClientRect().top;
-    const rows = new Map([...this.scrollRoot.querySelectorAll('[data-heading-anchor]')]
-      .map((element) => [element.dataset.headingAnchor, element]));
+    const rows = new Map(
+      [...this.scrollRoot.querySelectorAll('[data-heading-anchor]')].map((element) => [
+        element.dataset.headingAnchor,
+        element,
+      ]),
+    );
     let active = this.headings[0].anchor;
     for (const heading of this.headings) {
       const row = rows.get(heading.anchor);

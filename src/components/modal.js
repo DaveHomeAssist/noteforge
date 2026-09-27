@@ -4,7 +4,8 @@
 // trigger (or the menu button) on close. Close on Esc, backdrop, or any
 // [data-close] control. No dependencies; framework-free.
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Reference count so the shared `inert` on the background is only removed when the
 // LAST open modal closes — overlapping modals can't prematurely un-inert the app.
@@ -128,7 +129,11 @@ export class Modal {
   #trapTab(e) {
     const items = this.#focusables();
     const panel = this.panel;
-    if (items.length === 0) { e.preventDefault(); panel?.focus?.(); return; }
+    if (items.length === 0) {
+      e.preventDefault();
+      panel?.focus?.();
+      return;
+    }
     const first = items[0];
     const last = items[items.length - 1];
     const active = document.activeElement;

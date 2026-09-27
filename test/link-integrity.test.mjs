@@ -7,10 +7,7 @@ import { Note, normalizeAliases } from '../src/core/note.js';
 import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/core/migrations.js';
 import { createBackup, verifyBackup } from '../src/core/backup.js';
 import { normalizeTitle } from '../src/utils/helpers.js';
-import {
-  parseWikilinks,
-  rewriteWikilinkTargets,
-} from '../src/utils/wikilinks.js';
+import { parseWikilinks, rewriteWikilinkTargets } from '../src/utils/wikilinks.js';
 import { findUnlinkedMentions } from '../src/utils/link-analysis.js';
 import { extractHeadings, headingContextAt, resolveHeadingAnchor } from '../src/utils/headings.js';
 import {
@@ -29,8 +26,13 @@ function memoryBackend({ failBatch = false, initial = [] } = {}) {
   const values = new Map(initial.map(([key, value]) => [key, structuredClone(value)]));
   return {
     values,
-    async load(key, fallback) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
-    async save(key, value) { values.set(key, structuredClone(value)); return true; },
+    async load(key, fallback) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
+    async save(key, value) {
+      values.set(key, structuredClone(value));
+      return true;
+    },
     async saveMany(entries) {
       if (failBatch) return false;
       const next = new Map(values);
@@ -39,7 +41,9 @@ function memoryBackend({ failBatch = false, initial = [] } = {}) {
       next.forEach((value, key) => values.set(key, value));
       return true;
     },
-    async getStatus() { return { backend: 'indexeddb' }; },
+    async getStatus() {
+      return { backend: 'indexeddb' };
+    },
   };
 }
 
@@ -63,13 +67,14 @@ function rawNote(id, title, content = '', extra = {}) {
 
 test('schema-v4 aliases normalize for comparison while preserving first stored spelling', () => {
   assert.equal(normalizeTitle('  Ｃafe\u0301\t Plan  '), 'café plan');
-  assert.deepEqual(
-    normalizeAliases(['  Project Home  ', 'Ｐroject Home', 'Other', ' other '], 'Project Home'),
-    ['Other'],
+  assert.deepEqual(normalizeAliases(['  Project Home  ', 'Ｐroject Home', 'Other', ' other '], 'Project Home'), [
+    'Other',
+  ]);
+  const note = new Note(
+    rawNote('alias-note', 'Canonical', '', {
+      aliases: [' Legacy ', 'legacy', 'Canonical', 'Second'],
+    }),
   );
-  const note = new Note(rawNote('alias-note', 'Canonical', '', {
-    aliases: [' Legacy ', 'legacy', 'Canonical', 'Second'],
-  }));
   assert.deepEqual(note.aliases, ['Legacy', 'Second']);
   assert.deepEqual(note.toJSON().aliases, ['Legacy', 'Second']);
 
@@ -114,7 +119,10 @@ test('wikilinks and mentions exclude escapes, code fences, inline code, URLs, li
     '[[Broken across\n[[Nested line]]',
     '[[Visible#Part|label]]',
   ].join('\n');
-  assert.deepEqual(parseWikilinks(markdown).map((token) => token.target), ['Visible']);
+  assert.deepEqual(
+    parseWikilinks(markdown).map((token) => token.target),
+    ['Visible'],
+  );
 
   const mentions = findUnlinkedMentions(
     'Alpha alphabet ALPHA `Alpha` [[Alpha]] https://example.test/Alpha\nA Project ships; A Projector does not.',
@@ -124,11 +132,14 @@ test('wikilinks and mentions exclude escapes, code fences, inline code, URLs, li
     ],
     { sourceId: 'source' },
   );
-  assert.deepEqual(mentions.map((mention) => [mention.text, mention.targetId]), [
-    ['Alpha', 'alpha'],
-    ['ALPHA', 'alpha'],
-    ['A Project', 'project'],
-  ]);
+  assert.deepEqual(
+    mentions.map((mention) => [mention.text, mention.targetId]),
+    [
+      ['Alpha', 'alpha'],
+      ['ALPHA', 'alpha'],
+      ['A Project', 'project'],
+    ],
+  );
   assert.deepEqual(
     findUnlinkedMentions('Alpha', [{ name: 'Alpha', targetId: 'self', targetTitle: 'Alpha' }], { sourceId: 'self' }),
     [],
@@ -136,14 +147,18 @@ test('wikilinks and mentions exclude escapes, code fences, inline code, URLs, li
 });
 
 test('headings receive deterministic duplicate and Unicode anchors with code exclusions', () => {
-  const markdown = '# Repeat\ntext\n## Repeat\n```md\n# Hidden\n```\n~~~md\n### Also hidden\n~~~\n#### Café & Résumé\n###### Final';
+  const markdown =
+    '# Repeat\ntext\n## Repeat\n```md\n# Hidden\n```\n~~~md\n### Also hidden\n~~~\n#### Café & Résumé\n###### Final';
   const headings = extractHeadings(markdown);
-  assert.deepEqual(headings.map(({ level, anchor }) => [level, anchor]), [
-    [1, 'heading-repeat'],
-    [2, 'heading-repeat-2'],
-    [4, 'heading-café-résumé'],
-    [6, 'heading-final'],
-  ]);
+  assert.deepEqual(
+    headings.map(({ level, anchor }) => [level, anchor]),
+    [
+      [1, 'heading-repeat'],
+      [2, 'heading-repeat-2'],
+      [4, 'heading-café-résumé'],
+      [6, 'heading-final'],
+    ],
+  );
   assert.equal(headingContextAt(headings, markdown.indexOf('###### Final') - 1).anchor, 'heading-café-résumé');
   assert.equal(resolveHeadingAnchor(headings, '#Repeat'), 'heading-repeat');
   assert.equal(resolveHeadingAnchor(headings, 'repeat-2'), 'heading-repeat-2');
@@ -161,7 +176,11 @@ test('canonical titles outrank imported aliases while interactive collisions rej
   assert.equal(db.availableTitle('Résumé'), 'Résumé 2');
 
   const canonical = db.createNote({ id: 'canonical', title: 'CV' }, { allowIdentityConflicts: true });
-  assert.equal(db.resolveTitleResult('cv').note.id, canonical.id, 'canonical target wins an imported title/alias collision');
+  assert.equal(
+    db.resolveTitleResult('cv').note.id,
+    canonical.id,
+    'canonical target wins an imported title/alias collision',
+  );
   let report = links.linkIntegrityReport();
   assert.equal(report.healthy, false);
   assert.ok(report.ambiguities.some((entry) => entry.kind === 'title_alias_collision'));
@@ -210,7 +229,10 @@ test('rename preview applies one atomic rewrite with aliases, exact exclusions, 
   assert.equal(db.getNote(target.id).title, 'Project', 'preview is non-mutating');
 
   const result = await links.applyRenamePlan(plan);
-  assert.deepEqual(boundaries.flat().map((capture) => capture.reason), ['pre_rename', 'pre_rename']);
+  assert.deepEqual(
+    boundaries.flat().map((capture) => capture.reason),
+    ['pre_rename', 'pre_rename'],
+  );
   assert.equal(result.linkCount, 5);
   assert.equal(db.getNote(target.id).title, 'Project Atlas');
   assert.deepEqual(db.getNote(target.id).aliases, ['Legacy', 'Project']);
@@ -261,7 +283,10 @@ test('explicit repair plans resolve imported duplicate titles and aliases withou
     onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)),
   });
   db.createNote({ id: 'duplicate-a', title: 'Duplicated' }, { allowIdentityConflicts: true });
-  db.createNote({ id: 'duplicate-b', title: 'Duplicated', aliases: ['Shared alias'] }, { allowIdentityConflicts: true });
+  db.createNote(
+    { id: 'duplicate-b', title: 'Duplicated', aliases: ['Shared alias'] },
+    { allowIdentityConflicts: true },
+  );
   const source = db.createNote({ id: 'ambiguous-source', title: 'Source', content: '[[Duplicated]]' });
   await db.flush();
   const links = new LinkOperations(db);
@@ -276,7 +301,10 @@ test('explicit repair plans resolve imported duplicate titles and aliases withou
   assert.equal(db.getNote(source.id).content, '[[Duplicated]]', 'ambiguous old links are never assigned during repair');
   assert.equal(db.resolveTitle('Duplicated').id, 'duplicate-b');
 
-  db.createNote({ id: 'alias-conflict', title: 'Alias owner', aliases: ['Shared alias'] }, { allowIdentityConflicts: true });
+  db.createNote(
+    { id: 'alias-conflict', title: 'Alias owner', aliases: ['Shared alias'] },
+    { allowIdentityConflicts: true },
+  );
   const removal = links.planAliasRemoval('duplicate-b', 'shared alias');
   assert.equal(removal.valid, true);
   assert.deepEqual(db.getNote('duplicate-b').aliases, ['Shared alias'], 'alias-removal preview is non-mutating');
@@ -297,7 +325,8 @@ test('contextual backlinks and previewed mention conversion share the live ident
   const source = db.createNote({
     id: 'mention-source',
     title: 'Source',
-    content: '# Ref <script>alert(1)</script>\nSee [[A Project|linked]] here.\n## Plain\nAlpha is plain; `Alpha` is code.',
+    content:
+      '# Ref <script>alert(1)</script>\nSee [[A Project|linked]] here.\n## Plain\nAlpha is plain; `Alpha` is code.',
   });
   await db.flush();
   await db.initializeKnowledgeIndex();
@@ -331,7 +360,10 @@ test('session history is bounded and recents persist as 50 unique live note IDs'
   assert.equal(goForward(back).current, 'c');
   const forward = goForward(back);
   assert.equal(navigate(forward, 'c'), forward, 'same-note opens do not duplicate history');
-  assert.deepEqual(pruneNavigation(state, (id) => id !== 'b'), { back: ['a'], current: 'c', forward: [] });
+  assert.deepEqual(
+    pruneNavigation(state, (id) => id !== 'b'),
+    { back: ['a'], current: 'c', forward: [] },
+  );
 
   let recent = [];
   for (let index = 0; index < 75; index += 1) recent = recordRecent(recent, `note-${index}`);
@@ -339,12 +371,18 @@ test('session history is bounded and recents persist as 50 unique live note IDs'
   assert.equal(recent.length, RECENT_LIMIT);
   assert.equal(recent[0], 'note-50');
   assert.equal(new Set(recent).size, RECENT_LIMIT);
-  assert.deepEqual(normalizeRecentIds(['missing', 'note-50', 'note-50'], (id) => id !== 'missing'), ['note-50']);
+  assert.deepEqual(
+    normalizeRecentIds(['missing', 'note-50', 'note-50'], (id) => id !== 'missing'),
+    ['note-50'],
+  );
 
-  const controller = new NavigationController({
-    getNote: (id) => ['a', 'b', 'c'].includes(id) ? { id } : null,
-    setConfig() {},
-  }, { state });
+  const controller = new NavigationController(
+    {
+      getNote: (id) => (['a', 'b', 'c'].includes(id) ? { id } : null),
+      setConfig() {},
+    },
+    { state },
+  );
   controller.replaceCurrent('a');
   assert.equal(controller.state.current, 'a');
   assert.deepEqual(controller.state.back, ['a', 'b']);
@@ -366,12 +404,14 @@ test('aliases survive a deterministic schema-v4 portable backup', async () => {
 
 test('a 1,000-note alias index keeps an incremental mention save under the interaction budget', async () => {
   const notes = Array.from({ length: 1_000 }, (_, index) => rawNote(`n-${index}`, `Knowledge note ${index}`));
-  const backend = memoryBackend({ initial: [
-    ['schemaVersion', CURRENT_SCHEMA_VERSION],
-    ['notes', notes],
-    ['config', {}],
-    ['persistenceStatus', {}],
-  ] });
+  const backend = memoryBackend({
+    initial: [
+      ['schemaVersion', CURRENT_SCHEMA_VERSION],
+      ['notes', notes],
+      ['config', {}],
+      ['persistenceStatus', {}],
+    ],
+  });
   const db = new Database({ storageBackend: backend });
   await db.init();
   await db.initializeKnowledgeIndex();

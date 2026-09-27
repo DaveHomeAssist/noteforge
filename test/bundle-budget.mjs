@@ -49,9 +49,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   for (const file of result.files) console.log(`${String(file.bytes).padStart(9)}  ${file.path}`);
   const margin = result.ceiling - result.total;
-  console.log(`${String(result.total).padStart(9)}  initial shell total (ceiling ${result.ceiling}, ${margin >= 0 ? `${margin} bytes below` : `${-margin} bytes ABOVE`})`);
+  console.log(
+    `${String(result.total).padStart(9)}  initial shell total (ceiling ${result.ceiling}, ${margin >= 0 ? `${margin} bytes below` : `${-margin} bytes ABOVE`})`,
+  );
   if (!result.withinBudget) {
-    console.error('Bundle budget: initial shell exceeds the authoritative ceiling in docs/implementation/performance_budgets.md');
+    console.error(
+      'Bundle budget: initial shell exceeds the authoritative ceiling in docs/implementation/performance_budgets.md',
+    );
     process.exit(1);
   }
 }

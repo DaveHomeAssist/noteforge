@@ -121,16 +121,26 @@ export class LinkToolsView {
     this.els.content.innerHTML = report.healthy
       ? '<p class="link-tools__healthy">No ambiguous canonical titles or aliases were found.</p>'
       : `<p class="muted">Ambiguous imported names are never guessed. Use the repair actions below; destructive rewrites involving a name stay blocked until it resolves uniquely.</p>
-        <ul class="link-tools__ambiguities">${report.ambiguities.map((entry) => `<li>
+        <ul class="link-tools__ambiguities">${report.ambiguities
+          .map(
+            (entry) => `<li>
           <strong>${escapeHtml(ambiguityLabel(entry.kind))}: “${escapeHtml(entry.name)}”</strong>
-          <ul>${entry.notes.map((note) => `<li>${escapeHtml(note.title)} <code>${escapeHtml(note.id)}</code>
+          <ul>${entry.notes
+            .map(
+              (note) => `<li>${escapeHtml(note.title)} <code>${escapeHtml(note.id)}</code>
             <span class="link-tools__repair-actions">
               ${note.canonical ? `<button type="button" class="btn btn--ghost" data-repair-rename="${escapeHtml(note.id)}">Rename note</button>` : ''}
               ${(note.aliases || []).map((alias) => `<button type="button" class="btn btn--ghost" data-repair-alias="${escapeHtml(note.id)}" data-alias="${escapeHtml(alias)}">Remove alias “${escapeHtml(alias)}”</button>`).join('')}
             </span>
-          </li>`).join('')}</ul>
-        </li>`).join('')}</ul>`;
-    this.els.status.textContent = report.healthy ? 'Link resolution is healthy.' : `${report.ambiguities.length} ambiguity group${report.ambiguities.length === 1 ? '' : 's'} need repair.`;
+          </li>`,
+            )
+            .join('')}</ul>
+        </li>`,
+          )
+          .join('')}</ul>`;
+    this.els.status.textContent = report.healthy
+      ? 'Link resolution is healthy.'
+      : `${report.ambiguities.length} ambiguity group${report.ambiguities.length === 1 ? '' : 's'} need repair.`;
     this.#present();
   }
 
@@ -154,9 +164,11 @@ export class LinkToolsView {
         <p><strong>${escapeHtml(this.plan.oldTitle)}</strong> → <strong>${escapeHtml(this.plan.newTitle)}</strong></p>
         <p>${this.plan.linkCount} exact inbound link${this.plan.linkCount === 1 ? '' : 's'} across ${this.plan.affected.length} protected note${this.plan.affected.length === 1 ? '' : 's'}.</p>
         <ul>${this.plan.affected.map((note) => `<li>${escapeHtml(note.title)} — ${note.linkCount} link${note.linkCount === 1 ? '' : 's'}</li>`).join('')}</ul>
-        <p class="muted">${this.plan.repairMode
-          ? 'This repairs one duplicated imported title. Ambiguous old targets are not rewritten or retained as an alias.'
-          : 'The previous title becomes an alias. Display text, fragments, embeds, code, escaped text, and unrelated prose remain unchanged.'} No data changes until Apply rename.</p>
+        <p class="muted">${
+          this.plan.repairMode
+            ? 'This repairs one duplicated imported title. Ambiguous old targets are not rewritten or retained as an alias.'
+            : 'The previous title becomes an alias. Display text, fragments, embeds, code, escaped text, and unrelated prose remain unchanged.'
+        } No data changes until Apply rename.</p>
       </div>`;
     }
     this.#setPlanState();
@@ -164,30 +176,38 @@ export class LinkToolsView {
 
   #setPlanState() {
     this.els.apply.disabled = !this.plan?.valid;
-    this.els.status.textContent = this.plan?.valid ? 'Preview ready. No data has been changed.' : (this.plan?.message || '');
+    this.els.status.textContent = this.plan?.valid
+      ? 'Preview ready. No data has been changed.'
+      : this.plan?.message || '';
   }
 
   async #apply() {
     if (!this.plan?.valid) return;
     this.els.apply.disabled = true;
-    this.els.status.textContent = this.mode === 'rename'
-      ? 'Applying atomic rename…'
-      : this.mode === 'alias-repair'
-        ? 'Removing conflicting alias…'
-        : 'Converting mention…';
+    this.els.status.textContent =
+      this.mode === 'rename'
+        ? 'Applying atomic rename…'
+        : this.mode === 'alias-repair'
+          ? 'Removing conflicting alias…'
+          : 'Converting mention…';
     try {
-      const result = this.mode === 'rename'
-        ? await this.links.applyRenamePlan(this.plan)
-        : this.mode === 'alias-repair'
-          ? await this.links.applyAliasRemovalPlan(this.plan)
-          : await this.links.applyMentionPlan(this.plan);
-      this.els.status.textContent = this.mode === 'rename'
-        ? `Rename completed. ${result.linkCount} link${result.linkCount === 1 ? '' : 's'} updated.`
-        : this.mode === 'alias-repair'
-          ? `Alias “${result.alias}” removed.`
-          : 'Mention converted to a wikilink.';
+      const result =
+        this.mode === 'rename'
+          ? await this.links.applyRenamePlan(this.plan)
+          : this.mode === 'alias-repair'
+            ? await this.links.applyAliasRemovalPlan(this.plan)
+            : await this.links.applyMentionPlan(this.plan);
+      this.els.status.textContent =
+        this.mode === 'rename'
+          ? `Rename completed. ${result.linkCount} link${result.linkCount === 1 ? '' : 's'} updated.`
+          : this.mode === 'alias-repair'
+            ? `Alias “${result.alias}” removed.`
+            : 'Mention converted to a wikilink.';
       this.els.apply.hidden = true;
-      this.els.content.insertAdjacentHTML('beforeend', '<p class="link-tools__healthy" tabindex="-1">Change saved with a local safety revision.</p>');
+      this.els.content.insertAdjacentHTML(
+        'beforeend',
+        '<p class="link-tools__healthy" tabindex="-1">Change saved with a local safety revision.</p>',
+      );
       this.els.content.querySelector('.link-tools__healthy')?.focus();
       this.onApplied({ mode: this.mode, result });
     } catch (error) {

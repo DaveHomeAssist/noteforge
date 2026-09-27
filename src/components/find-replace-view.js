@@ -40,8 +40,20 @@ export class FindReplaceView {
     this.plan = null;
     this.matchIndex = -1;
     this.els.panel.addEventListener('click', (event) => this.#onClick(event));
-    this.els.panel.addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.preventDefault(); this.close(); } });
-    for (const input of [els.find, els.replacement, els.caseSensitive, els.wholeWord, els.includeArchived, els.includeTrash]) {
+    this.els.panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.close();
+      }
+    });
+    for (const input of [
+      els.find,
+      els.replacement,
+      els.caseSensitive,
+      els.wholeWord,
+      els.includeArchived,
+      els.includeTrash,
+    ]) {
       input.addEventListener('input', () => this.#invalidate());
       input.addEventListener('change', () => this.#invalidate());
     }
@@ -70,9 +82,15 @@ export class FindReplaceView {
 
   #setScope(scope) {
     this.scope = scope === 'vault' ? 'vault' : 'current';
-    this.els.panel.querySelectorAll('[data-scope]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.scope === this.scope)); });
-    this.els.panel.querySelectorAll('.find-replace__vault-option').forEach((label) => { label.hidden = this.scope !== 'vault'; });
-    this.els.panel.querySelectorAll('[data-find-prev],[data-find-next]').forEach((button) => { button.hidden = this.scope !== 'current'; });
+    this.els.panel.querySelectorAll('[data-scope]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.scope === this.scope));
+    });
+    this.els.panel.querySelectorAll('.find-replace__vault-option').forEach((label) => {
+      label.hidden = this.scope !== 'vault';
+    });
+    this.els.panel.querySelectorAll('[data-find-prev],[data-find-next]').forEach((button) => {
+      button.hidden = this.scope !== 'current';
+    });
     this.#invalidate();
   }
 
@@ -102,7 +120,12 @@ export class FindReplaceView {
       return;
     }
     this.plan = {
-      ...replaceLiteral(this.editor.getSourceMarkdown(), this.els.find.value, this.els.replacement.value, this.#options()),
+      ...replaceLiteral(
+        this.editor.getSourceMarkdown(),
+        this.els.find.value,
+        this.els.replacement.value,
+        this.#options(),
+      ),
       noteId: note.id,
     };
     this.els.apply.disabled = !this.plan.changed;
@@ -124,7 +147,10 @@ export class FindReplaceView {
       return;
     }
     this.els.apply.disabled = this.plan.changed.length === 0;
-    const affected = this.plan.changed.slice(0, 100).map((note) => `<li>${escapeHtml(note.title)} — ${note.count} match${note.count === 1 ? '' : 'es'}</li>`).join('');
+    const affected = this.plan.changed
+      .slice(0, 100)
+      .map((note) => `<li>${escapeHtml(note.title)} — ${note.count} match${note.count === 1 ? '' : 'es'}</li>`)
+      .join('');
     this.els.preview.innerHTML = `<p><strong>${this.plan.changed.length} changed</strong> · ${this.plan.unchanged.length} unchanged · ${this.plan.skipped.length} skipped · 0 failed</p>${affected ? `<ul>${affected}</ul>` : ''}<p class="muted">No data has been changed. Apply requires confirmation and a pre-change revision for every affected note.</p>`;
     this.els.status.textContent = this.plan.changed.length ? 'Vault preview ready.' : 'No vault notes would change.';
   }
@@ -132,7 +158,8 @@ export class FindReplaceView {
   #editableMatches() {
     const matches = [];
     for (const entry of this.editor.findEntries()) {
-      for (const match of findLiteralMatches(entry.text, this.els.find.value, this.#options())) matches.push({ ...match, blockId: entry.id });
+      for (const match of findLiteralMatches(entry.text, this.els.find.value, this.#options()))
+        matches.push({ ...match, blockId: entry.id });
     }
     return matches;
   }
@@ -141,7 +168,8 @@ export class FindReplaceView {
     if (!this.plan) this.#preview();
     const matches = this.#editableMatches();
     if (!matches.length) {
-      this.els.status.textContent = 'No editable text matches. Matches inside Markdown markers remain visible in Preview.';
+      this.els.status.textContent =
+        'No editable text matches. Matches inside Markdown markers remain visible in Preview.';
       return;
     }
     this.matchIndex = (this.matchIndex + direction + matches.length) % matches.length;
@@ -166,7 +194,13 @@ export class FindReplaceView {
       return;
     }
     if (!this.plan.valid || !this.plan.changed.length) return;
-    if (!await this.confirmVaultApply({ message: `Apply replacements to ${this.plan.changed.length} note${this.plan.changed.length === 1 ? '' : 's'}? Every affected note requires a local safety revision first.`, plan: this.plan })) return;
+    if (
+      !(await this.confirmVaultApply({
+        message: `Apply replacements to ${this.plan.changed.length} note${this.plan.changed.length === 1 ? '' : 's'}? Every affected note requires a local safety revision first.`,
+        plan: this.plan,
+      }))
+    )
+      return;
     this.els.apply.disabled = true;
     this.els.status.textContent = 'Applying revision-protected vault replacement…';
     try {

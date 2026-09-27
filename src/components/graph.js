@@ -30,7 +30,10 @@ export class GraphView {
     this.db = db;
     this.onOpen = onOpen;
     this.container.addEventListener('click', (e) => {
-      if (e.target.closest('.graph__export')) { this.#exportSvg(); return; }
+      if (e.target.closest('.graph__export')) {
+        this.#exportSvg();
+        return;
+      }
       const node = e.target.closest('[data-id]');
       if (node) this.onOpen(node.dataset.id);
     });
@@ -38,7 +41,10 @@ export class GraphView {
     this.container.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
       const node = e.target.closest('[data-id]');
-      if (node) { e.preventDefault(); this.onOpen(node.dataset.id); }
+      if (node) {
+        e.preventDefault();
+        this.onOpen(node.dataset.id);
+      }
     });
   }
 
@@ -56,7 +62,10 @@ export class GraphView {
     let notice = '';
     if (nodes.length > NODE_BUDGET) {
       const deg = new Map(nodes.map((n) => [n.id, 0]));
-      for (const e of edges) { deg.set(e.source, deg.get(e.source) + 1); deg.set(e.target, deg.get(e.target) + 1); }
+      for (const e of edges) {
+        deg.set(e.source, deg.get(e.source) + 1);
+        deg.set(e.target, deg.get(e.target) + 1);
+      }
       const sorted = [...nodes].sort((a, b) => deg.get(b.id) - deg.get(a.id)).map((n) => n.id);
       // If the open note falls outside the top-N, reserve a slot for it so the total
       // (and the notice below) stay exactly at the budget rather than N+1.

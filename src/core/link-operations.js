@@ -51,9 +51,10 @@ export class LinkOperations {
     const note = this.db.getNote(noteId);
     if (!note) return { valid: false, code: 'missing_note', message: 'The note no longer exists.' };
     const oldResolution = this.db.resolveTitleResult(note.title);
-    const repairsDuplicateTitle = oldResolution.status === 'ambiguous'
-      && oldResolution.via === 'title'
-      && oldResolution.candidates.some((candidate) => candidate.id === noteId);
+    const repairsDuplicateTitle =
+      oldResolution.status === 'ambiguous' &&
+      oldResolution.via === 'title' &&
+      oldResolution.candidates.some((candidate) => candidate.id === noteId);
     if (!repairsDuplicateTitle && (oldResolution.status !== 'resolved' || oldResolution.note?.id !== noteId)) {
       return {
         valid: false,
@@ -61,10 +62,10 @@ export class LinkOperations {
         message: 'This title is ambiguous in the imported vault. Resolve the link integrity report before renaming it.',
       };
     }
-    const nextAliases = normalizeAliases([
-      ...(note.aliases || []),
-      ...(repairsDuplicateTitle ? [] : [note.title]),
-    ], requestedTitle);
+    const nextAliases = normalizeAliases(
+      [...(note.aliases || []), ...(repairsDuplicateTitle ? [] : [note.title])],
+      requestedTitle,
+    );
     const identity = this.db.validateLinkIdentity(noteId, requestedTitle, nextAliases);
     if (!identity.valid) return identity;
     if (identity.title === note.title) {
@@ -79,9 +80,10 @@ export class LinkOperations {
     for (const source of this.db.getAllNotes()) {
       const rewritten = rewriteWikilinkTargets(
         source.content,
-        (token) => !repairsDuplicateTitle
-          && normalizeTitle(token.target) === oldKey
-          && this.db.resolveTitleResult(token.target).note?.id === noteId,
+        (token) =>
+          !repairsDuplicateTitle &&
+          normalizeTitle(token.target) === oldKey &&
+          this.db.resolveTitleResult(token.target).note?.id === noteId,
         identity.title,
       );
       if (!rewritten.edits.length) continue;
@@ -132,7 +134,8 @@ export class LinkOperations {
     if (!note) return { valid: false, code: 'missing_note', message: 'The note no longer exists.' };
     const key = normalizeTitle(alias);
     const stored = (note.aliases || []).find((value) => normalizeTitle(value) === key);
-    if (!key || !stored) return { valid: false, code: 'missing_alias', message: 'That alias is no longer present on the note.' };
+    if (!key || !stored)
+      return { valid: false, code: 'missing_alias', message: 'That alias is no longer present on the note.' };
     const expected = note.toJSON();
     const next = {
       ...expected,
@@ -164,15 +167,23 @@ export class LinkOperations {
   planMentionConversion(request) {
     const source = this.db.getNote(request?.sourceId);
     const target = this.db.getNote(request?.targetId);
-    if (!source || !target) return { valid: false, code: 'missing_note', message: 'The source or target note no longer exists.' };
-    const occurrence = this.db.unlinkedMentionsFor(target.id).find((entry) => (
-      entry.sourceId === source.id
-      && entry.start === request.start
-      && entry.end === request.end
-      && entry.text === request.text
-    ));
+    if (!source || !target)
+      return { valid: false, code: 'missing_note', message: 'The source or target note no longer exists.' };
+    const occurrence = this.db
+      .unlinkedMentionsFor(target.id)
+      .find(
+        (entry) =>
+          entry.sourceId === source.id &&
+          entry.start === request.start &&
+          entry.end === request.end &&
+          entry.text === request.text,
+      );
     if (!occurrence || source.content.slice(occurrence.start, occurrence.end) !== occurrence.text) {
-      return { valid: false, code: 'stale_mention', message: 'This mention changed. Refresh the note and review it again.' };
+      return {
+        valid: false,
+        code: 'stale_mention',
+        message: 'This mention changed. Refresh the note and review it again.',
+      };
     }
     const replacement = buildMentionReplacement(occurrence);
     const expected = source.toJSON();

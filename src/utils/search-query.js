@@ -26,11 +26,16 @@ export function parseQuery(raw) {
     else if (k === 'prop' || k === 'property') {
       const equals = val.indexOf('=');
       const property = (equals < 0 ? val : val.slice(0, equals)).normalize('NFKC').toLowerCase();
-      const value = equals < 0 ? null : val.slice(equals + 1).normalize('NFKC').toLowerCase();
+      const value =
+        equals < 0
+          ? null
+          : val
+              .slice(equals + 1)
+              .normalize('NFKC')
+              .toLowerCase();
       if (!property || (equals >= 0 && !value)) return match;
       filters.properties.push({ key: property, value });
-    }
-    else return match; // unknown filter — leave it as searchable text
+    } else return match; // unknown filter — leave it as searchable text
     return ' ';
   });
   return { text: text.trim().replace(/\s+/g, ' '), filters };
@@ -74,8 +79,11 @@ export function scoreNote(text, note, { inTitle = false } = {}) {
     }
     const tagHit = note.tags.some((t) => t.toLowerCase().includes(ql));
     if (tagHit) score = Math.max(score ?? -Infinity, 25);
-    const propertyHit = note._propertySearchIndex instanceof Map
-      && [...note._propertySearchIndex].some(([key, values]) => key.includes(ql) || values.some((value) => value.includes(ql)));
+    const propertyHit =
+      note._propertySearchIndex instanceof Map &&
+      [...note._propertySearchIndex].some(
+        ([key, values]) => key.includes(ql) || values.some((value) => value.includes(ql)),
+      );
     if (propertyHit) score = Math.max(score ?? -Infinity, 20);
   }
 

@@ -42,13 +42,19 @@ export class CalendarView {
     this.items = [];
     this.days = [];
     this.index = new NoteDerivedIndex(db, (note) => buildCalendarItems([note]));
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.els.grid.querySelector('[tabindex="0"]') || this.modal.panel });
+    this.modal = new Modal(els.overlay, {
+      initialFocus: () => this.els.grid.querySelector('[tabindex="0"]') || this.modal.panel,
+    });
     this.els.overlay.addEventListener('click', (event) => this.#onClick(event));
     this.els.grid.addEventListener('keydown', (event) => this.#onGridKey(event));
-    this.unsubscribe = db.subscribe(() => { if (this.open) this.refresh(); });
+    this.unsubscribe = db.subscribe(() => {
+      if (this.open) this.refresh();
+    });
   }
 
-  get open() { return this.modal.isOpen; }
+  get open() {
+    return this.modal.isOpen;
+  }
 
   show({ date = localDateKey(), mode = this.mode } = {}) {
     this.anchor = parseCalendarDate(date) ? date : localDateKey();
@@ -58,9 +64,14 @@ export class CalendarView {
     this.modal.open();
   }
 
-  close() { this.modal.close(); }
+  close() {
+    this.modal.close();
+  }
 
-  destroy() { this.unsubscribe?.(); this.index.destroy(); }
+  destroy() {
+    this.unsubscribe?.();
+    this.index.destroy();
+  }
 
   refresh() {
     this.items = this.index.list();
@@ -68,10 +79,16 @@ export class CalendarView {
     this.days = period.days;
     if (!this.days.includes(this.activeDate)) this.activeDate = this.mode === 'week' ? period.start : this.anchor;
     const anchor = parseCalendarDate(this.anchor);
-    this.els.label.textContent = this.mode === 'week'
-      ? `${calendarDateLabel(this.days[0], { month: 'short', day: 'numeric' })} – ${calendarDateLabel(this.days.at(-1), { month: 'short', day: 'numeric', year: 'numeric' })}`
-      : calendarDateLabel(`${String(anchor.year).padStart(4, '0')}-${String(anchor.month).padStart(2, '0')}-01`, { month: 'long', year: 'numeric' });
-    this.els.overlay.querySelectorAll('[data-calendar-mode]').forEach((button) => { button.setAttribute('aria-pressed', String(button.dataset.calendarMode === this.mode)); });
+    this.els.label.textContent =
+      this.mode === 'week'
+        ? `${calendarDateLabel(this.days[0], { month: 'short', day: 'numeric' })} – ${calendarDateLabel(this.days.at(-1), { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : calendarDateLabel(`${String(anchor.year).padStart(4, '0')}-${String(anchor.month).padStart(2, '0')}-01`, {
+            month: 'long',
+            year: 'numeric',
+          });
+    this.els.overlay.querySelectorAll('[data-calendar-mode]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.calendarMode === this.mode));
+    });
     this.#renderGrid();
     this.#renderAgenda();
     this.els.status.textContent = `${this.items.filter((item) => this.days.includes(item.date)).length} calendar item${this.items.filter((item) => this.days.includes(item.date)).length === 1 ? '' : 's'} in this ${this.mode}.`;
@@ -98,20 +115,35 @@ export class CalendarView {
   #renderAgenda() {
     const grouped = calendarItemsByDate(this.items);
     const populated = this.days.filter((date) => (grouped.get(date) || []).length);
-    this.els.agenda.innerHTML = populated.length ? populated.map((date) => `<section class="calendar-agenda__day" data-agenda-date="${date}"><h3>${escapeHtml(calendarDateLabel(date, { weekday: 'short', month: 'short', day: 'numeric' }))}</h3><ul>${(grouped.get(date) || []).map((item) => `<li><button type="button" data-calendar-item="${escapeHtml(item.id)}"><span>${item.type === 'task' ? (item.checked ? '✓' : '□') : item.type === 'daily' ? 'Daily' : 'Date'}</span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.noteTitle)}</small></button></li>`).join('')}</ul></section>`).join('') : '<div class="calendar-agenda__empty"><strong>No calendar items in this period.</strong><p class="muted">Choose Open Daily note to start one for the selected date.</p></div>';
+    this.els.agenda.innerHTML = populated.length
+      ? populated
+          .map(
+            (date) =>
+              `<section class="calendar-agenda__day" data-agenda-date="${date}"><h3>${escapeHtml(calendarDateLabel(date, { weekday: 'short', month: 'short', day: 'numeric' }))}</h3><ul>${(grouped.get(date) || []).map((item) => `<li><button type="button" data-calendar-item="${escapeHtml(item.id)}"><span>${item.type === 'task' ? (item.checked ? '✓' : '□') : item.type === 'daily' ? 'Daily' : 'Date'}</span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.noteTitle)}</small></button></li>`).join('')}</ul></section>`,
+          )
+          .join('')
+      : '<div class="calendar-agenda__empty"><strong>No calendar items in this period.</strong><p class="muted">Choose Open Daily note to start one for the selected date.</p></div>';
   }
 
-  #findItem(id) { return this.items.find((item) => item.id === id) || null; }
+  #findItem(id) {
+    return this.items.find((item) => item.id === id) || null;
+  }
 
   #onClick(event) {
     const mode = event.target.closest('[data-calendar-mode]');
-    if (mode) { this.mode = mode.dataset.calendarMode; this.refresh(); this.modal.focusInitial(); return; }
+    if (mode) {
+      this.mode = mode.dataset.calendarMode;
+      this.refresh();
+      this.modal.focusInitial();
+      return;
+    }
     const period = event.target.closest('[data-period]');
     if (period) {
       if (period.dataset.period === 'today') this.anchor = this.activeDate = localDateKey();
       else {
         const amount = period.dataset.period === 'next' ? 1 : -1;
-        this.anchor = this.mode === 'week' ? addCalendarDays(this.anchor, amount * 7) : addCalendarMonths(this.anchor, amount);
+        this.anchor =
+          this.mode === 'week' ? addCalendarDays(this.anchor, amount * 7) : addCalendarMonths(this.anchor, amount);
         this.activeDate = this.anchor;
       }
       this.refresh();
@@ -131,7 +163,10 @@ export class CalendarView {
       this.activeDate = day.closest('[data-calendar-date]').dataset.calendarDate;
       const hasItems = this.items.some((item) => item.date === this.activeDate);
       if (!hasItems) this.#openDaily();
-      else { this.refresh(); this.els.status.textContent = `${calendarDateLabel(this.activeDate)} selected. Choose an item or Open Daily note.`; }
+      else {
+        this.refresh();
+        this.els.status.textContent = `${calendarDateLabel(this.activeDate)} selected. Choose an item or Open Daily note.`;
+      }
       return;
     }
     if (event.target.closest('[data-open-daily]')) this.#openDaily();
@@ -154,8 +189,10 @@ export class CalendarView {
     else if (event.key === 'ArrowDown') next = addCalendarDays(date, 7);
     else if (event.key === 'Home') next = startOfWeek(date);
     else if (event.key === 'End') next = addCalendarDays(startOfWeek(date), 6);
-    else if (event.key === 'PageUp') next = this.mode === 'week' ? addCalendarDays(date, -7) : addCalendarMonths(date, -1);
-    else if (event.key === 'PageDown') next = this.mode === 'week' ? addCalendarDays(date, 7) : addCalendarMonths(date, 1);
+    else if (event.key === 'PageUp')
+      next = this.mode === 'week' ? addCalendarDays(date, -7) : addCalendarMonths(date, -1);
+    else if (event.key === 'PageDown')
+      next = this.mode === 'week' ? addCalendarDays(date, 7) : addCalendarMonths(date, 1);
     if (!next) return;
     event.preventDefault();
     this.activeDate = next;

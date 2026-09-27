@@ -10,7 +10,11 @@ export function normalizeCaptureUrl(value) {
   const source = bounded(value, MAX_URL).trim();
   if (!source) return '';
   let url;
-  try { url = new URL(source); } catch { throw new TypeError('Enter a complete http or https URL.'); }
+  try {
+    url = new URL(source);
+  } catch {
+    throw new TypeError('Enter a complete http or https URL.');
+  }
   if (!['http:', 'https:'].includes(url.protocol)) throw new TypeError('Only http and https URLs can be captured.');
   return url.href;
 }
@@ -36,7 +40,9 @@ export function consumeShareTarget(input) {
 }
 
 function escapeLinkLabel(value) {
-  return String(value).replace(/\\/g, '\\\\').replace(/([[\]])/g, '\\$1');
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/([[\]])/g, '\\$1');
 }
 
 export function buildCaptureMarkdown({ title = '', text = '', url = '', imageDataUrl = '', imageAlt = '' } = {}) {
@@ -50,8 +56,12 @@ export function buildCaptureMarkdown({ title = '', text = '', url = '', imageDat
     parts.push(normalized.title);
   }
   if (imageDataUrl) {
-    if (!/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);/i.test(imageDataUrl)) throw new TypeError('Captured image data is not a supported image.');
-    const alt = String(imageAlt || 'Captured image').replace(/[[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);/i.test(imageDataUrl))
+      throw new TypeError('Captured image data is not a supported image.');
+    const alt = String(imageAlt || 'Captured image')
+      .replace(/[[\]\r\n]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     parts.push(`![${alt}](${imageDataUrl})`);
   }
   return parts.join('\n\n');

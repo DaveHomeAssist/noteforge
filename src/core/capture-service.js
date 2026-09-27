@@ -38,7 +38,8 @@ export class CaptureService {
       next.update({ content: appendCapturedMarkdown(next.content, markdown) });
       note = this.db.saveNote(next, { reason: 'quick_capture' });
     }
-    if (!await this.db.flushCurrentWrites()) throw new Error('Capture is still pending because browser storage did not accept it.');
+    if (!(await this.db.flushCurrentWrites()))
+      throw new Error('Capture is still pending because browser storage did not accept it.');
     return { note: this.db.getNote(note.id), created };
   }
 }

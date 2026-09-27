@@ -16,7 +16,8 @@ function detached(value) {
 
 export class RecoveryService {
   constructor({ db, revisionStore, storage, now = () => new Date(), download = downloadText }) {
-    if (!db || !revisionStore || !storage) throw new TypeError('RecoveryService requires database, revision store, and storage.');
+    if (!db || !revisionStore || !storage)
+      throw new TypeError('RecoveryService requires database, revision store, and storage.');
     this.db = db;
     this.revisions = revisionStore;
     this.storage = storage;
@@ -26,9 +27,10 @@ export class RecoveryService {
       onNotesPersisted: (captures) => this.capturePersisted(captures),
       onNotesPurged: (noteIds) => this.revisions.deleteNoteHistories(noteIds),
     };
-    const connected = typeof this.db.connectHistoryHandlers === 'function'
-      ? this.db.connectHistoryHandlers(handlers)
-      : Promise.resolve(Object.assign(this.db, handlers));
+    const connected =
+      typeof this.db.connectHistoryHandlers === 'function'
+        ? this.db.connectHistoryHandlers(handlers)
+        : Promise.resolve(Object.assign(this.db, handlers));
     this.ready = connected.then(async () => {
       const status = await this.revisions.getStatus();
       if (status.available && typeof this.revisions.reconcileVaultNoteIds === 'function') {
@@ -49,7 +51,9 @@ export class RecoveryService {
   async capturePersisted(captures) {
     const results = [];
     for (const capture of captures) {
-      results.push(await this.revisions.capture(capture.note, { reason: capture.reason, force: capture.force === true }));
+      results.push(
+        await this.revisions.capture(capture.note, { reason: capture.reason, force: capture.force === true }),
+      );
     }
     return results;
   }
@@ -80,7 +84,8 @@ export class RecoveryService {
     const prepared = await this.revisions.prepareRestore(current, revisionId, { restoredAt: this.now() });
     const restored = Note.fromJSON(prepared.payload);
     this.db.saveNote(restored, { captureRevision: false });
-    if (!await this.db.flushCurrentWrites()) throw new Error('The safety revision was kept, but the restored note could not be saved.');
+    if (!(await this.db.flushCurrentWrites()))
+      throw new Error('The safety revision was kept, but the restored note could not be saved.');
     return { note: restored, safetyRevision: prepared.safetyCapture.revision };
   }
 
@@ -93,7 +98,7 @@ export class RecoveryService {
     });
     const copy = Note.fromJSON(payload);
     this.db.saveNote(copy, { captureRevision: false });
-    if (!await this.db.flushCurrentWrites()) throw new Error('The restored copy could not be saved.');
+    if (!(await this.db.flushCurrentWrites())) throw new Error('The restored copy could not be saved.');
     return { note: copy };
   }
 
@@ -105,9 +110,10 @@ export class RecoveryService {
     const persistence = this.db.getPersistenceStatus();
     const pendingWrites = Number.isInteger(persistence.pendingWrites) ? persistence.pendingWrites : 0;
     const pendingHistory = Number.isInteger(persistence.pendingHistory) ? persistence.pendingHistory : 0;
-    const pendingWriteError = pendingWrites > 0
-      ? `${pendingWrites} current-note write${pendingWrites === 1 ? ' is' : 's are'} still pending. Changes are not yet durably saved.`
-      : null;
+    const pendingWriteError =
+      pendingWrites > 0
+        ? `${pendingWrites} current-note write${pendingWrites === 1 ? ' is' : 's are'} still pending. Changes are not yet durably saved.`
+        : null;
     return {
       ...backend,
       ...history,
@@ -201,7 +207,8 @@ export class RecoveryService {
   }
 
   async restoreBackup({ confirmed, plan, type, file, verified, snapshotId }) {
-    if (confirmed !== true || !plan?.restoreState) throw new Error('A verified restore preview and explicit confirmation are required.');
+    if (confirmed !== true || !plan?.restoreState)
+      throw new Error('A verified restore preview and explicit confirmation are required.');
     // Never trust a mutable preview object at the commit boundary. Re-read and
     // verify the chosen source, then build a fresh plan against current memory.
     let freshPlan;
@@ -218,7 +225,8 @@ export class RecoveryService {
     const safety = await this.createBackup();
     this.download(safety.text, `noteforge-pre-restore-${fileDate(this.now())}.json`, 'application/json');
     const restored = await this.db.replaceVault(freshPlan.restoreState);
-    if (!restored) throw new Error('The current vault was left in memory because the restore batch could not be saved.');
+    if (!restored)
+      throw new Error('The current vault was left in memory because the restore batch could not be saved.');
     return { restored: true, summary: freshPlan.summary };
   }
 }

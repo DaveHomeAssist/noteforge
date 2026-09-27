@@ -30,10 +30,20 @@ function backend(initial = {}) {
   const values = new Map(Object.entries(structuredClone(initial)));
   return {
     values,
-    async load(key, fallback) { return values.has(key) ? structuredClone(values.get(key)) : fallback; },
-    async save(key, value) { values.set(key, structuredClone(value)); return true; },
-    async saveMany(entries) { entries.forEach(([key, value]) => values.set(key, structuredClone(value))); return true; },
-    async getStatus() { return { backend: 'indexeddb', available: true }; },
+    async load(key, fallback) {
+      return values.has(key) ? structuredClone(values.get(key)) : fallback;
+    },
+    async save(key, value) {
+      values.set(key, structuredClone(value));
+      return true;
+    },
+    async saveMany(entries) {
+      entries.forEach(([key, value]) => values.set(key, structuredClone(value)));
+      return true;
+    },
+    async getStatus() {
+      return { backend: 'indexeddb', available: true };
+    },
   };
 }
 
@@ -64,7 +74,8 @@ test('YAML adapter preserves unknown mappings and rejects malformed, duplicate, 
     '---\na: 1\na: 2\n---\nbody',
     '---\n!unknown value\n---\nbody',
     '---\n- not\n- a mapping\n---\nbody',
-  ]) assert.equal((await parseFrontmatter(source)).status, 'invalid');
+  ])
+    assert.equal((await parseFrontmatter(source)).status, 'invalid');
 });
 
 test('targeted property edits preserve body bytes, comments/order, types, and immutable identity', async () => {
@@ -82,7 +93,10 @@ test('targeted property edits preserve body bytes, comments/order, types, and im
   assert.equal(parsed.properties.get('ready'), true);
   assert.deepEqual(parsed.properties.get('labels'), ['one', 'two']);
   await rejectsCode(() => setFrontmatterProperty(next, 'site', 'javascript:alert(1)', { type: 'url' }), 'unsafe_url');
-  await rejectsCode(() => setFrontmatterProperty(next, 'noteforge_id', 'changed', { type: 'text' }), 'immutable_property');
+  await rejectsCode(
+    () => setFrontmatterProperty(next, 'noteforge_id', 'changed', { type: 'text' }),
+    'immutable_property',
+  );
   await rejectsCode(() => removeFrontmatterProperty(next, 'noteforge_id'), 'immutable_property');
   const removed = await removeFrontmatterProperty(next, 'ready');
   assert.equal((await parseFrontmatter(removed)).properties.has('ready'), false);
@@ -109,14 +123,48 @@ test('schema v6 marks and Phase5Controller completes revision-protected alias mi
   const store = backend({
     schemaVersion: 5,
     notes: [
-      { id: 'valid', title: 'Current', content, aliases: ['Legacy'], tags: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', deletedAt: null, pinned: false, parentId: null, archivedAt: null, banner: null },
-      { id: 'broken', title: 'Broken', content: '---\naliases: [oops\n---\nBody exact', aliases: ['Keep Metadata'], tags: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', deletedAt: null, pinned: false, parentId: null, archivedAt: null, banner: null },
+      {
+        id: 'valid',
+        title: 'Current',
+        content,
+        aliases: ['Legacy'],
+        tags: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        pinned: false,
+        parentId: null,
+        archivedAt: null,
+        banner: null,
+      },
+      {
+        id: 'broken',
+        title: 'Broken',
+        content: '---\naliases: [oops\n---\nBody exact',
+        aliases: ['Keep Metadata'],
+        tags: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        pinned: false,
+        parentId: null,
+        archivedAt: null,
+        banner: null,
+      },
     ],
     config: {},
   });
   const captures = [];
-  const db = await new Database({ storageBackend: store, onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)) }).init();
-  const controller = new Phase5Controller({ db, editor: { flushPending() {}, currentId: null }, ensureRecovery: async () => {}, refreshSearch() {} });
+  const db = await new Database({
+    storageBackend: store,
+    onNotesPersisted: async (batch) => captures.push(...structuredClone(batch)),
+  }).init();
+  const controller = new Phase5Controller({
+    db,
+    editor: { flushPending() {}, currentId: null },
+    ensureRecovery: async () => {},
+    refreshSearch() {},
+  });
   const result = await controller.ready;
   await db.flush();
   const migrated = db.getNote('valid');
@@ -129,18 +177,51 @@ test('schema v6 marks and Phase5Controller completes revision-protected alias mi
   assert.equal(result.blocked.length, 1);
   assert.equal(db.config.frontmatterAliasMigration.status, 'repair_required');
   await controller.reconcileAliases({ changedOnly: true });
-  assert.equal(db.config.frontmatterAliasMigration.status, 'repair_required', 'unchanged blocked notes remain in the repair report');
-  assert.ok(captures.some((capture) => capture.reason === 'pre_frontmatter_alias_migration' && capture.note.id === 'valid'));
+  assert.equal(
+    db.config.frontmatterAliasMigration.status,
+    'repair_required',
+    'unchanged blocked notes remain in the repair report',
+  );
+  assert.ok(
+    captures.some((capture) => capture.reason === 'pre_frontmatter_alias_migration' && capture.note.id === 'valid'),
+  );
   controller.unsubscribe();
 });
 
 test('frontmatter aliases stay the single source of truth: removing an alias from either store is not resurrected', async () => {
-  const meta = { tags: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', deletedAt: null, pinned: false, parentId: null, archivedAt: null, banner: null };
-  const migrated = { id: 'n1', title: 'Current', content: '---\naliases: [Old Name]\nkeep: yes\n---\nBody', aliases: ['Old Name'], ...meta };
+  const meta = {
+    tags: [],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    deletedAt: null,
+    pinned: false,
+    parentId: null,
+    archivedAt: null,
+    banner: null,
+  };
+  const migrated = {
+    id: 'n1',
+    title: 'Current',
+    content: '---\naliases: [Old Name]\nkeep: yes\n---\nBody',
+    aliases: ['Old Name'],
+    ...meta,
+  };
   const frontmatterAliases = async (note) => aliasesFromProperties((await parseFrontmatter(note.content)).properties);
   const boot = async () => {
-    const db = await new Database({ storageBackend: backend({ schemaVersion: 6, notes: [migrated], config: { frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] } } }), onNotesPersisted: async () => {} }).init();
-    const controller = new Phase5Controller({ db, editor: { flushPending() {}, currentId: null }, ensureRecovery: async () => {}, refreshSearch() {} });
+    const db = await new Database({
+      storageBackend: backend({
+        schemaVersion: 6,
+        notes: [migrated],
+        config: { frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] } },
+      }),
+      onNotesPersisted: async () => {},
+    }).init();
+    const controller = new Phase5Controller({
+      db,
+      editor: { flushPending() {}, currentId: null },
+      ensureRecovery: async () => {},
+      refreshSearch() {},
+    });
     await controller.ready;
     const settle = async () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -156,7 +237,11 @@ test('frontmatter aliases stay the single source of truth: removing an alias fro
   await links.applyAliasRemovalPlan(links.planAliasRemoval('n1', 'Old Name'));
   await settle();
   assert.deepEqual(db.getNote('n1').aliases, []);
-  assert.equal((await frontmatterAliases(db.getNote('n1'))).present, false, 'the emptied aliases key is removed from YAML');
+  assert.equal(
+    (await frontmatterAliases(db.getNote('n1'))).present,
+    false,
+    'the emptied aliases key is removed from YAML',
+  );
   assert.match(db.getNote('n1').content, /keep: yes/, 'other frontmatter keys survive');
   assert.equal(db.resolveTitle('Old Name'), null);
   controller.unsubscribe();
@@ -189,16 +274,43 @@ test('frontmatter aliases stay the single source of truth: removing an alias fro
 
   // Pure decision table.
   const property = { valid: true, present: true, aliases: ['A'] };
-  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, null), ['A', 'B'], 'first sight merges legacy metadata');
-  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['B'] }), ['A'], 'Markdown edit wins');
-  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'x', aliases: ['A'] }), ['B'], 'metadata edit wins');
-  assert.deepEqual(canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['A'] }), ['A', 'B'], 'a coordinated write merges');
+  assert.deepEqual(
+    canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, null),
+    ['A', 'B'],
+    'first sight merges legacy metadata',
+  );
+  assert.deepEqual(
+    canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['B'] }),
+    ['A'],
+    'Markdown edit wins',
+  );
+  assert.deepEqual(
+    canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'x', aliases: ['A'] }),
+    ['B'],
+    'metadata edit wins',
+  );
+  assert.deepEqual(
+    canonicalAliasesFor({ title: 'T', content: 'x', aliases: ['B'] }, property, { content: 'old', aliases: ['A'] }),
+    ['A', 'B'],
+    'a coordinated write merges',
+  );
 });
 
 test('derived property filters are normalized, exact, non-authoritative, and searchable', async () => {
   const parsed = await parseFrontmatter('---\nstatus: Active\nscore: 7\nlabels: [One, Two]\n---\nBody');
-  const note = { title: 'Record', content: 'Body', tags: [], updatedAt: '2026-01-01', banner: null, pinned: false, archivedAt: null };
-  Object.defineProperty(note, '_propertySearchIndex', { value: propertySearchIndex(parsed.properties), enumerable: false });
+  const note = {
+    title: 'Record',
+    content: 'Body',
+    tags: [],
+    updatedAt: '2026-01-01',
+    banner: null,
+    pinned: false,
+    archivedAt: null,
+  };
+  Object.defineProperty(note, '_propertySearchIndex', {
+    value: propertySearchIndex(parsed.properties),
+    enumerable: false,
+  });
   assert.deepEqual(parseQuery('property:status=active').filters.properties, [{ key: 'status', value: 'active' }]);
   assert.equal(rankNotes('property:labels=two', [note]).length, 1);
   assert.equal(rankNotes('prop:score=8', [note]).length, 0);
@@ -221,7 +333,14 @@ test('stable block IDs round-trip, survive reorder/edit, resolve uniquely, and d
 test('heading and block fragments survive wikilink parsing and canonical-title rewrites', () => {
   const source = '[[Old#Heading|Shown]] [[Old#^alpha]] ![[Old#^alpha]]';
   const tokens = parseWikilinks(source);
-  assert.deepEqual(tokens.map(({ fragment, embedded }) => [fragment, embedded]), [['Heading', false], ['^alpha', false], ['^alpha', true]]);
+  assert.deepEqual(
+    tokens.map(({ fragment, embedded }) => [fragment, embedded]),
+    [
+      ['Heading', false],
+      ['^alpha', false],
+      ['^alpha', true],
+    ],
+  );
   const rewritten = rewriteWikilinkTargets(source, (token) => token.target === 'Old', 'New').content;
   assert.equal(rewritten, '[[New#Heading|Shown]] [[New#^alpha]] ![[New#^alpha]]');
   assert.equal(extractHeadings('# Visible ^anchor')[0].text, 'Visible');
@@ -232,17 +351,41 @@ test('frontmatter and block markers survive portable backup and Markdown export 
   const state = {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     config: { frontmatterAliasMigration: { version: 1, status: 'complete', blocked: [] } },
-    notes: [{ id: 'n', title: 'Note', content, aliases: ['Legacy'], tags: [], banner: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', deletedAt: null, pinned: false, parentId: null, archivedAt: null }],
+    notes: [
+      {
+        id: 'n',
+        title: 'Note',
+        content,
+        aliases: ['Legacy'],
+        tags: [],
+        banner: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        pinned: false,
+        parentId: null,
+        archivedAt: null,
+      },
+    ],
   };
-  const verified = await verifyBackup(serializeBackup(await createBackup(state, { createdAt: '2026-08-20T00:00:00.000Z' })));
+  const verified = await verifyBackup(
+    serializeBackup(await createBackup(state, { createdAt: '2026-08-20T00:00:00.000Z' })),
+  );
   assert.equal(verified.notes[0].content, content);
   assert.deepEqual(runMigrations(verified, CURRENT_SCHEMA_VERSION).data.config, state.config);
   const files = new Map();
   const directory = {
     async getFileHandle(name) {
-      return { async createWritable() {
-        return { async write(value) { files.set(name, value); }, async close() {} };
-      } };
+      return {
+        async createWritable() {
+          return {
+            async write(value) {
+              files.set(name, value);
+            },
+            async close() {},
+          };
+        },
+      };
     },
   };
   assert.equal(await writeVaultToDir(directory, state.notes), 1);
