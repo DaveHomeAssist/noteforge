@@ -64,25 +64,44 @@
           </div>
           <button id="new-note-btn" class="btn btn--primary" title="New note (Ctrl+N)"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-plus"></use></svg> New</button>
           <div class="menu">
-            <button id="menu-btn" class="btn btn--ghost" title="More" aria-label="More actions" aria-controls="menu-dropdown" aria-expanded="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-ellipsis"></use></svg></button>
-            <div class="menu__dropdown" id="menu-dropdown" hidden>
-              <button id="palette-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-command"></use></svg> Command palette <span class="menu__hint">Ctrl/⌘ P</span></button>
-              <button id="template-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-layout-template"></use></svg> New from template…</button>
-              <button id="today-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-calendar-days"></use></svg> Open Today’s Note</button>
-              <button id="tasks-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-square-check-big"></use></svg> Tasks</button>
-              <button id="calendar-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-calendar"></use></svg> Calendar</button>
-              <button id="trash-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-trash-2"></use></svg> Trash <span id="trash-badge" class="menu__badge" hidden></span></button>
-              <button id="settings-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-settings"></use></svg> Settings</button>
-              <button id="history-btn" class="menu__item" disabled><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-history"></use></svg> Revision history</button>
-              <button id="backup-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-life-buoy"></use></svg> Backup center</button>
-              <button id="clipper-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-scissors"></use></svg> Web clipper setup</button>
-              <button id="reconcile-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-folder-sync"></use></svg> Reconcile Markdown folder</button>
-              <button id="find-replace-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-text-search"></use></svg> Find and replace <span class="menu__hint">Ctrl/⌘ F</span></button>
-              <button id="archive-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-archive"></use></svg> Archive</button>
-              <button id="link-report-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-link"></use></svg> Link integrity report</button>
-              <button id="export-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-download"></use></svg> Export JSON</button>
-              <button id="import-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-upload"></use></svg> Import JSON</button>
-              <button id="seed-btn" class="menu__item"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-sparkles"></use></svg> Load sample notes</button>
+            <button id="menu-btn" class="btn btn--ghost" title="More" aria-label="More actions" aria-haspopup="menu" aria-controls="menu-dropdown" aria-expanded="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-ellipsis"></use></svg></button>
+            <div class="menu__dropdown" id="menu-dropdown" role="menu" aria-labelledby="menu-btn" hidden>
+              <div class="menu__group" role="group" aria-labelledby="menu-group-create">
+                <div class="menu__label" aria-hidden="true" id="menu-group-create">Create</div>
+                <button id="template-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-layout-template"></use></svg> New from template…</button>
+                <button id="today-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-calendar-days"></use></svg> Open Today’s Note <span class="menu__hint">Ctrl/⌘ Shift D</span></button>
+              </div>
+              <div class="menu__separator" role="separator"></div>
+              <div class="menu__group" role="group" aria-labelledby="menu-group-views">
+                <div class="menu__label" aria-hidden="true" id="menu-group-views">Views</div>
+                <button id="palette-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-command"></use></svg> Command palette <span class="menu__hint">Ctrl/⌘ P</span></button>
+                <button id="find-replace-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-text-search"></use></svg> Find and replace <span class="menu__hint">Ctrl/⌘ F</span></button>
+                <button id="tasks-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-square-check-big"></use></svg> Tasks</button>
+                <button id="calendar-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-calendar"></use></svg> Calendar</button>
+                <button id="archive-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-archive"></use></svg> Archive</button>
+                <button id="trash-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-trash-2"></use></svg> Trash <span id="trash-badge" class="menu__badge" hidden></span></button>
+              </div>
+              <div class="menu__separator" role="separator"></div>
+              <div class="menu__group" role="group" aria-labelledby="menu-group-knowledge">
+                <div class="menu__label" aria-hidden="true" id="menu-group-knowledge">Knowledge</div>
+                <button id="link-report-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-link"></use></svg> Link integrity report</button>
+                <button id="history-btn" class="menu__item" role="menuitem" tabindex="-1" disabled><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-history"></use></svg> Revision history</button>
+              </div>
+              <div class="menu__separator" role="separator"></div>
+              <div class="menu__group" role="group" aria-labelledby="menu-group-data">
+                <div class="menu__label" aria-hidden="true" id="menu-group-data">Data</div>
+                <button id="backup-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-life-buoy"></use></svg> Backup center</button>
+                <button id="export-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-download"></use></svg> Export JSON</button>
+                <button id="import-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-upload"></use></svg> Import JSON</button>
+                <button id="reconcile-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-folder-sync"></use></svg> Reconcile Markdown folder</button>
+                <button id="clipper-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-scissors"></use></svg> Web clipper setup</button>
+                <button id="seed-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-sparkles"></use></svg> Load sample notes</button>
+              </div>
+              <div class="menu__separator" role="separator"></div>
+              <div class="menu__group" role="group" aria-labelledby="menu-group-app">
+                <div class="menu__label" aria-hidden="true" id="menu-group-app">App</div>
+                <button id="settings-btn" class="menu__item" role="menuitem" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-settings"></use></svg> Settings</button>
+              </div>
             </div>
           </div>
           <input type="file" id="import-file" accept="application/json" hidden />
