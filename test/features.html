@@ -2383,6 +2383,19 @@
       workspace.editors.secondary.container.dispatchEvent(new Event('scroll'));
       check('Phase 6 persists independent primary and secondary scroll positions',
         await until(() => workspace.state.panes.primary.scrollTop === 11 && workspace.state.panes.secondary.scrollTop === 22));
+      const closeActive = workspace.element.querySelector('[data-close-active]');
+      const moveActive = workspace.element.querySelector('[data-move-active]');
+      check('Phase 6 toolbar gives the active tab labelled close and move actions outside the tablist',
+        closeActive?.getAttribute('aria-label') === 'Close the active tab'
+        && moveActive?.getAttribute('aria-label') === 'Move the active tab to the other pane'
+        && !closeActive.closest('[role="tablist"]') && !closeActive.disabled && !moveActive.disabled);
+      const activeBefore = workspace.state.panes[workspace.state.activePane].activeNoteId;
+      workspaceAnnouncement = '';
+      closeActive.click();
+      check('Phase 6 toolbar close action closes the active tab',
+        await until(() => /^Closed .* tab\.$/.test(workspaceAnnouncement))
+        && !workspace.state.panes.primary.tabs.includes(activeBefore)
+        && !workspace.state.panes.secondary.tabs.includes(activeBefore));
       workspace.element.remove();
 
       let copied = '';
@@ -2489,6 +2502,34 @@
       results.push('FAIL  accessibility-hardening selectors — threw: ' + e.message);
     }
   })();
+
+  // ============ stacked modals: only the topmost is interactive ============
+  section('Modal: a stacked dialog makes the one beneath inert and takes Escape', () => {
+    const mkOverlay = (label) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal';
+      overlay.hidden = true;
+      overlay.innerHTML = `<div class="modal__panel" tabindex="-1"><button type="button">${label}</button></div>`;
+      document.body.appendChild(overlay);
+      return overlay;
+    };
+    const below = mkOverlay('Below');
+    const above = mkOverlay('Above');
+    const first = new Modal(below);
+    const second = new Modal(above);
+    first.open();
+    second.open();
+    check('the dialog beneath a stacked dialog is inert and the top one is not',
+      below.hasAttribute('inert') && !above.hasAttribute('inert') && document.documentElement.hasAttribute('data-modal-open'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    check('one Escape closes only the topmost dialog and re-enables the one beneath',
+      !second.isOpen && first.isOpen && !below.hasAttribute('inert'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    check('the next Escape closes the last dialog and clears the modal flag',
+      !first.isOpen && !document.documentElement.hasAttribute('data-modal-open'));
+    below.remove();
+    above.remove();
+  });
 
   // ============ in-app confirm dialog + toasts (src/ui/dialogs.js) ============
   await (async () => {

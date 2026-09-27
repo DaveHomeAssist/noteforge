@@ -7,23 +7,30 @@
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Reference count so the shared `inert` on the background is only removed when the
-// LAST open modal closes — overlapping modals can't prematurely un-inert the app.
-let openModalCount = 0;
-const openOverlays = new Set();
+// Open modals form a stack. Only the topmost one is interactive: everything else,
+// including a dialog underneath a confirmation, is `inert`, and only the topmost
+// one handles Escape and Tab, so one Escape closes one dialog. The shared `inert`
+// on the background is removed only when the LAST open modal closes.
+const modalStack = [];
 const managedInert = new Map();
+
+/** True while any Modal-based dialog is open (global shortcuts stay out). */
+export function isAnyModalOpen() {
+  return modalStack.length > 0;
+}
 
 function syncBackgroundInert() {
   const desired = new Set();
-  const overlays = [...openOverlays];
+  const top = modalStack.at(-1)?.overlay || null;
   const visit = (container) => {
     for (const child of container?.children || []) {
-      if (openOverlays.has(child)) continue;
-      if (overlays.some((overlay) => child.contains(overlay))) visit(child);
+      if (child === top) continue;
+      if (child.contains(top)) visit(child);
       else desired.add(child);
     }
   };
-  if (openModalCount > 0) visit(document.body);
+  if (top) visit(document.body);
+  document.documentElement.toggleAttribute('data-modal-open', modalStack.length > 0);
 
   for (const [element, wasInert] of [...managedInert]) {
     if (desired.has(element)) continue;
@@ -49,7 +56,7 @@ export class Modal {
     this._returnFocus = null;
 
     this.__onKey = (e) => {
-      if (!this.isOpen) return;
+      if (!this.isOpen || modalStack.at(-1) !== this) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation(); // don't let the app's global Escape (e.g. exit graph) also fire
@@ -72,8 +79,7 @@ export class Modal {
     this.isOpen = true;
     this._returnFocus = document.activeElement;
     this.overlay.hidden = false;
-    openModalCount += 1;
-    openOverlays.add(this.overlay);
+    modalStack.push(this);
     syncBackgroundInert();
     document.addEventListener('keydown', this.__onKey, true);
     this.focusInitial();
@@ -83,8 +89,8 @@ export class Modal {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.overlay.hidden = true;
-    openModalCount = Math.max(0, openModalCount - 1);
-    openOverlays.delete(this.overlay);
+    const index = modalStack.lastIndexOf(this);
+    if (index !== -1) modalStack.splice(index, 1);
     syncBackgroundInert();
     document.removeEventListener('keydown', this.__onKey, true);
     this.#restoreFocus();

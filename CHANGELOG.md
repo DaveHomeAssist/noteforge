@@ -12,11 +12,18 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - In-app confirmation dialog and notices (`src/ui/dialogs.js`) in place of the browser's blocking `alert()` and `confirm()`; permanent deletes are styled as destructive and focus Cancel first.
 - Undo for moving a note to Trash, in the notice that confirms it.
 - Alt+Shift+M moves the focused workspace tab to the other pane.
+- Labelled Close and Move buttons for the active workspace tab in the workspace toolbar, reachable by touch screen readers.
 
 ### Changed
 - Every text and background color pair meets WCAG AA contrast in both themes; the accessibility gate reports zero violations and now fails on any.
 - Moving a note to Trash no longer asks first (it is recoverable); emptying the Trash and permanent deletes still confirm.
 - Workspace tab close and move buttons are 24 px targets and pointer-only; keyboard users close with Delete and move with Alt+Shift+M.
+
+### Fixed
+- A confirmation opened over another dialog left the dialog beneath it interactive, and one Escape closed both; dialogs now stack, only the topmost is interactive, and each Escape closes one.
+- Global keyboard shortcuts no longer act behind an open confirmation.
+- Destructive and primary buttons keep AA contrast on hover (the destructive hover measured 1.14:1).
+- The "Add banner" control no longer fades below AA contrast.
 
 ## [1.2.0] - 2026-09-27
 
