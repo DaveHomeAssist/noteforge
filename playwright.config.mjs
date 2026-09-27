@@ -41,6 +41,8 @@ export default defineConfig({
   projects: [
     { name: 'features', testMatch: ['features.spec.mjs', 'smokes.spec.mjs'] },
     { name: 'a11y', testMatch: 'a11y.spec.mjs' },
-    { name: 'visual', testMatch: 'visual.spec.mjs' },
+    // No retries: rendering is deterministic in the pinned container, and a retry
+    // would compare against a baseline the first attempt just wrote.
+    { name: 'visual', testMatch: 'visual.spec.mjs', retries: 0 },
   ],
 });
