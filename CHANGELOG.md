@@ -7,6 +7,17 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 
 ## [Unreleased]
 
+### Added
+- Design tokens (`src/styles/tokens.css`): primitive scales, semantic light and dark colors with text-on-accent and text-on-danger pairs, spacing, type, radius, elevation, motion, layers, and target sizes.
+- In-app confirmation dialog and notices (`src/ui/dialogs.js`) in place of the browser's blocking `alert()` and `confirm()`; permanent deletes are styled as destructive and focus Cancel first.
+- Undo for moving a note to Trash, in the notice that confirms it.
+- Alt+Shift+M moves the focused workspace tab to the other pane.
+
+### Changed
+- Every text and background color pair meets WCAG AA contrast in both themes; the accessibility gate reports zero violations and now fails on any.
+- Moving a note to Trash no longer asks first (it is recoverable); emptying the Trash and permanent deletes still confirm.
+- Workspace tab close and move buttons are 24 px targets and pointer-only; keyboard users close with Delete and move with Alt+Shift+M.
+
 ## [1.2.0] - 2026-09-27
 
 Closes Phase 0 of the NoteForge 2 roadmap: every pull request now runs the lint,

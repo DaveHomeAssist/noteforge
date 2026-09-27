@@ -5,6 +5,10 @@
 
 import { escapeHtml, truncate, formatDate } from '../utils/helpers.js';
 import { Modal } from './modal.js';
+import { whenConfirmed } from '../utils/when-confirmed.js';
+
+// The in-app dialog loads only when a permanent delete needs confirming.
+const confirmDialog = async (options) => (await import('../ui/dialogs.js')).confirmDialog(options);
 
 export function createTrashElements({ badge = document.getElementById('trash-badge'), root = document.body } = {}) {
   const overlay = document.createElement('div');
@@ -22,10 +26,15 @@ export class TrashView {
    * @param {import('../core/database.js').Database} db
    * @param {(id:string)=>void} onOpenNote  called after a restore, to open the note
    */
-  constructor(els, db, onOpenNote) {
+  /**
+   * @param {{ confirm?: (options: object) => boolean | Promise<boolean> }} [options]
+   *   confirmation for permanent deletes; defaults to the in-app dialog.
+   */
+  constructor(els, db, onOpenNote, { confirm = confirmDialog } = {}) {
     this.els = els;
     this.db = db;
     this.onOpenNote = onOpenNote;
+    this.confirm = confirm;
     this.modal = new Modal(els.overlay);
 
     this.els.list.addEventListener('click', (e) => this.#onListClick(e));
@@ -113,25 +122,29 @@ export class TrashView {
     } else if (btn.dataset.act === 'purge') {
       const note = this.db.getTrash().find((n) => n.id === id);
       const label = note ? `"${note.title || 'Untitled'}"` : 'this note';
-      if (
-        confirm(
-          `Permanently delete ${label}? This also removes its browser-local revision history and any local snapshots containing it. This cannot be undone.`,
-        )
-      ) {
-        this.db.purgeNote(id);
-      }
+      whenConfirmed(
+        this.confirm({
+          title: 'Delete permanently?',
+          message: `Permanently delete ${label}? This also removes its browser-local revision history and any local snapshots containing it. This cannot be undone.`,
+          confirmLabel: 'Delete permanently',
+          danger: true,
+        }),
+        () => this.db.purgeNote(id),
+      );
     }
   }
 
   #empty() {
     const n = this.db.getTrash().length;
     if (n === 0) return;
-    if (
-      confirm(
-        `Permanently delete ${n} note${n === 1 ? '' : 's'} in the Trash? This also removes their browser-local revision history and any local snapshots containing them. This cannot be undone.`,
-      )
-    ) {
-      this.db.emptyTrash();
-    }
+    whenConfirmed(
+      this.confirm({
+        title: 'Empty the Trash?',
+        message: `Permanently delete ${n} note${n === 1 ? '' : 's'} in the Trash? This also removes their browser-local revision history and any local snapshots containing them. This cannot be undone.`,
+        confirmLabel: 'Empty Trash',
+        danger: true,
+      }),
+      () => this.db.emptyTrash(),
+    );
   }
 }

@@ -37,6 +37,51 @@ export async function installFixedClock(context) {
   await context.clock.install({ time: FIXED_NOW });
 }
 
+// Test-only stand-in for page.on('dialog'): NoteForge confirms with an in-app
+// dialog (src/ui/dialogs.js), not window.confirm. When #confirm-dialog opens,
+// this answers it with window.__e2eConfirmNext (used once, like page.once) or
+// window.__e2eConfirmAll (every time, like page.on); with neither set, the
+// dialog stays open for the test to drive.
+function confirmResponder() {
+  const answer = () => {
+    const dialog = document.getElementById('confirm-dialog');
+    if (!dialog || dialog.hidden) {
+      if (dialog) delete dialog.dataset.e2eAnswered;
+      return;
+    }
+    if (dialog.dataset.e2eAnswered) return;
+    const choice = window.__e2eConfirmNext || window.__e2eConfirmAll;
+    if (!choice) return;
+    dialog.dataset.e2eAnswered = '1';
+    if (window.__e2eConfirmNext) window.__e2eConfirmNext = null;
+    setTimeout(() =>
+      dialog
+        .querySelector(choice === 'accept' ? '[data-confirm-accept]' : '.confirm-dialog__actions [data-confirm-cancel]')
+        ?.click(),
+    );
+  };
+  new MutationObserver(answer).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['hidden'],
+  });
+}
+
+/** Answer the next in-app confirm dialog with 'accept' or 'dismiss'. */
+export async function confirmNext(page, choice) {
+  await page.evaluate((value) => {
+    window.__e2eConfirmNext = value;
+  }, choice);
+}
+
+/** Answer every in-app confirm dialog on this page (including after navigation). */
+export async function confirmAll(page, choice) {
+  await page.addInitScript((value) => {
+    window.__e2eConfirmAll = value;
+  }, choice);
+}
+
 /**
  * A browser context with the suite's clock, time zone, and locale. Pass the same
  * options as `browser.newContext` (viewport, serviceWorkers, acceptDownloads...).
@@ -44,6 +89,7 @@ export async function installFixedClock(context) {
 export async function newAppContext(browser, options = {}) {
   const context = await browser.newContext({ timezoneId: TIME_ZONE, locale: LOCALE, ...options });
   await installFixedClock(context);
+  await context.addInitScript(confirmResponder);
   return context;
 }
 

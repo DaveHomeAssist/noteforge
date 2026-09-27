@@ -683,7 +683,7 @@
     const db = new Database();
     const els = mkTrashEls();
     let opened = null;
-    const tv = new TrashView(els, db, (id) => (opened = id));
+    const tv = new TrashView(els, db, (id) => (opened = id), { confirm: () => true });
     check('badge hidden when trash is empty', els.badge.hidden === true && els.badge.textContent === '');
     const n = db.createNote({ title: 'Doomed', content: 'bye' });
     db.deleteNote(n.id);
@@ -694,10 +694,7 @@
     check('restore button restores, opens the note, and closes the overlay', db.getNote(n.id) !== null && opened === n.id && els.overlay.hidden === true);
     db.deleteNote(n.id);
     tv.show();
-    const origConfirm = window.confirm; window.confirm = () => true;
-    try {
-      els.list.querySelector('[data-act="purge"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    } finally { window.confirm = origConfirm; }
+    els.list.querySelector('[data-act="purge"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('purge button permanently deletes the note', db.notes.has(n.id) === false && db.getTrash().length === 0);
     check('empty-state message shows when trash is empty', /empty/i.test(els.list.textContent));
     tv.close();
@@ -761,7 +758,7 @@
   section('TrashView: a purge rebuild keeps keyboard focus inside the dialog', () => {
     const db = new Database();
     const els = mkTrashEls();
-    const tv = new TrashView(els, db, () => {});
+    const tv = new TrashView(els, db, () => {}, { confirm: () => true });
     const n1 = db.createNote({ title: 'One', content: 'a' });
     const n2 = db.createNote({ title: 'Two', content: 'b' });
     db.deleteNote(n1.id); db.deleteNote(n2.id);
@@ -769,9 +766,7 @@
     const purgeBtn = els.list.querySelector('.trash-item [data-act="purge"]');
     purgeBtn.focus();
     check('purge button focused', document.activeElement === purgeBtn);
-    const origConfirm = window.confirm; window.confirm = () => true;
-    try { purgeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
-    finally { window.confirm = origConfirm; }
+    purgeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('one item purged, one remains', db.getTrash().length === 1);
     check('focus stayed inside the dialog after the list rebuilt', els.overlay.contains(document.activeElement));
     tv.close();
@@ -2491,6 +2486,60 @@
       check('hardening CSS no longer targets the nonexistent .note-item--active', !/note-item--active/.test(css));
     } catch (e) {
       results.push('FAIL  accessibility-hardening selectors — threw: ' + e.message);
+    }
+  })();
+
+  // ============ in-app confirm dialog + toasts (src/ui/dialogs.js) ============
+  await (async () => {
+    try {
+      const { confirmDialog, toast } = await import('/src/ui/dialogs.js');
+      const { whenConfirmed } = await import('/src/utils/when-confirmed.js');
+      const trigger = document.createElement('button');
+      trigger.textContent = 'trigger';
+      scratch.appendChild(trigger);
+      trigger.focus();
+      let answer = confirmDialog({ title: 'Delete it?', message: 'Gone for good.', confirmLabel: 'Delete', danger: true });
+      // Confirms queue, so the dialog opens on the next microtask.
+      await until(() => document.getElementById('confirm-dialog')?.hidden === false);
+      const dlg = document.getElementById('confirm-dialog');
+      const panel = dlg.querySelector('[role="alertdialog"]');
+      check('confirm dialog opens as a labelled, described alertdialog',
+        dlg.hidden === false && panel.getAttribute('aria-labelledby') === 'confirm-dialog-title'
+        && panel.getAttribute('aria-describedby') === 'confirm-dialog-message'
+        && document.getElementById('confirm-dialog-title').textContent === 'Delete it?');
+      check('a destructive confirm focuses Cancel first', document.activeElement === dlg.querySelector('.confirm-dialog__actions [data-confirm-cancel]'));
+      check('a destructive confirm styles its button as danger', dlg.querySelector('[data-confirm-accept]').classList.contains('btn--danger'));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      check('Escape cancels the confirm and closes it', (await answer) === false && dlg.hidden === true);
+      check('closing the confirm returns focus to its trigger', document.activeElement === trigger);
+      answer = confirmDialog({ title: 'Restore?', message: 'Bring it back.', confirmLabel: 'Restore' });
+      await until(() => dlg.hidden === false);
+      check('a non-destructive confirm focuses its confirm button', document.activeElement === dlg.querySelector('[data-confirm-accept]'));
+      dlg.querySelector('[data-confirm-accept]').click();
+      check('confirming resolves true', (await answer) === true);
+      let ran = 0;
+      whenConfirmed(true, () => { ran += 1; });
+      const syncRan = ran === 1;
+      await whenConfirmed(Promise.resolve(true), () => { ran += 1; });
+      whenConfirmed(false, () => { ran += 1; });
+      await whenConfirmed(Promise.resolve(false), () => { ran += 1; });
+      check('whenConfirmed runs only on true, synchronously for a plain true', syncRan && ran === 2);
+      let undone = false;
+      toast('Moved “X” to Trash.', { action: { label: 'Undo', run: () => { undone = true; } } });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const item = document.querySelector('.toasts .toast');
+      check('a toast renders in a polite live region with its action',
+        !!item && item.closest('.toasts').getAttribute('aria-live') === 'polite' && item.querySelector('.toast__action')?.textContent === 'Undo');
+      item.querySelector('.toast__action').click();
+      check('a toast action runs and dismisses the toast', undone && !document.querySelector('.toasts .toast'));
+      toast('Import failed: bad file', { tone: 'error' });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const error = document.querySelector('.toasts .toast--error');
+      check('an error toast is an alert and can be dismissed', error?.getAttribute('role') === 'alert');
+      error?.querySelector('.toast__close')?.click();
+      trigger.remove();
+    } catch (e) {
+      results.push('FAIL  in-app dialogs — threw: ' + e.message);
     }
   })();
 
