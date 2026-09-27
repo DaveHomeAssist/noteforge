@@ -77,6 +77,10 @@ class App {
     // Track the mobile breakpoint so the off-canvas sidebar can be made `inert`
     // when it's hidden off-screen (and the content inert when it's open over it).
     this.mobileMql = window.matchMedia('(max-width: 760px)');
+    // Tablets overlay the sidebar on the editor; it starts closed there and its
+    // open state is not persisted (the desktop preference stays untouched).
+    this.tabletMql = window.matchMedia('(min-width: 761px) and (max-width: 1023px)');
+    this.tabletMql.addEventListener?.('change', () => this.#applySidebarLayout());
     this.mobileMql.addEventListener
       ? this.mobileMql.addEventListener('change', () => this.#syncSidebarInert())
       : this.mobileMql.addListener?.(() => this.#syncSidebarInert());
@@ -385,13 +389,18 @@ class App {
   #applySidebarLayout() {
     const width = Number(this.db.config?.sidebarWidth);
     if (Number.isFinite(width)) this.#setSidebarWidth(width, { persist: false });
-    this.#setSidebarCollapsed(this.db.config?.sidebarCollapsed === true, { persist: false });
+    this.#setSidebarCollapsed(this.tabletMql.matches || this.db.config?.sidebarCollapsed === true, { persist: false });
   }
 
   #setSidebarCollapsed(collapsed, { persist = true } = {}) {
     this.el.app.classList.toggle('sidebar-collapsed', collapsed);
     this.el.railSidebarBtn?.setAttribute('aria-expanded', String(!collapsed));
-    if (persist) this.db.setConfig({ sidebarCollapsed: collapsed });
+    if (persist && !this.tabletMql.matches) this.db.setConfig({ sidebarCollapsed: collapsed });
+  }
+
+  /** Close the tablet overlay (a no-op elsewhere). */
+  #closeSidebarOverlay() {
+    if (this.tabletMql.matches && !this.#sidebarCollapsed()) this.#setSidebarCollapsed(true);
   }
 
   #setSidebarWidth(width, { persist = true } = {}) {
@@ -437,6 +446,7 @@ class App {
   }
 
   #closeSidebar() {
+    this.#closeSidebarOverlay();
     if (!this.el.app.classList.contains('sidebar-open')) return;
     this.el.app.classList.remove('sidebar-open');
     this.el.sidebarBackdrop.hidden = true;
@@ -1470,6 +1480,8 @@ class App {
       button?.addEventListener('click', () => this.goForward());
     this.el.sidebarToggle?.addEventListener('click', () => this.#toggleSidebar());
     this.el.sidebarBackdrop?.addEventListener('click', () => this.#closeSidebar());
+    // A press anywhere in the editor area closes the tablet overlay.
+    this.el.mainEl?.addEventListener('pointerdown', () => this.#closeSidebarOverlay());
   }
 
   async #export() {
@@ -1681,7 +1693,10 @@ class App {
           this.#closeMenu();
           this.el.menuBtn.focus();
         } else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();
-        else if (this.view === 'graph') this.setView('editor');
+        else if (this.tabletMql.matches && !this.#sidebarCollapsed()) {
+          this.#closeSidebarOverlay();
+          this.el.railSidebarBtn?.focus();
+        } else if (this.view === 'graph') this.setView('editor');
       }
     });
   }

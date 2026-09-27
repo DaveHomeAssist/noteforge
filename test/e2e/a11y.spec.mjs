@@ -31,6 +31,9 @@ const SCANS = [
   ),
   { key: 'shell@390/light', surface: 'shell', theme: 'light', viewport: 390 },
   { key: 'shell@390/dark', surface: 'shell', theme: 'dark', viewport: 390 },
+  { key: 'shell@768/light', surface: 'shell', theme: 'light', viewport: 768 },
+  { key: 'shell@768/dark', surface: 'shell', theme: 'dark', viewport: 768 },
+  { key: 'menu@768/light', surface: 'menu', theme: 'light', viewport: 768 },
 ];
 
 test.describe.configure({ mode: 'serial' });

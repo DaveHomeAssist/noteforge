@@ -6,7 +6,9 @@ import { captureRuntimeErrors, newAppContext, previewRoot, TIMEOUT } from './run
 
 export const VIEWPORTS = {
   390: { width: 390, height: 844 },
+  768: { width: 768, height: 1024 },
   1440: { width: 1440, height: 900 },
+  1920: { width: 1920, height: 1080 },
   2560: { width: 2560, height: 1440 },
 };
 
@@ -19,6 +21,11 @@ export async function openMenu(page) {
   if (mobile && !open) {
     await page.locator('#sidebar-toggle').click();
     await page.waitForFunction(() => document.querySelector('#app')?.classList.contains('sidebar-open'));
+  }
+  // Tablets start with the sidebar overlay closed; open it from the rail.
+  if (!mobile && !(await page.locator('#menu-btn').isVisible())) {
+    await page.locator('#rail-sidebar-btn').click();
+    await page.locator('#menu-btn').waitFor({ state: 'visible', timeout: TIMEOUT });
   }
   await page.locator('#menu-btn').click();
   await page.locator('#menu-dropdown').waitFor({ state: 'visible', timeout: TIMEOUT });
@@ -177,7 +184,8 @@ export async function openSurface(browser, { viewport, theme = 'light', surface 
   await page.goto(new URL('noteforge/', previewRoot()).href, { waitUntil: 'load', timeout: TIMEOUT });
   await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
   await page.evaluate(() => window.app.ready);
-  await page.locator('.note-item').first().waitFor({ state: 'visible', timeout: TIMEOUT });
+  // Attached, not visible: on tablets the list starts inside the closed overlay.
+  await page.locator('.note-item').first().waitFor({ state: 'attached', timeout: TIMEOUT });
   await settle(page);
   if (theme === 'dark') {
     await page.locator('#theme-btn:visible, #mobile-theme-btn:visible').first().click();

@@ -129,6 +129,25 @@ code {
     border-right: 0;
   }
 }
+/* Tablets (761-1023 px): the sidebar floats over the editor from the rail
+   instead of taking a column, starts closed, and closes after use. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .app,
+  .app.sidebar-collapsed {
+    grid-template-columns: var(--rail-w) 1fr;
+  }
+  .main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 var(--rail-w);
+    width: var(--sidebar-w);
+    z-index: 40;
+    box-shadow: var(--elevation-3);
+  }
+}
 /* Drag or use the arrow keys to resize the sidebar (240-480 px, persisted). */
 .sidebar__resize {
   position: absolute;

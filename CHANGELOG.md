@@ -20,6 +20,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - The slash menu groups block types under Text, Lists, and Insert, with an icon for each. Screen readers hear it as a list of options controlled by the block being typed in, with the active option announced as it changes.
 - Alt+Shift+↑ and Alt+Shift+↓ move the current block up or down, keeping the caret; the move can be undone.
 - The command palette groups results under Recent, Notes, Commands, and Headings (the best match's group first), shows each command's keyboard shortcut as keys, and on screens 1024 px and wider previews the highlighted note or command beside the list.
+- On tablets (761–1023 px) the notes sidebar floats over the editor from the rail instead of squeezing it. It starts closed and closes after you pick a note, press Escape, or tap the editor; tablet toggles do not change the desktop collapse setting.
 
 ### Changed
 - Dialogs, the command palette, the More actions menu, and the slash menu fade in over 120–180 ms, and the phone sidebar slides on the same motion tokens; with reduced motion requested, they appear at once.
@@ -38,6 +39,8 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - On phones the workspace toolbar fits on one row and the note title row keeps Properties, Pin, and Delete on screen.
 - The More actions menu scrolls instead of running past the bottom of short screens, and its shortcut hints align to the right edge.
 - In wide editors an empty note's body was 41 px wide and could not be clicked, and short notes were centered; the text column now fills its width.
+- At 768 px the editor had 396 px beside the sidebar and clipped the note title.
+- Closing a dialog whose trigger was hidden meanwhile (a closed menu or overlay) now returns focus to a visible control instead of the page.
 - Arrowing through the slash menu past its visible height now scrolls the active option into view.
 
 ## [1.2.0] - 2026-09-27
