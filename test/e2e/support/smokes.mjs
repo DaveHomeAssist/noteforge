@@ -937,7 +937,7 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
     await page.locator('#archive-overlay').waitFor({ state: 'visible' });
     await page.locator('.archive-item[data-id="phase3-parent"] [data-preview]').click();
     check(
-      'integrated Archive view previews the exact selected note in a labelled modal',
+      'integrated Archive view previews the exact selected note in a labelled view',
       /Phase3 Parent/.test(await page.locator('#archive-preview').innerText()) &&
         (await page.evaluate(() => document.querySelector('#archive-overlay')?.contains(document.activeElement))),
     );

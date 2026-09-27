@@ -739,8 +739,8 @@
 
   // ============ Trash: soft-delete / restore / purge (db + TrashView) ============
   const mkTrashEls = () => {
-    const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.hidden = true;
-    const panel = document.createElement('div'); panel.className = 'modal__panel'; panel.tabIndex = -1;
+    const overlay = document.createElement('section'); overlay.className = 'main-view'; overlay.hidden = true; overlay.tabIndex = -1;
+    const panel = document.createElement('div'); panel.className = 'main-view__page';
     const list = document.createElement('div');
     const empty = document.createElement('button'); empty.textContent = 'Empty trash';
     const badge = document.createElement('span');
@@ -835,28 +835,30 @@
     check('notes.size still counts trashed notes, so seeding is gated off', db.notes.size === 1);
   });
 
-  section('TrashView: focus enters the dialog on open and is restored on close', () => {
+  section('TrashView: a main-area view that takes focus and reports opening and closing', () => {
     const db = new Database();
     const els = mkTrashEls();
     const tv = new TrashView(els, db, () => {});
-    const trigger = document.createElement('button'); scratch.appendChild(trigger); trigger.focus();
-    check('trigger focused before open', document.activeElement === trigger);
+    const n = db.createNote({ title: 'Gone', content: 'x' });
+    db.deleteNote(n.id);
+    const events = [];
+    const log = (e) => events.push(`${e.type}:${e.detail.view}`);
+    els.overlay.addEventListener('mainview:open', log);
+    els.overlay.addEventListener('mainview:close', log);
     tv.show();
-    const panel = els.overlay.querySelector('.modal__panel');
-    check('focus moved into the dialog panel on open', document.activeElement === panel);
-    tv.close();
-    check('focus restored to the trigger on close', document.activeElement === trigger);
-    trigger.remove();
+    check('focus moves to the first item of the Trash view on open', document.activeElement === els.list.querySelector('button'));
+    els.overlay.dispatchEvent(new CustomEvent('mainview:request-close'));
+    check('the app can close the view, and the view reports open and close',
+      els.overlay.hidden === true && events.join() === 'mainview:open:trash,mainview:close:trash');
   });
 
-  section('TrashView: empty trash focuses the dialog, not the disabled Empty button', () => {
+  section('TrashView: empty trash focuses the view, not the disabled Empty button', () => {
     const db = new Database();
     const els = mkTrashEls();
     const tv = new TrashView(els, db, () => {});
     tv.show();
-    const panel = els.overlay.querySelector('.modal__panel');
     check('Empty button disabled when trash empty', els.empty.disabled === true);
-    check('focus is on the panel, not the disabled button', document.activeElement === panel);
+    check('focus is on the view, not the disabled button', document.activeElement === els.overlay);
     tv.close();
   });
 
@@ -873,7 +875,7 @@
     check('purge button focused', document.activeElement === purgeBtn);
     purgeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('one item purged, one remains', db.getTrash().length === 1);
-    check('focus stayed inside the dialog after the list rebuilt', els.overlay.contains(document.activeElement));
+    check('focus stayed inside the view after the list rebuilt', els.overlay.contains(document.activeElement));
     tv.close();
   });
 
