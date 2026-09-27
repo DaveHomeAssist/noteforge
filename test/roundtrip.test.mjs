@@ -626,11 +626,19 @@ ok(
 
 // --- pre-paint theme boot + theme surfaces (index.html / styles.css) ---
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+// Theme colors live in the design tokens (src/styles/tokens.css): theme-color,
+// the manifest, and the pre-paint boot script must match --color-surface and
+// --color-bg in each theme.
+const stylesCss = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
+const tokenPrimitives = Object.fromEntries(
+  [...stylesCss.matchAll(/--(nf-[a-z0-9-]+):\s*(#[0-9a-f]{3,8})/gi)].map((m) => [m[1], m[2]]),
+);
 const cssVar = (block, name) =>
-  new RegExp(`${block}\\s*\\{[^}]*--${name}:\\s*(#[0-9a-f]{3,8})`, 'i').exec(stylesCss)?.[1];
-const lightSurface = cssVar(':root', 'bg-elev');
-const darkSurface = cssVar(':root\\[data-theme="dark"\\]', 'bg-elev');
+  ((value) => (value?.startsWith('var(--') ? tokenPrimitives[value.slice(6, -1)] : value))(
+    new RegExp(`${block}\\s*\\{[^}]*--${name}:\\s*([^;]+);`, 'i').exec(stylesCss)?.[1]?.trim(),
+  );
+const lightSurface = cssVar(':root', 'color-surface');
+const darkSurface = cssVar(':root\\[data-theme="dark"\\]', 'color-surface');
 ok('index.html defaults to the light theme before any script runs', /<html[^>]*\sdata-theme="light"/.test(indexHtml));
 const bootScripts = [...indexHtml.matchAll(/<script>([^<]*)<\/script>/g)].map((m) => m[1]);
 const boot = bootScripts[0] || '';
@@ -705,7 +713,7 @@ ok(
 );
 ok(
   'manifest splash colours match the light default (WEB-1)',
-  manifest.background_color === cssVar(':root', 'bg') && manifest.theme_color === lightSurface,
+  manifest.background_color === cssVar(':root', 'color-bg') && manifest.theme_color === lightSurface,
 );
 ok(
   'manifest share target is relative, GET-only, and allowlists title/text/url',

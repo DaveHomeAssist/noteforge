@@ -41,7 +41,7 @@
   color: var(--danger);
 }
 .link-tools__healthy {
-  color: #15803d;
+  color: var(--color-success);
 }
 .link-tools__ambiguities > li {
   margin: 14px 0;

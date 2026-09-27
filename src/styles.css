@@ -1,45 +1,11 @@
 /* ===========================================================================
-   NoteForge — theme tokens + layout + components
-   Light/dark switch via [data-theme] on <html>. `color-scheme` makes native
-   controls, scrollbars, and form widgets follow the same switch.
+   NoteForge — layout + components
+   Colors, spacing, type, and motion come from src/styles/tokens.css; the
+   light/dark switch is [data-theme] on <html>, and `color-scheme` there makes
+   native controls, scrollbars, and form widgets follow it.
    ========================================================================= */
 
-:root {
-  color-scheme: light;
-  --bg: #f6f7f9;
-  --bg-elev: #ffffff;
-  --bg-sunken: #eef0f3;
-  --border: #e2e5ea;
-  --border-strong: #cfd4dc;
-  --text: #1f2430;
-  --text-muted: #6b7280;
-  --accent: #3b6ef6;
-  --accent-weak: #e6edff;
-  --danger: #dc2626;
-  --mark: #fff3a3;
-  --shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
-  --radius: 10px;
-  --radius-sm: 6px;
-  --sidebar-w: 320px;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #16181d;
-  --bg-elev: #1e2127;
-  --bg-sunken: #14161a;
-  --border: #2b2f37;
-  --border-strong: #3a3f49;
-  --text: #e6e8ec;
-  --text-muted: #9aa1ac;
-  --accent: #6b93ff;
-  --accent-weak: #232a3d;
-  --danger: #f87171;
-  --mark: #6b5d1f;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
+@import "./styles/tokens.css";
 
 * {
   margin: 0;
@@ -120,7 +86,7 @@ code {
 }
 .btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--color-on-accent);
   font-weight: 600;
 }
 .btn--primary:hover {
@@ -675,7 +641,7 @@ mark {
   font: inherit;
   font-size: 13px;
   background: var(--accent);
-  color: #fff;
+  color: var(--color-on-accent);
   border: none;
   border-radius: var(--radius-sm);
   padding: 0 12px;
@@ -979,7 +945,7 @@ mark {
 }
 .blk-check.is-checked::after {
   content: "✓";
-  color: #fff;
+  color: var(--color-on-accent);
   font-size: 12px;
   position: absolute;
   top: -2px;
@@ -1085,16 +1051,16 @@ mark {
   margin-bottom: 0;
 }
 .blk--callout-tip .blk-callout {
-  border-left-color: #10b981;
+  border-left-color: var(--color-callout-tip);
 }
 .blk--callout-warning .blk-callout {
-  border-left-color: #f59e0b;
+  border-left-color: var(--color-callout-warning);
 }
 .blk--callout-caution .blk-callout {
   border-left-color: var(--danger);
 }
 .blk--callout-important .blk-callout {
-  border-left-color: #a855f7;
+  border-left-color: var(--color-callout-note);
 }
 .blk-row[data-type="code"] .blk {
   font-family: var(--mono);
@@ -1273,7 +1239,7 @@ mark {
   font-size: 11px;
   line-height: 18px;
   text-align: center;
-  color: #fff;
+  color: var(--color-on-danger);
   background: var(--danger);
   border-radius: 9px;
   vertical-align: middle;
@@ -1291,7 +1257,7 @@ mark {
 .modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(16, 24, 40, 0.45);
+  background: var(--color-scrim);
 }
 .modal__panel {
   position: relative;
@@ -1303,7 +1269,7 @@ mark {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.25);
+  box-shadow: var(--elevation-3);
   overflow: hidden;
 }
 .modal__header {
@@ -1495,7 +1461,7 @@ html[data-font="l"] .editor {
   z-index: 100;
   padding: 8px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--color-on-accent);
   border-radius: var(--radius-sm);
   font-weight: 600;
   text-decoration: none;
@@ -1562,7 +1528,7 @@ html[data-font="l"] .editor {
     position: fixed;
     inset: 0;
     z-index: 49;
-    background: rgba(16, 24, 40, 0.45);
+    background: var(--color-scrim);
   }
   .editor {
     padding: 20px;
@@ -1598,8 +1564,8 @@ html[data-font="l"] .editor {
   align-items: center;
   gap: 12px;
   padding: 10px 12px 10px 16px;
-  background: var(--danger, #dc2626);
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--color-on-danger);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   font-size: 14px;
@@ -1607,7 +1573,7 @@ html[data-font="l"] .editor {
 .storage-error__close {
   flex: 0 0 auto;
   background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  color: inherit;
   border: none;
   border-radius: var(--radius-sm);
   width: 26px;
@@ -1620,5 +1586,6 @@ html[data-font="l"] .editor {
   background: rgba(255, 255, 255, 0.32);
 }
 .storage-error--history {
-  background: #92400e;
+  background: var(--color-warning-strong);
+  color: #ffffff;
 }

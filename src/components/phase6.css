@@ -102,7 +102,7 @@
   border-left-color: var(--accent);
 }
 .reconciliation-item[data-status="update"] {
-  border-left-color: #a16207;
+  border-left-color: var(--color-warning);
 }
 .reconciliation-item[data-status="conflict"] {
   border-left-color: var(--danger);

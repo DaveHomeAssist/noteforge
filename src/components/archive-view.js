@@ -63,7 +63,7 @@ export class ArchiveView {
         </div>`,
           )
           .join('')
-      : '<p class="muted archive-empty">Archive is empty.</p>';
+      : '<p class="muted archive-empty" role="listitem">Archive is empty.</p>';
     this.#renderPreview();
   }
 
