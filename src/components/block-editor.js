@@ -1604,8 +1604,10 @@ export class BlockEditor {
     const box = this.menu.el;
     const top = rect.bottom + 6;
     const maxLeft = window.innerWidth - box.offsetWidth - 12;
-    box.style.top = `${Math.min(top, window.innerHeight - box.offsetHeight - 8)}px`;
-    box.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
+    // Whole pixels: the enter animation composites the menu, and a fractional
+    // offset would then shift its text by a subpixel.
+    box.style.top = `${Math.round(Math.min(top, window.innerHeight - box.offsetHeight - 8))}px`;
+    box.style.left = `${Math.round(Math.max(8, Math.min(rect.left, maxLeft)))}px`;
   }
 
   #menuKeydown(e) {

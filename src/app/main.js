@@ -451,8 +451,11 @@ class App {
     this.el.menuDropdown.hidden = !open;
     this.el.menuBtn.setAttribute('aria-expanded', String(open));
     if (!open) return;
-    const { top } = this.el.menuDropdown.getBoundingClientRect();
-    this.el.menuDropdown.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    // Measure from layout offsets: the drop-in animation's transform would skew
+    // getBoundingClientRect() on the dropdown itself.
+    const dropdown = this.el.menuDropdown;
+    const top = (dropdown.offsetParent?.getBoundingClientRect().top ?? 0) + dropdown.offsetTop;
+    dropdown.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
     const items = this.#menuItems();
     (focus === 'last' ? items.at(-1) : items[0])?.focus();
   }
