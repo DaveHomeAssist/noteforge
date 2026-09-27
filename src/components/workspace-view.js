@@ -97,8 +97,8 @@ export class WorkspaceView {
         <span class="workspace__status muted" aria-live="polite"></span>
         <button type="button" class="btn btn--ghost" data-move-active aria-label="Move the active tab to the other pane" title="Move to other pane (Alt+Shift+M)">${icon('arrow-left-right')}</button>
         <button type="button" class="btn btn--ghost" data-close-active aria-label="Close the active tab" title="Close tab (Delete)">${icon('x')}</button>
-        <button type="button" class="btn btn--ghost" data-reopen>Reopen tab</button>
-        <button type="button" class="btn btn--ghost" data-split aria-pressed="false">Split view</button>
+        <button type="button" class="btn btn--ghost workspace__action" data-reopen>${icon('rotate-ccw')}<span class="workspace__label">Reopen tab</span></button>
+        <button type="button" class="btn btn--ghost workspace__action" data-split aria-pressed="false">${icon('columns-2')}<span class="workspace__label">Split view</span></button>
       </header>
       <div class="workspace__panes">
         <section class="workspace__pane" data-pane="primary" aria-label="Primary note pane">
