@@ -15,7 +15,8 @@
   import { BlockEditor } from '/src/components/block-editor.js';
   import { Database } from '/src/core/database.js';
   import { Editor } from '/src/components/editor.js';
-  import { BannerControl, BANNER_GRADIENTS } from '/src/components/banner.js';
+  import { BannerControl, loadBannerPicker } from '/src/components/banner.js';
+  import { BANNER_GRADIENTS } from '/src/components/banner-picker.js';
   import { TrashView } from '/src/components/trash-view.js';
   import { Modal } from '/src/components/modal.js';
   import { NoteList } from '/src/components/note-list.js';
@@ -418,6 +419,17 @@
     const bc = new BannerControl(host, { getBanner: () => banner, onChange: (b) => { banner = b; bc.render(); } });
     return { host, bc, get: () => banner };
   };
+
+  await (async () => {
+    // The picker is a lazy chunk: a click before it loads still lands once it does.
+    const name = 'banner: Add banner works before the picker chunk has loaded';
+    try {
+      const b = mkBanner(null);
+      b.host.querySelector('.banner-add').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await loadBannerPicker();
+      check(name, b.get() && b.get().type === 'gradient' && !!b.host.querySelector('.banner.banner--gradient'));
+    } catch (e) { results.push('FAIL  ' + name + ' — threw: ' + e.message); }
+  })();
 
   section('banner: add + gradient render', () => {
     const b = mkBanner(null);

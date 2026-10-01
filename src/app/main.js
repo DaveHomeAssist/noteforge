@@ -8,7 +8,7 @@ import { Editor } from '../components/editor.js';
 import { NoteList } from '../components/note-list.js';
 import { Theme } from '../ui/theme.js';
 import { normalizeSettings } from '../ui/settings.js';
-import { TEMPLATES, templateById } from './templates.js';
+import { templateById } from './templates.js';
 import { registerServiceWorker } from './pwa.js';
 import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
@@ -750,12 +750,13 @@ class App {
   #ensurePalette() {
     if (this.palette) return Promise.resolve(this.palette);
     if (this.paletteReady) return this.paletteReady;
-    this.paletteReady = import('../components/command-palette.js')
-      .then(({ CommandPalette, createCommandPaletteElements }) => {
+    this.paletteReady = Promise.all([import('../components/command-palette.js'), import('./palette-commands.js')])
+      .then(([{ CommandPalette, createCommandPaletteElements }, { buildCommands }]) => {
+        const commandContext = this.#paletteContext();
         this.palette = new CommandPalette(createCommandPaletteElements(), {
           getNotes: () => this.db.getAllNotes(),
           getRecentNotes: () => this.recentNoteIds.map((id) => this.db.getNote(id)).filter(Boolean),
-          getCommands: () => this.#commands(),
+          getCommands: () => buildCommands(commandContext),
           getTags: () => [...this.db.tagCounts().entries()],
           onOpenTag: (tag) => {
             this.setView('editor');
@@ -1103,233 +1104,29 @@ class App {
     if (this.el.mainEl) this.el.mainEl.inert = mobile && open;
   }
 
-  /** Live command set for the palette (recomputed each keystroke → reflects state). */
-  #commands() {
-    const cur = this.currentId ? this.db.getNote(this.currentId) : null;
-    const cmds = [
-      { id: 'new', title: 'New note', hint: 'Create', keys: ['Ctrl/⌘', 'N'], icon: 'plus', run: () => this.newNote() },
-      {
-        id: 'today',
-        title: 'Open Today’s Note',
-        hint: 'Local Daily note',
-        keys: ['Ctrl/⌘', 'Shift', 'D'],
-        icon: 'calendar-days',
-        run: () => this.openDailyNote(),
-      },
-      {
-        id: 'capture',
-        title: 'Quick Capture',
-        hint: 'Text, URL, clipboard, image',
-        keys: ['Ctrl/⌘', 'Shift', 'C'],
-        icon: 'inbox',
-        run: () => this.#showQuickCapture(),
-      },
-      {
-        id: 'tasks',
-        title: 'Open task dashboard',
-        hint: 'Today, overdue, upcoming',
-        icon: 'square-check-big',
-        run: () => this.#showTaskDashboard(),
-      },
-      {
-        id: 'calendar',
-        title: 'Open calendar',
-        hint: 'Month and week',
-        icon: 'calendar',
-        run: () => this.#showCalendar(),
-      },
-      ...TEMPLATES.map((t) => ({
-        id: 'tpl-' + t.id,
-        title: `New ${t.label.toLowerCase()}`,
-        hint: 'Template',
-        icon: t.icon,
-        run: () => this.newFromTemplate(t),
-      })),
-      {
-        id: 'search',
-        title: 'Search notes',
-        hint: 'Sidebar',
-        keys: ['Ctrl/⌘', 'K'],
-        icon: 'search',
-        run: () => this.#focusSearch(),
-      },
-      {
-        id: 'back',
-        title: 'Go back to previous note',
-        hint: 'Navigation',
-        keys: ['Alt', '←'],
-        icon: 'arrow-left',
-        run: () => this.goBack(),
-      },
-      {
-        id: 'forward',
-        title: 'Go forward to next note',
-        hint: 'Navigation',
-        keys: ['Alt', '→'],
-        icon: 'arrow-right',
-        run: () => this.goForward(),
-      },
-      {
-        id: 'graph',
-        title: this.view === 'graph' ? 'Close graph view' : 'Open graph view',
-        hint: 'View',
-        keys: ['Ctrl/⌘', 'G'],
-        icon: 'waypoints',
-        run: () => this.toggleGraph(),
-      },
-      {
-        id: 'theme',
-        title: 'Toggle dark / light theme',
-        hint: 'Appearance',
-        icon: 'sun-moon',
-        run: () => this.theme.toggle(),
-      },
-      {
-        id: 'find',
-        title: 'Find and replace in current note',
-        hint: 'Source Markdown',
-        keys: ['Ctrl/⌘', 'F'],
-        icon: 'text-search',
-        run: () => this.#showFindReplace('current'),
-      },
-      {
-        id: 'find-vault',
-        title: 'Find and replace across vault',
-        hint: 'Preview required',
-        icon: 'text-search',
-        run: () => this.#showFindReplace('vault'),
-      },
-      {
-        id: 'archive-view',
-        title: 'Open Archive',
-        hint: `${this.db.getArchived().length} archived`,
-        icon: 'archive',
-        run: () => this.#showArchive(),
-      },
-      {
-        id: 'trash',
-        title: 'Open Trash',
-        hint: `${this.db.getTrash().length} in trash`,
-        icon: 'trash-2',
-        run: () => this.#showTrash(),
-      },
-      {
-        id: 'settings',
-        title: 'Open settings',
-        hint: 'Preferences',
-        icon: 'settings',
-        run: () => this.#showSettings(),
-      },
-      { id: 'backup', title: 'Open Backup center', hint: 'Recovery', icon: 'life-buoy', run: () => this.#showBackup() },
-      {
-        id: 'clipper',
-        title: 'Set up web clipper',
-        hint: 'Capture web pages',
-        icon: 'scissors',
-        run: () => this.#showClipper(),
-      },
-      {
-        id: 'reconcile',
-        title: 'Reconcile Markdown folder',
-        hint: 'Preview, backup, then apply',
-        icon: 'folder-sync',
-        run: () => this.#showReconciliation(),
-      },
-      {
-        id: 'link-report',
-        title: 'Open link integrity report',
-        hint: 'Knowledge graph',
-        icon: 'link',
-        run: () => this.#showLinkReport(),
-      },
-      { id: 'export', title: 'Export notes as JSON', hint: 'Data', icon: 'download', run: () => this.#export() },
-      {
-        id: 'import',
-        title: 'Import notes from JSON',
-        hint: 'Data',
-        icon: 'upload',
-        run: () => this.el.importFile.click(),
-      },
-      { id: 'seed', title: 'Load sample notes', hint: 'Data', icon: 'sparkles', run: () => this.#seed() },
-      ...(this.savedSearches?.commands() || []),
-    ];
-    // Save-to-folder needs the File System Access API (Chromium) — only offer it there.
-    if (window.showDirectoryPicker) {
-      cmds.push({
-        id: 'save-folder',
-        title: 'Save all notes to a folder…',
-        hint: 'Markdown vault',
-        icon: 'folder',
-        run: () => this.saveVaultToFolder(),
-      });
-    }
-    if (cur) {
-      cmds.push({
-        id: 'properties',
-        title: 'Edit note properties',
-        hint: 'YAML frontmatter',
-        icon: 'sliders-horizontal',
-        run: () => this.#showProperties(cur.id),
-      });
-      cmds.push({
-        id: 'history',
-        title: 'Open revision history',
-        hint: cur.title,
-        icon: 'history',
-        run: () => this.#showHistory(),
-      });
-      cmds.push({
-        id: 'archive',
-        title: 'Archive current note',
-        hint: cur.title,
-        icon: 'archive',
-        run: () => this.#archiveCurrent(),
-      });
-      cmds.push({
-        id: 'child',
-        title: 'New sub-note under current',
-        hint: cur.title,
-        icon: 'corner-down-right',
-        run: () => this.newChild(cur.id),
-      });
-      if (cur.parentId)
-        cmds.push({
-          id: 'unnest',
-          title: 'Move current note to top level',
-          hint: cur.title,
-          icon: 'arrow-up-to-line',
-          run: () => this.reparent(cur.id, null),
-        });
-      cmds.push({
-        id: 'pin',
-        title: cur.pinned ? 'Unpin current note' : 'Pin current note to top',
-        hint: cur.title,
-        icon: 'pin',
-        run: () => this.togglePin(cur.id),
-      });
-      cmds.push({
-        id: 'export-html',
-        title: 'Export note as HTML',
-        hint: 'Shareable page',
-        icon: 'globe',
-        run: () => this.exportNoteHtml(cur),
-      });
-      cmds.push({
-        id: 'export-md',
-        title: 'Download note as Markdown',
-        hint: 'Save .md',
-        icon: 'file-down',
-        run: () => this.downloadNoteMarkdown(cur),
-      });
-      cmds.push({
-        id: 'del',
-        title: 'Delete current note',
-        hint: cur.title,
-        icon: 'trash-2',
-        run: () => this.deleteNote(cur.id),
-      });
-    }
-    return cmds;
+  /** What the lazy palette command list (./palette-commands.js) may run: the app
+   *  itself for public methods and state, and a bound function per private action. */
+  #paletteContext() {
+    return {
+      app: this,
+      archiveCurrent: (...args) => this.#archiveCurrent(...args),
+      export: (...args) => this.#export(...args),
+      focusSearch: (...args) => this.#focusSearch(...args),
+      seed: (...args) => this.#seed(...args),
+      showArchive: (...args) => this.#showArchive(...args),
+      showBackup: (...args) => this.#showBackup(...args),
+      showCalendar: (...args) => this.#showCalendar(...args),
+      showClipper: (...args) => this.#showClipper(...args),
+      showFindReplace: (...args) => this.#showFindReplace(...args),
+      showHistory: (...args) => this.#showHistory(...args),
+      showLinkReport: (...args) => this.#showLinkReport(...args),
+      showProperties: (...args) => this.#showProperties(...args),
+      showQuickCapture: (...args) => this.#showQuickCapture(...args),
+      showReconciliation: (...args) => this.#showReconciliation(...args),
+      showSettings: (...args) => this.#showSettings(...args),
+      showTaskDashboard: (...args) => this.#showTaskDashboard(...args),
+      showTrash: (...args) => this.#showTrash(...args),
+    };
   }
 
   openOrCreateByTitle(title, fragment = null) {

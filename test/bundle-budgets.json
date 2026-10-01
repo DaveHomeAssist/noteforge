@@ -38,16 +38,17 @@
       "gzipBudget": 29696
     },
     "retrieval": {
-      "description": "Command palette, find and replace, saved views, archive, bulk actions, link tools.",
+      "description": "Command palette and its command list, find and replace, saved views, archive, bulk actions, link tools.",
       "entries": [
         "src/components/command-palette.js",
+        "src/app/palette-commands.js",
         "src/components/find-replace-view.js",
         "src/components/saved-searches-view.js",
         "src/components/archive-view.js",
         "src/components/bulk-actions-view.js",
         "src/components/link-tools-view.js"
       ],
-      "gzipBudget": 26624
+      "gzipBudget": 29696
     },
     "daily": {
       "description": "Daily notes, quick capture, task dashboard, calendar.",
@@ -99,6 +100,13 @@
         "src/ui/dialogs.js"
       ],
       "gzipBudget": 4096
+    },
+    "banner": {
+      "description": "Note banner picker, gradient presets and Reposition (src/components/banner-picker.js), loaded when the pointer or focus first reaches a banner.",
+      "entries": [
+        "src/components/banner-picker.js"
+      ],
+      "gzipBudget": 3072
     },
     "precache": {
       "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
