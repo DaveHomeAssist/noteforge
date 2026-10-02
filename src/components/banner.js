@@ -14,17 +14,34 @@ let pickerLoad = null;
 
 /** Loads the picker chunk once; resolves to the module. */
 export function loadBannerPicker() {
-  pickerLoad ??= import('./banner-picker.js').then((m) => {
-    pickerModule = m;
-    return m;
-  });
+  pickerLoad ??= import('./banner-picker.js')
+    .then((m) => {
+      pickerModule = m;
+      return m;
+    })
+    .catch((error) => {
+      pickerLoad = null;
+      throw error;
+    });
   return pickerLoad;
 }
 
 /** Runs `fn(module)` now when the picker chunk is loaded, else after it loads. */
-function withPicker(fn) {
+function withPicker(ctrl, fn) {
+  if (ctrl.destroyed) return;
   if (pickerModule) fn(pickerModule);
-  else loadBannerPicker().then(fn);
+  else {
+    loadBannerPicker()
+      .then((m) => {
+        if (!ctrl.destroyed) fn(m);
+      })
+      .catch((error) => console.warn('[banner] picker unavailable; try again:', error));
+  }
+}
+
+function preloadPicker() {
+  // Hover/focus is speculative; a click can retry if this preload fails.
+  void loadBannerPicker().catch(() => {});
 }
 
 const el = (tag, cls) => {
@@ -42,6 +59,7 @@ export class BannerControl {
     this.host = host;
     this.getBanner = opts.getBanner;
     this.onChange = opts.onChange;
+    this.destroyed = false;
     this.picker = null;
     this.repositioning = false;
     this.__onDocClick = (e) => {
@@ -51,12 +69,15 @@ export class BannerControl {
         this.closePicker();
       }
     };
-    host.addEventListener('pointerenter', loadBannerPicker, { once: true });
-    host.addEventListener('focusin', loadBannerPicker, { once: true });
+    host.addEventListener('pointerenter', preloadPicker, { once: true });
+    host.addEventListener('focusin', preloadPicker, { once: true });
     this.render();
   }
 
   destroy() {
+    this.destroyed = true;
+    this.host.removeEventListener('pointerenter', preloadPicker);
+    this.host.removeEventListener('focusin', preloadPicker);
     this.closePicker();
     document.removeEventListener('mousedown', this.__onDocClick, true);
   }
@@ -78,7 +99,7 @@ export class BannerControl {
       const add = el('button', 'banner-add');
       add.type = 'button';
       add.innerHTML = `${icon('image')} Add banner`;
-      add.addEventListener('click', () => withPicker((m) => m.addRandomGradient(this)));
+      add.addEventListener('click', () => withPicker(this, (m) => m.addRandomGradient(this)));
       this.host.appendChild(add);
       return;
     }
@@ -105,9 +126,9 @@ export class BannerControl {
       '<button type="button" class="banner__btn" data-act="remove">Remove</button>';
     controls.addEventListener('click', (e) => {
       const act = e.target.closest('.banner__btn')?.dataset.act;
-      if (act === 'change') withPicker((m) => m.openPicker(this, e.target));
+      if (act === 'change') withPicker(this, (m) => m.openPicker(this, e.target));
       else if (act === 'remove') this.#remove();
-      else if (act === 'reposition') withPicker((m) => m.startReposition(this, strip, banner));
+      else if (act === 'reposition') withPicker(this, (m) => m.startReposition(this, strip, banner));
     });
     strip.appendChild(controls);
 

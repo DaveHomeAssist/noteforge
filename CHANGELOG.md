@@ -35,6 +35,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - Workspace tab close and move buttons are 24 px targets and pointer-only; keyboard users close with Delete and move with Alt+Shift+M.
 
 ### Fixed
+- Deferred banner actions are cancelled when leaving a note, and a failed picker load can be retried without reloading the app.
 - A confirmation opened over another dialog left the dialog beneath it interactive, and one Escape closed both; dialogs now stack, only the topmost is interactive, and each Escape closes one.
 - Global keyboard shortcuts no longer act behind an open confirmation.
 - Destructive and primary buttons keep AA contrast on hover (the destructive hover measured 1.14:1).
