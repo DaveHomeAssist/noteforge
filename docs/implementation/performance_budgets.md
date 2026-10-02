@@ -41,12 +41,13 @@ over. CI runs it after every build on Node 22 and 24.
 | editor | outline, backlink index, navigation | 5,389 B | 6,144 B |
 | graph | graph view | 3,092 B | 4,096 B |
 | recovery | history, backup center, recovery, backup core | 26,160 B | 29,696 B |
-| retrieval | palette, find/replace, saved views, archive, bulk actions, link tools | 24,139 B | 26,624 B |
+| retrieval | palette and its command list, find/replace, saved views, archive, bulk actions, link tools | 24,139 B | 29,696 B (raised 2026-10-01) |
 | daily | daily notes, capture, tasks, calendar | 19,629 B | 22,528 B |
 | properties | properties view, YAML parser | 43,344 B | 48,128 B |
 | workspace | tabs and panes, clipper, folder reconciliation | 24,665 B | 27,648 B |
 | settings | settings, Trash | 4,193 B | 5,120 B |
 | dialogs | in-app confirm dialog and toasts, on first use | 3,001 B | 4,096 B |
+| banner | note banner picker, gradient presets, Reposition (added 2026-10-01) | 2,181 B | 3,072 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
 ### Measurements
@@ -55,6 +56,8 @@ over. CI runs it after every build on Node 22 and 24.
 | --- | --- | ---: | ---: | ---: | ---: |
 | 2026-09-27 | Budgets set (Vite 6.4.3, marked 15) | 75,571 B | 19,629 B | 43,344 B | 220,873 B |
 | 2026-09-27 | marked 18, Vite 8 (Rolldown groups for the runtime and YAML) | 74.1 KiB | 18.5 KiB | 41.1 KiB | 210.9 KiB |
+| 2026-10-01 | Before Tier 1 split (`db9971f`) | 82,352 B | 19,631 B | 42,177 B | 230,324 B |
+| 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
 
 Vite 8 without the Rolldown groups put the YAML parser in the Daily route (49.0 KiB against 22 KiB); the budget gate caught it (PR #14).
 
@@ -72,6 +75,9 @@ paint belongs in a lazy route, with its CSS loaded alongside it.
 | --- | --- | ---: | ---: | --- | --- |
 | 2026-09-27 | all | raw 257,180 B shell ceiling | table above | Policy v2 replaces the raw initial-shell ceiling (roadmap Phase 0) | Dave (roadmap Phase 0, "execute the next phase", 2026-09-26) |
 | 2026-09-27 | dialogs (new) | none | 4,096 B | New lazy route for src/ui/dialogs.js (Phase 1 in-app confirm and toasts); measured 3,001 B + 10% | Phase 1 go (2026-09-26) |
+| 2026-10-01 | shell | 83,968 B | 83,968 B (held) | No raise. With 1,616 B of headroom left at `db9971f`, the remaining Phase 1 shell work goes behind lazy routes first: this split moves the banner picker and the palette command list out (82,352 to 80,242 B). Slash/link/block menus are the next candidate | Dave, 2026-10-01 (approved holding the shell and splitting first) |
+| 2026-10-01 | retrieval | 26,624 B | 29,696 B | The palette command list (`src/app/palette-commands.js`, about 1.6 KB gzip) now loads with the palette instead of the shell; measured 26,849 B + 10% | Dave, 2026-10-01 (same approval) |
+| 2026-10-01 | banner (new) | none | 3,072 B | New lazy route for `src/components/banner-picker.js` and its CSS; measured 2,181 B + 10% | Dave, 2026-10-01 (same approval) |
 
 ## Build budget history (policy v1, raw initial-shell ceiling, until 2026-09-26)
 

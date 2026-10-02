@@ -25,6 +25,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - Tasks, Calendar, Archive, and Trash open in the main area in place of the editor, as the graph does, instead of in dialogs. Their rail buttons show which view is active; pressing one again, Escape, Close, or opening a note returns to the editor. Global shortcuts keep working while they are shown.
 
 ### Changed
+- The note banner's picker, gradient presets and Reposition, and the command palette's command list, now load on demand instead of with the app, cutting first-paint JavaScript and CSS by 2,110 B gzip (82,352 to 80,242 B; shell budget held at 82 KiB). The picker starts loading when the pointer or focus reaches a banner, so Change, Reposition and Add banner still respond at once. New `banner` budget route (3 KiB); the `retrieval` budget rises to 29 KiB because it now carries the command list.
 - Dialogs, the command palette, the More actions menu, and the slash menu fade in over 120–180 ms, and the phone sidebar slides on the same motion tokens; with reduced motion requested, they appear at once.
 - Callout headers, the note tree's expand/collapse buttons, and the notice close button use icons instead of emoji and "▸", "▾", and "×" characters. The accessibility gate now also rejects those characters in controls, and it scans notices.
 - Heading results in the command palette use heading icons instead of "H1"–"H6" text.
@@ -34,6 +35,7 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 - Workspace tab close and move buttons are 24 px targets and pointer-only; keyboard users close with Delete and move with Alt+Shift+M.
 
 ### Fixed
+- Deferred banner actions are cancelled when leaving a note, and a failed picker load can be retried without reloading the app.
 - A confirmation opened over another dialog left the dialog beneath it interactive, and one Escape closed both; dialogs now stack, only the topmost is interactive, and each Escape closes one.
 - Global keyboard shortcuts no longer act behind an open confirmation.
 - Destructive and primary buttons keep AA contrast on hover (the destructive hover measured 1.14:1).
