@@ -1,4 +1,4 @@
-import { normalizeAliases } from '../core/note.js';
+import { Note, normalizeAliases } from '../core/note.js';
 import { createBlockEditorPhase5Enhancer } from '../components/block-editor-phase5.js';
 import { setTransclusionRenderer } from '../utils/markdown.js';
 import { createTransclusionRenderer } from '../utils/transclusion.js';
@@ -97,24 +97,27 @@ export class Phase5Controller {
   }
 
   async set(noteId, key, value, type) {
-    const note = this.db.getNote(noteId);
+    const note = this.db.getNote(noteId)?.toJSON();
+    const token = this.db.captureMutationToken();
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const nextContent = await setFrontmatterProperty(note.content, key, value, { type });
     const parsed = await parseFrontmatter(nextContent);
     const aliases =
       key === 'aliases' ? normalizeAliases(aliasesFromProperties(parsed.properties).aliases, note.title) : note.aliases;
-    await this.#commit(note, nextContent, aliases, 'pre_property_edit');
+    await this.#commit(note, nextContent, aliases, 'pre_property_edit', token);
   }
 
   async remove(noteId, key) {
-    const note = this.db.getNote(noteId);
+    const note = this.db.getNote(noteId)?.toJSON();
+    const token = this.db.captureMutationToken();
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const nextContent = await removeFrontmatterProperty(note.content, key);
-    await this.#commit(note, nextContent, key === 'aliases' ? [] : note.aliases, 'pre_property_edit');
+    await this.#commit(note, nextContent, key === 'aliases' ? [] : note.aliases, 'pre_property_edit', token);
   }
 
   async replaceRaw(noteId, rawSource) {
-    const note = this.db.getNote(noteId);
+    const note = this.db.getNote(noteId)?.toJSON();
+    const token = this.db.captureMutationToken();
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const current = splitFrontmatterSource(note.content);
     const raw = String(rawSource ?? '');
@@ -137,10 +140,10 @@ export class Phase5Controller {
       aliasProperty?.valid && aliasProperty.present
         ? normalizeAliases(aliasProperty.aliases, note.title)
         : note.aliases;
-    await this.#commit(note, nextContent, aliases, 'pre_frontmatter_source_edit');
+    await this.#commit(note, nextContent, aliases, 'pre_frontmatter_source_edit', token);
   }
 
-  async #commit(note, content, aliases, reason) {
+  async #commit(note, content, aliases, reason, token) {
     if (content === note.content && same(aliases, note.aliases)) return false;
     this.editor?.flushPending?.();
     await this.db.flush();
@@ -154,7 +157,7 @@ export class Phase5Controller {
     await this.ensureRecovery();
     const before = fresh.toJSON();
     const replacement = { ...before, content, aliases };
-    await this.db.commitPlannedNotes([replacement], [before], reason);
+    await this.db.commitPlannedNotes([replacement], [note], reason, token);
     const updated = this.db.getNote(note.id);
     if (updated) await this.#indexNote(updated);
     if (this.editor?.currentId === note.id) {
@@ -221,7 +224,8 @@ export class Phase5Controller {
   }
 
   async #reconcileAliases(changedOnly, noteIds) {
-    const allNotes = this.db.getNotesInScope('all');
+    const token = this.db.captureMutationToken();
+    const allNotes = this.db.getNotesInScope('all').map((note) => Note.fromJSON(note.toJSON()));
     const liveIds = new Set(allNotes.map((note) => note.id));
     const requested = Array.isArray(noteIds) ? new Set(noteIds) : null;
     const notes = requested ? allNotes.filter((note) => requested.has(note.id)) : allNotes;
@@ -282,6 +286,7 @@ export class Phase5Controller {
           current,
           captures.filter((capture) => current.some((entry) => entry.id === capture.id)),
           'pre_frontmatter_alias_migration',
+          token,
         );
       }
     }

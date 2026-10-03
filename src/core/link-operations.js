@@ -104,6 +104,7 @@ export class LinkOperations {
     const expected = [...affected.keys()].map((id) => this.db.notes.get(id).toJSON());
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'rename',
       repairMode: repairsDuplicateTitle,
       noteId,
@@ -125,7 +126,7 @@ export class LinkOperations {
       throw new Error('Notes changed after this rename preview. Review the updated plan before applying it.');
     }
     const captures = fresh.expected.map((raw) => this.db.notes.get(raw.id));
-    await this.db.commitPlannedNotes(fresh.replacements, captures, 'pre_rename');
+    await this.db.commitPlannedNotes(plan.replacements, captures, 'pre_rename', plan.token);
     return { note: this.db.getNote(plan.noteId), affectedNotes: fresh.affected.length, linkCount: fresh.linkCount };
   }
 
@@ -144,6 +145,7 @@ export class LinkOperations {
     };
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'alias_repair',
       noteId,
       noteTitle: note.title,
@@ -160,7 +162,7 @@ export class LinkOperations {
     if (!fresh.valid || fresh.fingerprint !== plan.fingerprint) {
       throw new Error('The note changed after this alias preview. Review the repair again.');
     }
-    await this.db.commitPlannedNotes([fresh.next], [this.db.getNote(fresh.noteId)], 'pre_alias_repair');
+    await this.db.commitPlannedNotes([plan.next], [plan.expected], 'pre_alias_repair', plan.token);
     return { note: this.db.getNote(fresh.noteId), alias: fresh.alias };
   }
 
@@ -194,6 +196,7 @@ export class LinkOperations {
     };
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'mention',
       sourceId: source.id,
       sourceTitle: source.title,
@@ -217,7 +220,7 @@ export class LinkOperations {
     if (!fresh.valid || fresh.fingerprint !== plan.fingerprint) {
       throw new Error('The source note changed after this preview. Review the mention again.');
     }
-    await this.db.commitPlannedNotes([fresh.next], [this.db.getNote(fresh.sourceId)], 'pre_link_conversion');
+    await this.db.commitPlannedNotes([plan.next], [plan.expected], 'pre_link_conversion', plan.token);
     return { source: this.db.getNote(fresh.sourceId), target: this.db.getNote(fresh.targetId) };
   }
 }

@@ -55,6 +55,7 @@ export class BulkOperations {
     }
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'vault_replace',
       query: String(query),
       replacement: String(replacement ?? ''),
@@ -85,7 +86,7 @@ export class BulkOperations {
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
     try {
-      await this.db.commitPlannedNotes(plan.replacements, current, 'pre_bulk_replace');
+      await this.db.commitPlannedNotes(plan.replacements, plan.expected, 'pre_bulk_replace', plan.token);
       return { changed: plan.changed, unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
     } catch (error) {
       error.report = { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: plan.changed };
@@ -175,6 +176,7 @@ export class BulkOperations {
     const expected = selected.map((note) => note.toJSON());
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'note_batch',
       action,
       payload: Object.freeze({ ...payload, tag }),
@@ -206,6 +208,7 @@ export class BulkOperations {
         plan.replacements,
         current.filter((note) => changedIds.has(note.id)),
         'pre_bulk_action',
+        plan.token,
       );
       return { changed: plan.changed, unchanged: plan.unchanged, failed: [] };
     } catch (error) {

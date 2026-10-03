@@ -13,6 +13,8 @@
 // app is now branded "NoteForge" — renaming them would point at a fresh, empty
 // IndexedDB and orphan every existing user's notes. The display name is cosmetic;
 // the storage identity must stay stable.
+import { readVault, initializeVault, commitVault } from './vault-transactions.js';
+
 const NS = 'my-notes-app:'; // legacy localStorage namespace (migration source)
 const DB_NAME = 'my-notes-app';
 const STORE = 'kv';
@@ -336,6 +338,29 @@ async function quotaEstimate() {
 // --- public API -------------------------------------------------------------
 
 export const storage = {
+  async readCurrentVault() {
+    const db = await openDB();
+    if (!db) return null;
+    return readVault(db, STORE);
+  },
+
+  async initializeCurrentVault(legacy, migrated, { allowLegacyMigration = false } = {}) {
+    const db = await openDB();
+    if (!db) throw new Error('Concurrent-safe storage is unavailable. Export your draft before leaving.');
+    if (!allowLegacyMigration) {
+      const error = new Error('This vault needs a verified compatibility upgrade before editing can continue.');
+      error.name = 'VaultUpgradeRequired';
+      throw error;
+    }
+    return initializeVault(db, STORE, legacy, migrated, crypto.randomUUID());
+  },
+
+  async commitCurrentVault(mutation) {
+    const db = await openDB();
+    if (!db) throw new Error('Concurrent-safe storage is unavailable. The draft has not been saved.');
+    return commitVault(db, STORE, mutation);
+  },
+
   /** Warm up the backend. Resolves true if IndexedDB is in use, false otherwise. */
   async ready() {
     return (await openDB()) != null;

@@ -28,15 +28,19 @@ function transactionResult(transaction, result) {
 export function readVault(db, storeName) {
   const tx = db.transaction(storeName, 'readonly');
   const store = tx.objectStore(storeName);
-  const snapshot = { meta: null, config: null, records: [], conflicts: [] };
+  const snapshot = { meta: null, config: null, persistence: null, records: [], conflicts: [] };
   const done = transactionResult(tx, () => snapshot);
   const meta = store.get(VAULT_META);
   const config = store.get(VAULT_CONFIG);
+  const persistence = store.get('persistenceStatus');
   meta.onsuccess = () => {
     snapshot.meta = meta.result ?? null;
   };
   config.onsuccess = () => {
     snapshot.config = config.result ?? null;
+  };
+  persistence.onsuccess = () => {
+    snapshot.persistence = persistence.result ?? null;
   };
   const records = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
   records.onsuccess = () => {

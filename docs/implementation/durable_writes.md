@@ -4,10 +4,17 @@ Phase 1 reliability repair, based on main 7114047aca10ad9b25839774a22d06370a6456
 
 ## Status
 
-In progress. The maintained P1 regressions reproduce both data-loss defects on
-the baseline in Chromium, Firefox and WebKit (nine failed assertions). The new
-transaction module is a foundation; it is not yet wired into the production
-Database. No migration is enabled and this branch is not releasable.
+In progress, not releasable. The production Database now uses the conditional
+transaction module when a vault has been explicitly activated. Both original
+P1 reproductions pass through that Database across Chromium, Firefox and WebKit.
+Activation in these tests is explicit and limited to disposable synthetic vaults;
+it is not evidence that production upgrades are safe.
+
+Normal startup does not activate either empty or populated legacy storage. It
+loads legacy content in memory with read-only persistence until compatibility is
+proved. The application still needs a complete upgrade/recovery presentation,
+conflict resolution UI, and clean/dirty window refresh integration. Do not merge
+or deploy this intermediate state.
 
 ## Persistence writer inventory
 
@@ -77,8 +84,8 @@ mechanism; they do not replace full application upgrade acceptance.
 - Measure representative vault sizes; verify exact-SHA CI, both deployments,
   provenance and synthetic user behavior. Leave P2 and final soak work separate.
 
-The CI and local test:all gate now include the durability projects. Their current
-expected failures are visible release blockers, not skipped tests or a pass.
+The CI and local test:all gate include the durability projects. Passing these
+does not override incomplete application startup, migration or recovery gates.
 
 ## Foundation verification, 2026-10-03
 
@@ -100,3 +107,61 @@ expected failures are visible release blockers, not skipped tests or a pass.
 
 Original evidence is retained separately from the evolving implementation under
 the local execution artifacts. Complete Phase 1 acceptance remains open.
+
+## Database integration checkpoint, 2026-10-03
+
+- Each ordinary note/lifecycle mutation queues only its affected identities.
+  Queue entries retain their generation, base version and detached metadata.
+  A same-note conflict retains the draft in IndexedDB and does not prevent an
+  unrelated queued note from committing. The aggregate flush remains false while
+  any draft is unresolved.
+- Planned operations validate the local preview revision around preparation and
+  use the observed vault sequence plus note versions at the final IDB boundary.
+  This conservatively catches new backlink/title dependencies. A draft queued
+  during acknowledgement remains in memory with its old base, so it cannot
+  silently undo the committed plan.
+- Rename, aliases, mention conversion, bulk plans, Properties, alias migration,
+  task commits, revision restore, backup restore and folder reconciliation now
+  use the conditional boundary or its guarded whole-vault replacement. Per-caller
+  browser acceptance and dirty-editor integration remain to be expanded.
+- Revision restore captures its safety state once through the shared commit
+  preparation hook. Portable restore retains the reviewed destination token and
+  compares the reverified source with the original source fingerprint. Backup
+  creation and rolling snapshots read one consistent committed vault.
+- Latest integrated browser run: 48/48 pass (16 per engine), including both
+  original P1 cases, lifecycle writes, conflicts, queued drafts, phantom backlinks,
+  replacement generations, detached metadata/history, config fields, backup
+  freshness, persistence timestamps and both activation gates.
+- The preceding combined durability run passed 63/63: 42 Database cases, 15
+  transaction primitive cases and 6 legacy hazard diagnostics. The six diagnostic
+  passes still demonstrate an unsafe naive upgrade, not compatible old clients.
+- Node 22.22.1 and Node 24.21.0: 549/549 pass. The count floor is now 549.
+  Static checks pass; typecheck baseline decreased from 56 to 48 without raising
+  any file allowance. The in-page browser feature suite also passes; it does
+  not cover the gated production startup/recovery flow. Build/budgets pass (shell 81.5 KiB / 82.0 KiB; precache
+  229.9 KiB / 238.0 KiB); audit reports zero vulnerabilities.
+- An earlier development run was interrupted by page reloads during source edits
+  (7/9 pass, 2 invalid observations). Its log is preserved separately; fixed-source
+  runs above establish the current database results.
+
+### Remaining release requirements
+
+1. Prove and implement the old/new-client activation barrier using real builds,
+   including cached navigation, suspended/back-forward pages and fallback writes.
+   The IndexedDB specification explicitly rejects lower-version opens and waits
+   for old connections to close; a version bump is therefore not a full client
+   compatibility solution. [IndexedDB open algorithm](https://www.w3.org/TR/IndexedDB/#opening)
+2. Complete visible upgrade/degraded recovery, conflict comparison/resolution,
+   draft export and exact save-state UI. A read-only persistence flag alone is
+   not a usable recovery experience. Automatic sample creation and startup config
+   writes still need to respect this state.
+3. Refresh clean views on notifications/resume while preserving dirty editors and
+   pending conflicts. Revalidate every affected caller with real editor drafts,
+   history/backup failures and migration interruptions.
+4. Complete performance measurements, full Node/browser/a11y/golden/visual gates,
+   exact-head CI/review, merge/deploy, provenance and both-origin live acceptance.
+
+A service worker is not assumed to be able to evict every old runtime: the
+navigation algorithm rejects a window whose document is not fully active. Test
+the actual suspended-page boundary rather than substituting a successful active
+tab handshake. [Service Worker navigation](https://www.w3.org/TR/service-workers/#client-navigate)

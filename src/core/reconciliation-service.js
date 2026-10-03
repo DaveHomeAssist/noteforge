@@ -59,12 +59,13 @@ export class ReconciliationService {
 
   async plan(entries) {
     const version = ++this.planVersion;
+    const token = this.db.captureMutationToken();
     const nextEntries = Array.isArray(entries) ? [...entries] : [];
     const result = await this.planner(
       nextEntries,
       [...this.db.notes.values()].map((note) => note.toJSON()),
       {
-        mappings: this.db.config.folderMappings,
+        mappings: detached(this.db.config.folderMappings),
       },
     );
     if (version !== this.planVersion) {
@@ -74,6 +75,7 @@ export class ReconciliationService {
     }
     this.entries = nextEntries;
     this.planResult = result;
+    this.planMutationToken = token;
     return detached(result);
   }
 
@@ -108,7 +110,7 @@ export class ReconciliationService {
     const selected = this.#validateDecisions(plan, decisions);
     if (!selected.length) return this.#completionReport(plan, decisions, [], 'No folder changes were selected.');
 
-    await this.recovery.downloadBackup();
+    await this.recovery.downloadBackup({ recordTimestamp: false });
 
     const freshEntries = await this.#reread();
     const freshPlan = await planVaultImport(
@@ -191,11 +193,14 @@ export class ReconciliationService {
       );
     }
     const nextConfig = { ...detached(this.db.config), folderMappings: nextMappings };
-    const saved = await this.db.replaceVault({
-      notes: nextNotes,
-      config: nextConfig,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-    });
+    const saved = await this.db.replaceVault(
+      {
+        notes: nextNotes,
+        config: nextConfig,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      },
+      this.planMutationToken,
+    );
     if (!saved) throw new Error('The folder batch was not saved; the current vault remains unchanged.');
     return this.#completionReport(
       freshPlan,
