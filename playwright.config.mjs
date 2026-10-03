@@ -39,6 +39,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
+    ...['chromium', 'firefox', 'webkit'].map((browserName) => ({
+      name: `durability-${browserName}`,
+      testMatch: ['durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs'],
+      use: { browserName, channel: undefined },
+    })),
     {
       name: 'features',
       testMatch: ['features.spec.mjs', 'smokes.spec.mjs', 'dialogs.spec.mjs', 'shell.spec.mjs', 'banner.spec.mjs'],

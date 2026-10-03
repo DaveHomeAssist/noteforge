@@ -62,15 +62,15 @@ jobs:
           path: test-results/junit.xml
           if-no-files-found: warn
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
 
       # Playwright Test: the in-page feature suite, the eight end-to-end smokes
       # (dev server and the production build offline), and the axe ratchet
       # (test/e2e/a11y-baseline.json). Retries once in CI; a retried pass is
       # reported as flaky. Traces are kept for failures.
       - name: End-to-end and accessibility (Playwright)
-        run: npx playwright test --project=features --project=a11y
+        run: npx playwright test --project=features --project=a11y --project=durability-chromium --project=durability-firefox --project=durability-webkit
 
       - name: Upload Playwright report and traces
         if: failure()
