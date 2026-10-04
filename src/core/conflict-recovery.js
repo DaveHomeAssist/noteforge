@@ -73,23 +73,6 @@ function copyWrites(snapshot, conflict, timestamp) {
     });
 }
 
-function overlayPending(db, snapshot) {
-  const records = new Map(snapshot.records);
-  for (const [key, entry] of db._writeQueue) {
-    if (key.startsWith('note:'))
-      records.set(key.slice(5), { version: entry.expected, value: structuredClone(entry.value) });
-    if (key === 'config') {
-      for (const write of entry.value) {
-        if (write.remove) delete snapshot.config.values[write.key];
-        else snapshot.config.values = { ...snapshot.config.values, [write.key]: structuredClone(write.value) };
-        snapshot.config.versions = { ...snapshot.config.versions, [write.key]: write.expected };
-      }
-    }
-  }
-  snapshot.records = [...records];
-  return snapshot;
-}
-
 function committedSnapshot(snapshot, mutation, meta, conflicts) {
   const current = structuredClone(snapshot);
   current.meta = meta;
@@ -181,7 +164,7 @@ export async function resolveConflict(db, shown, action, adopt) {
     // A follow-up read failure must not turn an acknowledged resolution into an
     // ambiguous result or discard a newer local draft.
     const current = committedSnapshot(snapshot, mutation, result.meta, db.conflicts);
-    adopt(overlayPending(db, current));
+    adopt(current);
     return {
       action,
       noteIds: [...new Set([...preview.notes.map((note) => note.id), ...mutation.notes.map((write) => write.id)])],

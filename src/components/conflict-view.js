@@ -41,6 +41,7 @@ export class ConflictView {
         <footer>
           <p role="status" aria-live="polite" data-status></p>
           <div class="conflict-view__actions">
+            <button type="button" data-refresh>Refresh comparison</button>
             <button type="button" data-export>Export recovery file</button>
             <button type="button" data-action="keep-current">Keep saved version</button>
             <button type="button" data-action="save-copy">Save draft as a copy</button>
@@ -54,6 +55,7 @@ export class ConflictView {
     this.status = this.overlay.querySelector('[data-status]');
     this.choice.addEventListener('change', () => void this.select());
     this.overlay.querySelector('[data-dismiss]').addEventListener('click', () => this.close());
+    this.overlay.querySelector('[data-refresh]').addEventListener('click', () => void this.refresh());
     this.overlay.querySelector('[data-export]').addEventListener('click', () => this.export());
     this.overlay.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', () => void this.resolve(button.dataset.action));
@@ -84,11 +86,15 @@ export class ConflictView {
     }
     this.choice.disabled = this.busy || !this.choice.options.length;
     this.overlay.querySelector('[data-dismiss]').disabled = this.busy;
+    this.overlay.querySelector('[data-refresh]').disabled = this.busy;
   }
 
   async refresh() {
+    if (this.busy) return;
     const request = ++this.request;
+    const selected = this.choice.value;
     this.preview = null;
+    this.clearComparison();
     this.buttons();
     this.status.textContent = 'Loading saved conflicts…';
     try {
@@ -103,6 +109,7 @@ export class ConflictView {
         option.textContent = conflict.mutation.notes?.[0]?.value?.title || 'Settings or planned change';
         this.choice.append(option);
       }
+      if ([...this.choice.options].some((option) => option.value === selected)) this.choice.value = selected;
       if (this.choice.options.length) await this.select();
       else {
         this.status.textContent =
@@ -110,6 +117,7 @@ export class ConflictView {
         this.clearComparison();
       }
     } catch (error) {
+      if (!this.modal.isOpen || request !== this.request) return;
       this.status.textContent = `Saved conflicts could not be read: ${error.message}. You can still export local drafts.`;
     }
     this.buttons();

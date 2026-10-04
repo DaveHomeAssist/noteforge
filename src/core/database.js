@@ -41,6 +41,31 @@ function jsonEquivalent(left, right) {
   );
 }
 
+// One submission has one terminal result. A failed receipt is never rewritten
+// into a later retry's success, and a coalesced draft is not a committed draft.
+function noteWriteReceipt(id, entry) {
+  let resolve;
+  let settled = false;
+  const completion = new Promise((done) => {
+    resolve = done;
+  });
+  return {
+    completion,
+    finish(status) {
+      if (settled) return;
+      settled = true;
+      resolve({
+        status,
+        noteId: id,
+        generation: entry.generation,
+        version: status === 'committed' ? entry.expected + 1 : null,
+        note: structuredClone(entry.value),
+        ...(status === 'conflict' ? { conflictId: entry.conflictId } : {}),
+      });
+    },
+  };
+}
+
 export class Database {
   constructor({ storageBackend = storage, onNotesPersisted = null, onNotesPurged = null } = {}) {
     this.storage = storageBackend;
@@ -50,6 +75,7 @@ export class Database {
     // default (themeMode: 'light', WEB-1); a legacy stored `theme` still wins for upgrades.
     this.config = { showGraph: false };
     this.listeners = new Set();
+    this.persistenceListeners = new Set();
     this.ready = false;
     this._writeQueue = new Map(); // key -> latest value (coalesced)
     this._draining = null; // the single in-flight drain promise, or null
@@ -92,6 +118,23 @@ export class Database {
 
   #emit(noteIds = null, external = false) {
     for (const fn of this.listeners) fn(this, noteIds, external);
+    this.#emitPersistence(noteIds);
+  }
+
+  /** Observe save-state changes without rebuilding note views or stealing focus. */
+  subscribePersistence(fn) {
+    this.persistenceListeners.add(fn);
+    return () => this.persistenceListeners.delete(fn);
+  }
+
+  #emitPersistence(noteIds = null) {
+    for (const fn of this.persistenceListeners) {
+      try {
+        fn(this, noteIds);
+      } catch {
+        /* Observers cannot change a storage outcome. */
+      }
+    }
   }
 
   // --- lifecycle / persistence -------------------------------------------
@@ -185,7 +228,7 @@ export class Database {
     return Array.from(this.notes.values());
   }
 
-  #adoptVault(snapshot, allowPending = false) {
+  #adoptVault(snapshot) {
     if (
       snapshot.meta?.schemaVersion !== CURRENT_SCHEMA_VERSION ||
       typeof snapshot.meta.generation !== 'string' ||
@@ -200,12 +243,7 @@ export class Database {
     // Prepare the entire replacement before touching the current model. A bad
     // record must not turn a failed refresh into a partially emptied window.
     const records = snapshot.records.map(([id, record]) => {
-      if (
-        typeof id !== 'string' ||
-        !id ||
-        !Number.isSafeInteger(record.version) ||
-        record.version < (allowPending ? 0 : 1)
-      )
+      if (typeof id !== 'string' || !id || !Number.isSafeInteger(record.version) || record.version < 1)
         throw new Error('Invalid saved note version.');
       const note = record.value === null ? null : Note.fromJSON(record.value);
       if (note && note.id !== id) throw new Error('Invalid saved note identity.');
@@ -258,14 +296,15 @@ export class Database {
   #persist(captures = [], purgedIds = [], changedIds = null) {
     this._mutationRevision++;
     if (this._vaultMeta) {
+      let completion;
       for (const id of changedIds ?? [...new Set([...this.notes.keys(), ...purgedIds])]) {
         const value = this.notes.get(id)?.toJSON() ?? null;
-        this.#queueWrite(`note:${id}`, value, null, {
+        completion = this.#queueWrite(`note:${id}`, value, null, {
           captures: captures.filter((capture) => capture.note.id === id),
           purgedIds: purgedIds.includes(id) ? [id] : [],
         });
       }
-      return;
+      return completion;
     }
     // Persist the full set (live + trashed) so the Trash survives reload.
     this.#queueWrite(
@@ -298,7 +337,7 @@ export class Database {
       mergedCommit = { captures: [...capturesById.values()], purgedIds };
     }
     const expected = previous?.expected ?? (key.startsWith('note:') ? (this._noteVersions.get(key.slice(5)) ?? 0) : 0);
-    this._writeQueue.set(key, {
+    const entry = {
       value: structuredClone(value),
       expected,
       generation: previous?.generation ?? this._vaultMeta?.generation,
@@ -306,8 +345,15 @@ export class Database {
       noteCommit: structuredClone(mergedCommit),
       inFlight: false,
       conflictId: previous?.conflictId,
-    }); // latest queued snapshot wins
+      outcome: null,
+      receipt: null,
+    };
+    if (key.startsWith('note:')) entry.receipt = noteWriteReceipt(key.slice(5), entry);
+    if (previous && !previous.inFlight) previous.receipt?.finish('superseded');
+    this._writeQueue.set(key, entry); // latest queued snapshot wins
+    this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
     if (!this._vaultReplacing) void this.#flushWrites();
+    return entry.receipt?.completion;
   }
 
   #flushWrites() {
@@ -317,18 +363,19 @@ export class Database {
     if (this._draining) return this._draining;
     if (this._vaultReplacing) return null;
     if (this._writeQueue.size === 0) return null;
-    let failed = false;
+    const failedEntries = new Map();
     let draining;
     // Start on the next microtask so `this._draining` is assigned before even
     // an empty/synchronous path can settle and run its finalizer.
     draining = Promise.resolve()
       .then(async () => {
-        const failedKeys = new Set();
         while (this._writeQueue.size) {
-          const next = [...this._writeQueue.entries()].find(([key]) => !failedKeys.has(key));
+          const next = [...this._writeQueue.entries()].find(([key, entry]) => failedEntries.get(key) !== entry);
           if (!next) break;
           const [key, entry] = next;
           entry.inFlight = true;
+          entry.outcome = null;
+          this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
           let okSave = false;
           try {
             okSave = this._readOnly
@@ -347,6 +394,8 @@ export class Database {
             // Delete only if a newer snapshot for this key wasn't queued while
             // we awaited — otherwise loop again and persist the newer value.
             if (this._writeQueue.get(key) === entry) this._writeQueue.delete(key);
+            entry.receipt?.finish('committed');
+            this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
             entry.afterPersist?.();
             if (entry.noteCommit) {
               if (entry.noteCommit.captures.length) this.#capturePersistedNotes(entry.noteCommit.captures);
@@ -358,10 +407,12 @@ export class Database {
             // snapshot queued, surface the failure, and stop this drain to
             // avoid a hot spin. The in-memory Map is still the source of truth
             // for the session, and the next save (or flush) retries.
-            this.#reportPersistError(key);
             entry.inFlight = false;
-            failed = true;
-            failedKeys.add(key);
+            entry.outcome ||= this._readOnly ? 'unavailable' : 'failed';
+            entry.receipt?.finish(entry.outcome);
+            this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
+            this.#reportPersistError(key);
+            failedEntries.set(key, entry);
           }
         }
       })
@@ -370,7 +421,7 @@ export class Database {
         // A write can be queued after the loop observes an empty Map but before
         // this promise settles. Hand it to a successor drain so it cannot remain
         // stranded until an unrelated future edit. Do not hot-retry a failure.
-        if (!failed && this._writeQueue.size) void this.#flushWrites();
+        if ([...this._writeQueue].some(([key, entry]) => failedEntries.get(key) !== entry)) void this.#flushWrites();
       });
     this._draining = draining;
     return draining;
@@ -416,6 +467,7 @@ export class Database {
     else return this.storage.save(key, entry.value);
     const result = await this.storage.commitCurrentVault(mutation);
     if (result.status !== 'committed') {
+      entry.outcome = 'conflict';
       this.conflicts.set(result.conflict.id, result.conflict);
       try {
         this.onConflict?.(result.conflict);
@@ -515,6 +567,26 @@ export class Database {
     return this._writeQueue.size === 0;
   }
 
+  /** State of this exact in-memory note, never inferred from a global empty queue. */
+  getNoteSaveState(id) {
+    const state = { noteId: id, generation: this._vaultMeta?.generation ?? null, version: null };
+    if (this._readOnly || !this._vaultMeta) return { ...state, status: 'unavailable' };
+    const raw = this.notes.get(id)?.toJSON() ?? null;
+    const pending = this._writeQueue.get(`note:${id}`);
+    if (pending) {
+      if (!jsonEquivalent(raw, pending.value)) return { ...state, status: 'dirty' };
+      return {
+        ...state,
+        generation: pending.generation,
+        status: pending.inFlight ? 'in-flight' : pending.outcome || 'pending',
+      };
+    }
+    const version = this._noteVersions.get(id);
+    const matches = raw ? JSON.stringify(raw) === this._savedNotes.get(id) : !this._savedNotes.has(id);
+    if (version && matches) return { ...state, status: 'committed', version };
+    return { ...state, status: raw ? 'dirty' : 'missing' };
+  }
+
   getPersistenceStatus() {
     return {
       lastPersistedAt: this.lastPersistedAt,
@@ -545,7 +617,21 @@ export class Database {
   async resolveConflict(preview, action) {
     const { resolveConflict } = await import('./conflict-recovery.js');
     return resolveConflict(this, preview, action, (snapshot) => {
-      this.#adoptVault(snapshot, true);
+      this.#adoptVault(snapshot);
+      // Keep authoritative values/versions separate from pending local drafts.
+      // A draft overlay is never evidence that its contents were committed.
+      for (const [key, entry] of this._writeQueue) {
+        if (key.startsWith('note:')) {
+          if (entry.value) this.notes.set(key.slice(5), Note.fromJSON(entry.value));
+          else this.notes.delete(key.slice(5));
+        } else if (key === CONFIG_KEY) {
+          for (const write of entry.value) {
+            if (write.remove) delete this.config[write.key];
+            else this.config = { ...this.config, [write.key]: structuredClone(write.value) };
+          }
+        }
+      }
+      this.#rebuildLinkState();
       this._mutationRevision++;
       this.#emit();
     });
@@ -844,7 +930,12 @@ export class Database {
 
   // --- CRUD ---------------------------------------------------------------
 
-  saveNote(note, { captureRevision = true, reason = 'autosave' } = {}) {
+  saveNote(note, options = {}) {
+    return this.saveNoteWithReceipt(note, options).note;
+  }
+
+  /** Submit a snapshot and return its first terminal write result separately from the mutable model. */
+  saveNoteWithReceipt(note, { captureRevision = true, reason = 'autosave' } = {}) {
     const previousIdentity = this._identitySignatures.get(note.id) ?? null;
     this.notes.set(note.id, note);
     const nextIdentity = this.#identitySignature(note);
@@ -855,9 +946,17 @@ export class Database {
       this._knowledgeIndex?.refreshSource(note);
     }
     const captures = captureRevision ? [{ note: note.toJSON(), reason }] : [];
-    this.#persist(captures, [], [note.id]);
+    const completion =
+      this.#persist(captures, [], [note.id]) ??
+      Promise.resolve({
+        status: 'unavailable',
+        noteId: note.id,
+        generation: null,
+        version: null,
+        note: structuredClone(note.toJSON()),
+      });
     this.#emit([note.id]);
-    return note;
+    return { note, completion };
   }
 
   createNote(fields = {}, { allowIdentityConflicts = false } = {}) {

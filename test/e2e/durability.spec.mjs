@@ -368,3 +368,286 @@ for (const legacyNotes of [false, true]) {
     }
   });
 }
+
+test('note receipts distinguish a coalesced snapshot from its committed successor', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const page = await openDatabase(context, { seed: true });
+    const result = await page.evaluate(async () => {
+      const note = window.db.getNote('a');
+      note.update({ content: 'Coalesced draft' });
+      const first = window.db.saveNoteWithReceipt(note);
+      note.update({ content: 'Committed successor' });
+      const second = window.db.saveNoteWithReceipt(note);
+      const pending = window.db.getNoteSaveState('a');
+      const receipts = await Promise.all([first.completion, second.completion]);
+      await window.db.flushCurrentWrites();
+      const saved = (await window.db.storage.readCurrentVault()).records.find(([id]) => id === 'a')[1];
+      return { pending, receipts, saved, state: window.db.getNoteSaveState('a') };
+    });
+    expect(result.pending.status).toBe('pending');
+    expect(result.receipts[0]).toMatchObject({
+      status: 'superseded',
+      noteId: 'a',
+      version: null,
+      note: { content: 'Coalesced draft' },
+    });
+    expect(result.receipts[1]).toMatchObject({
+      status: 'committed',
+      noteId: 'a',
+      version: result.saved.version,
+      note: result.saved.value,
+    });
+    expect(result.receipts[1].generation).toBe(result.state.generation);
+    expect(result.state).toMatchObject({ status: 'committed', version: result.saved.version });
+  } finally {
+    await context.close();
+  }
+});
+
+test('note receipts wait for acknowledgement and never acknowledge later queued content', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await openDatabase(context, { seed: true });
+  try {
+    await page.evaluate(() => {
+      const commit = window.db.storage.commitCurrentVault.bind(window.db.storage);
+      let first = true;
+      window.db.storage.commitCurrentVault = async (mutation) => {
+        const result = await commit(mutation);
+        if (first) {
+          first = false;
+          await new Promise((resolve) => {
+            window.releaseReceipt = resolve;
+          });
+        }
+        return result;
+      };
+      const note = window.db.getNote('a');
+      note.update({ content: 'First exact snapshot' });
+      window.firstReceipt = window.db.saveNoteWithReceipt(note).completion;
+      window.firstSettled = false;
+      window.firstReceipt.then(() => {
+        window.firstSettled = true;
+      });
+    });
+    await page.waitForFunction(() => window.releaseReceipt);
+    expect(await page.evaluate(() => window.firstSettled)).toBe(false);
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a').status)).toBe('in-flight');
+    await page.evaluate(() => {
+      const note = window.db.getNote('a');
+      note.update({ content: 'Later exact snapshot' });
+      window.laterReceipt = window.db.saveNoteWithReceipt(note).completion;
+    });
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a').status)).toBe('pending');
+    await page.evaluate(() => window.releaseReceipt());
+    const receipts = await page.evaluate(() => Promise.all([window.firstReceipt, window.laterReceipt]));
+    expect(receipts[0]).toMatchObject({ status: 'committed', version: 2, note: { content: 'First exact snapshot' } });
+    expect(receipts[1]).toMatchObject({ status: 'committed', version: 3, note: { content: 'Later exact snapshot' } });
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a'))).toMatchObject({
+      status: 'committed',
+      version: 3,
+    });
+    const reopened = await openDatabase(context);
+    expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Later exact snapshot');
+  } finally {
+    await page.evaluate(() => window.releaseReceipt?.()).catch(() => {});
+    await context.close();
+  }
+});
+
+test('note receipts report an independent commit despite another note conflict', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const current = await openDatabase(context, { seed: true });
+    const stale = await openDatabase(context);
+    expect(await save(current, 'a', 'Other window version')).toBe(true);
+    const result = await stale.evaluate(async () => {
+      const a = window.db.getNote('a');
+      a.update({ content: 'Retained conflict draft' });
+      const first = window.db.saveNoteWithReceipt(a);
+      const b = window.db.getNote('b');
+      b.update({ content: 'Independent acknowledged note' });
+      const second = window.db.saveNoteWithReceipt(b);
+      const receipts = await Promise.all([first.completion, second.completion]);
+      const drained = await window.db.flushCurrentWrites();
+      return { receipts, drained, a: window.db.getNoteSaveState('a'), b: window.db.getNoteSaveState('b') };
+    });
+    expect(result.drained).toBe(false);
+    expect(result.receipts[0]).toMatchObject({
+      status: 'conflict',
+      version: null,
+      note: { content: 'Retained conflict draft' },
+    });
+    expect(result.receipts[0].conflictId).toBeTruthy();
+    expect(result.receipts[1]).toMatchObject({
+      status: 'committed',
+      version: 2,
+      note: { content: 'Independent acknowledged note' },
+    });
+    expect(result.a.status).toBe('conflict');
+    expect(result.b.status).toBe('committed');
+  } finally {
+    await context.close();
+  }
+});
+
+test('a failed note receipt stays failed while an explicit retry has its own committed receipt', async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  try {
+    const page = await openDatabase(context, { seed: true });
+    const result = await page.evaluate(async () => {
+      const commit = window.db.storage.commitCurrentVault.bind(window.db.storage);
+      window.db.storage.commitCurrentVault = async () => {
+        throw new Error('Injected note receipt failure');
+      };
+      const note = window.db.getNote('a');
+      note.update({ content: 'Retry exact source' });
+      const failed = window.db.saveNoteWithReceipt(note);
+      const first = await failed.completion;
+      const failedState = window.db.getNoteSaveState('a');
+      window.db.storage.commitCurrentVault = commit;
+      const retried = window.db.saveNoteWithReceipt(note);
+      const second = await retried.completion;
+      await window.db.flushCurrentWrites();
+      second.note.content = 'Mutated public receipt';
+      return {
+        first,
+        failedState,
+        original: await failed.completion,
+        second,
+        saved: (await window.db.storage.readCurrentVault()).records.find(([id]) => id === 'a')[1].value.content,
+        state: window.db.getNoteSaveState('a'),
+      };
+    });
+    expect(result.first).toMatchObject({ status: 'failed', version: null, note: { content: 'Retry exact source' } });
+    expect(result.failedState.status).toBe('failed');
+    expect(result.original).toEqual(result.first);
+    expect(result.second).toMatchObject({ status: 'committed', version: 2 });
+    expect(result.saved).toBe('Retry exact source');
+    expect(result.state.status).toBe('committed');
+  } finally {
+    await context.close();
+  }
+});
+
+test('note save state does not call an unqueued model edit committed', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const page = await openDatabase(context, { seed: true });
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a'))).toMatchObject({
+      status: 'committed',
+      version: 1,
+    });
+    await page.evaluate(() => window.db.getNote('a').update({ content: 'Unqueued source' }));
+    expect(await page.evaluate(() => window.db.flushCurrentWrites())).toBe(true);
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a'))).toMatchObject({
+      status: 'dirty',
+      version: null,
+    });
+  } finally {
+    await context.close();
+  }
+});
+
+test('note receipts report unavailable storage without acknowledging a read-only draft', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const page = await openDatabase(context, { seed: true });
+    const result = await page.evaluate(async () => {
+      window.db._readOnly = true;
+      const note = window.db.getNote('a');
+      note.update({ content: 'Read-only draft' });
+      const receipt = await window.db.saveNoteWithReceipt(note).completion;
+      return {
+        receipt,
+        state: window.db.getNoteSaveState('a'),
+        saved: (await window.db.storage.readCurrentVault()).records.find(([id]) => id === 'a')[1].value.content,
+      };
+    });
+    expect(result.receipt).toMatchObject({
+      status: 'unavailable',
+      version: null,
+      note: { content: 'Read-only draft' },
+    });
+    expect(result.state.status).toBe('unavailable');
+    expect(result.saved).toBe('Original a');
+  } finally {
+    await context.close();
+  }
+});
+
+test('note receipts retain their original generation when a replacement commits first', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await openDatabase(context, { seed: true });
+  try {
+    const originalGeneration = await page.evaluate(() => window.db.captureMutationToken().generation);
+    await page.evaluate(() => {
+      const commit = window.db.storage.commitCurrentVault.bind(window.db.storage);
+      window.db.storage.commitCurrentVault = async (mutation) => {
+        const result = await commit(mutation);
+        if (mutation.replacement)
+          await new Promise((resolve) => {
+            window.releaseReplacement = resolve;
+          });
+        return result;
+      };
+      const notes = [...window.db.notes.values()].map((note) => ({ ...note.toJSON(), content: 'Replacement source' }));
+      window.replacing = window.db.replaceVault({ notes, config: window.db.config });
+    });
+    await page.waitForFunction(() => window.releaseReplacement);
+    await page.evaluate(() => {
+      const note = window.db.getNote('a');
+      note.update({ content: 'Old generation draft' });
+      window.receipt = window.db.saveNoteWithReceipt(note).completion;
+    });
+    expect(await page.evaluate(() => window.db.getNoteSaveState('a'))).toMatchObject({
+      status: 'pending',
+      generation: originalGeneration,
+      version: null,
+    });
+    await page.evaluate(() => window.releaseReplacement());
+    expect(await page.evaluate(() => window.replacing)).toBe(true);
+    expect(await page.evaluate(() => window.receipt)).toMatchObject({
+      status: 'conflict',
+      generation: originalGeneration,
+      version: null,
+    });
+    const reopened = await openDatabase(context);
+    expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Replacement source');
+    expect(await reopened.evaluate(() => window.db.getNoteSaveState('a').generation)).not.toBe(originalGeneration);
+  } finally {
+    await page.evaluate(() => window.releaseReplacement?.()).catch(() => {});
+    await context.close();
+  }
+});
+
+test('note save observers cannot change outcomes and unsubscribe without rebuilding notes', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const page = await openDatabase(context, { seed: true });
+    const result = await page.evaluate(async () => {
+      const states = [];
+      const unsubscribe = window.db.subscribePersistence((db, ids) => {
+        if (ids?.includes('a')) states.push(db.getNoteSaveState('a').status);
+        throw new Error('Injected observer failure');
+      });
+      const note = window.db.getNote('a');
+      note.update({ content: 'Observed exact source' });
+      const receipt = await window.db.saveNoteWithReceipt(note).completion;
+      await window.db.flushCurrentWrites();
+      unsubscribe();
+      const count = states.length;
+      note.update({ content: 'After unsubscribe' });
+      const second = await window.db.saveNoteWithReceipt(note).completion;
+      return { receipt, second, states, count };
+    });
+    expect(result.receipt.status).toBe('committed');
+    expect(result.second.status).toBe('committed');
+    expect(result.states).toEqual(expect.arrayContaining(['pending', 'in-flight', 'committed']));
+    expect(result.states).toHaveLength(result.count);
+  } finally {
+    await context.close();
+  }
+});

@@ -588,3 +588,79 @@ The complete affected conflict-recovery and planned-preview suites pass
 controls. Static checks pass; typecheck remains at 47 baseline diagnostics.
 The Playwright setup built the unchanged application successfully. The original
 failed slow-transition report and all subsequent reports remain preserved.
+
+## Exact note submission receipts
+
+`saveNoteWithReceipt(note, options)` returns the existing mutable `note` and a
+`completion` promise for that submitted snapshot. Existing `saveNote` callers
+retain their return value and behavior. A receipt resolves with `noteId`, vault
+`generation`, a detached `note` snapshot, and one terminal status:
+
+- `committed`: the transaction was acknowledged; `version` is the exact committed
+  note version. Optional history is outside this acknowledgement.
+- `superseded`: a newer queued snapshot replaced this one before its write
+  began. It was not individually committed, even if a later draft contains it.
+- `conflict`: the precondition failed; `conflictId` identifies retained recovery.
+- `failed` or `unavailable`: no successful acknowledgement was received. The
+  draft remains pending; do not infer rollback or delete it.
+
+Only `committed` supplies a version. A failed receipt is terminal and does not
+turn into success when storage is retried. An explicit resubmission receives a
+new receipt. A replacement submission during a failed drain is eligible for its
+own attempt; the unchanged failed entry is not hot-retried. An in-flight older
+submission can commit while a newer draft remains pending, and each receives
+its own exact snapshot/version outcome. Mutable receipt data cannot alter the
+stored note or the private saved baseline. Receipts from read-only or injected
+unversioned storage report `unavailable`, never a fabricated committed version.
+
+`getNoteSaveState(id)` describes the current model against that note's queued
+snapshot or confirmed saved baseline, with pending, in-flight, dirty, committed,
+conflict, failed, unavailable and missing states. An empty global queue is not
+sufficient. `subscribePersistence` provides separate notifications so a save
+indicator can update without rebuilding the editor. Its observers cannot change
+a storage outcome and must unsubscribe when their owner is destroyed.
+
+Conflict resolution now adopts the actual committed snapshot into saved
+baselines/versions, then overlays retained drafts only into the local model.
+Previously, the overlay was passed into authoritative adoption and could label
+an uncommitted draft as the saved baseline. The maintained acknowledgement race
+reproduced that mismatch in all three engines before the change. The original
+draft remains on its original queued base, so this repair does not silently
+rebase it or bypass conflict handling.
+
+Receipt/adoption checks initially passed 18/18 across the three engines. The full
+local run then passed 365/365: 291 durability checks, 27 application cases and 47
+axe scans. This includes generation, unavailable-storage and observer cases.
+Node 22/24 pass 557/557 each. Per-pane UI and application caller adoption remain
+required: the API alone does not complete user-visible save acknowledgement.
+Do not use receipt contents to replace newer buffered typing or treat a previous
+committed version as proof of the current draft.
+
+## Refreshing an invalidated initial conflict comparison
+
+The preceding checkpoint's CI run 37175809809 completed with 341 clean browser
+passes on Node 24, and 340 clean passes plus one retried WebKit recovery-export
+case on Node 22. Both builds passed and both budget gates failed. The original
+startup and contrast cases passed in both lanes. The new recovery case showed a
+correct stale-preview rejection during initial loading, with blank comparisons
+and no direct refresh action; no new data loss was established.
+
+Recovery now exposes **Refresh comparison**. Loading clears the old comparison
+and disables mutation choices; the still-existing selected conflict is retained.
+Refresh never applies a choice. A delayed older read failure cannot replace the
+status of a newer review. Refresh is disabled while a recovery commit is busy.
+The ordinary export fixture now waits for actual deferred startup; the separate
+adversarial startup case remains unchanged.
+
+A held-read/config-change regression fails the prior UI because the refresh
+control is missing. After the fix, all 63 recovery checks pass across Chromium,
+Firefox and WebKit, including both new refresh races, export, axe and 1440x900 /
+375x812 root geometry. The mobile recovery screenshot was inspected with all
+footer controls inside the viewport. This affected-suite run follows the clean
+365-case run; a combined exact-head CI run is still required.
+
+Final static/typecheck checks pass (47 retained typecheck diagnostics). Build
+succeeds. Gzip budgets still fail: shell 86,275 / 83,968 bytes and precache
+251,148 / 243,712 bytes; conflicts is 6,247 / 7,168 bytes. Limits, accessibility
+rules and visual baselines are unchanged. Migration activation, UI/caller
+acknowledgements, remaining acceptance and release verification remain open.

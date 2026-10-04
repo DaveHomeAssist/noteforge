@@ -44,6 +44,17 @@ async function conflict(browser) {
   return { context, a, b };
 }
 
+async function waitForRecoveryStartup(app) {
+  await app.evaluate(() => window.app.ready);
+  // app.ready covers the shell; deferred alias reconciliation can still
+  // commit configuration and invalidate a recovery preview afterwards.
+  await app.waitForFunction(() => window.app.phase5 && window.app.phase6);
+  await app.evaluate(async () => {
+    await Promise.all([window.app.phase5.ready, window.app.phase6.ready, window.app.vaultRefreshReady]);
+    await window.app.db.flush();
+  });
+}
+
 for (const action of ['keep-current', 'save-copy', 'use-draft']) {
   test(`conflict ${action} is durable and archives both recoverable versions`, async ({ browser }) => {
     const { context, b } = await conflict(browser);
@@ -184,6 +195,7 @@ test('a draft queued during resolution acknowledgement is retained on its origin
     await b.evaluate(() => window.outcome);
     expect(await b.evaluate(() => window.db.flushCurrentWrites())).toBe(false);
     expect(await b.evaluate(() => window.db.getNote('a').content)).toBe('Newer draft during commit');
+    expect(await b.evaluate(() => JSON.parse(window.db._savedNotes.get('a')).content)).toBe('Draft in B');
     const reopened = await open(context);
     expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Draft in B');
     expect(
@@ -206,14 +218,7 @@ test('reopened conflicts are compared, exported and resolved through the applica
     await b.close();
     const app = await context.newPage();
     await app.goto(devUrl());
-    await app.evaluate(() => window.app.ready);
-    // app.ready covers the shell; deferred alias reconciliation can still
-    // commit configuration and invalidate a recovery preview afterwards.
-    await app.waitForFunction(() => window.app.phase5 && window.app.phase6);
-    await app.evaluate(async () => {
-      await Promise.all([window.app.phase5.ready, window.app.phase6.ready, window.app.vaultRefreshReady]);
-      await window.app.db.flush();
-    });
+    await waitForRecoveryStartup(app);
     await app.getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
@@ -326,6 +331,105 @@ test('deferred startup invalidates an open recovery review and requires another 
   }
 });
 
+test('an invalidated initial comparison can be refreshed without applying a recovery choice', async ({ browser }) => {
+  const { context, b } = await conflict(browser);
+  try {
+    await b.close();
+    const app = await context.newPage();
+    await app.goto(devUrl());
+    await waitForRecoveryStartup(app);
+    await app.evaluate(() => {
+      window.app.stopVaultRefresh?.();
+      const db = window.app.db;
+      const preview = db.previewConflict.bind(db);
+      db.previewConflict = (...args) => {
+        db.previewConflict = preview;
+        const read = db.storage.readCurrentVault.bind(db.storage);
+        db.storage.readCurrentVault = async () => {
+          db.storage.readCurrentVault = read;
+          const snapshot = await read();
+          await new Promise((resolve) => {
+            window.releaseReviewRead = resolve;
+          });
+          return snapshot;
+        };
+        return preview(...args);
+      };
+    });
+    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
+    await app.waitForFunction(() => window.releaseReviewRead);
+    await app.evaluate(async () => {
+      window.app.db.setConfig({ showGraph: !window.app.db.config.showGraph });
+      await window.app.db.flushCurrentWrites();
+      window.releaseReviewRead();
+    });
+    await expect(dialog.getByRole('status')).toContainText('draft or saved vault changed');
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue('');
+    for (const action of ['Keep saved version', 'Save draft as a copy', 'Replace saved version with draft'])
+      await expect(dialog.getByRole('button', { name: action, exact: true })).toBeDisabled();
+    const refresh = dialog.getByRole('button', { name: 'Refresh comparison', exact: true });
+    await expect(refresh).toBeEnabled();
+    await refresh.click();
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
+    await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved in A/);
+    const state = await app.evaluate(async () => ({
+      archive: await window.app.db.storage.readResolvedConflicts(),
+      snapshot: await window.app.db.storage.readCurrentVault(),
+    }));
+    expect(state.archive).toEqual([]);
+    expect(state.snapshot.conflicts).toHaveLength(1);
+    expect(state.snapshot.records.some(([, record]) => record.value?.content === 'Draft in B')).toBe(false);
+    expect(state.snapshot.records.find(([id]) => id === 'a')[1].value.content).toBe('Saved in A');
+  } finally {
+    await context.close();
+  }
+});
+
+test('refresh retains the selected conflict and ignores an older read failure', async ({ browser }) => {
+  const { context, a, b } = await conflict(browser);
+  try {
+    await a.evaluate(() => window.save('b', 'Saved B elsewhere'));
+    await b.evaluate(() => window.save('b', 'Second draft in B'));
+    await b.close();
+    const app = await context.newPage();
+    await app.goto(devUrl());
+    await waitForRecoveryStartup(app);
+    await app.evaluate(() => window.app.stopVaultRefresh?.());
+    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
+    const choice = dialog.getByLabel('Conflict', { exact: true });
+    await expect(choice.locator('option')).toHaveCount(2);
+    await choice.selectOption({ label: 'b' });
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Second draft in B/);
+    const selected = await choice.inputValue();
+    await app.evaluate(() => {
+      const storage = window.app.db.storage;
+      const read = storage.readCurrentVault.bind(storage);
+      storage.readCurrentVault = () => {
+        storage.readCurrentVault = read;
+        return new Promise((_, reject) => {
+          window.failOlderReviewRead = () => reject(new Error('Older read failure'));
+        });
+      };
+    });
+    const refresh = dialog.getByRole('button', { name: 'Refresh comparison', exact: true });
+    await refresh.click();
+    await app.waitForFunction(() => window.failOlderReviewRead);
+    await expect(dialog.getByRole('button', { name: 'Save draft as a copy', exact: true })).toBeDisabled();
+    await refresh.click();
+    await expect(choice).toHaveValue(selected);
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Second draft in B/);
+    await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved B elsewhere/);
+    await app.evaluate(() => window.failOlderReviewRead());
+    await expect(dialog.getByRole('status')).toHaveText('Review both versions, then choose an action.');
+    await expect(dialog.getByRole('button', { name: 'Save draft as a copy', exact: true })).toBeEnabled();
+    expect(await app.evaluate(() => window.app.db.storage.readResolvedConflicts())).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 test('a changed draft record invalidates another window preview without a vault sequence change', async ({
   browser,
 }) => {
@@ -364,7 +468,7 @@ test('recovery export includes newly stored conflicts and still exports local dr
   try {
     const app = await context.newPage();
     await app.goto(devUrl());
-    await app.evaluate(() => window.app.ready);
+    await waitForRecoveryStartup(app);
     await app.getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
