@@ -41,7 +41,7 @@ export default defineConfig({
   projects: [
     ...['chromium', 'firefox', 'webkit'].map((browserName) => ({
       name: `durability-${browserName}`,
-      testMatch: ['identity-commit.spec.mjs', 'editor-save-state.spec.mjs', 'capture-receipts.spec.mjs', 'durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs', 'storage-recovery.spec.mjs', 'conflict-recovery.spec.mjs', 'vault-refresh.spec.mjs', 'planned-preview.spec.mjs', 'editor-adoption.spec.mjs'],
+      testMatch: ['editor-scale.spec.mjs', 'identity-commit.spec.mjs', 'editor-save-state.spec.mjs', 'capture-receipts.spec.mjs', 'durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs', 'storage-recovery.spec.mjs', 'conflict-recovery.spec.mjs', 'vault-refresh.spec.mjs', 'planned-preview.spec.mjs', 'editor-adoption.spec.mjs'],
       use: { browserName, channel: undefined },
     })),
     {

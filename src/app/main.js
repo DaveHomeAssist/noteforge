@@ -191,7 +191,9 @@ class App {
         this.editor.syncAuthoritative(noteIds);
         this.#applySettings(normalizeSettings(this.db.config));
       }
-      this.noteList.render();
+      // A burst of commits shares one sidebar redraw; editor/durability state
+      // below still updates synchronously and the frame reads the latest model.
+      this.noteList.scheduleRender();
       this.editor.refresh();
       if (external) this.currentId = this.editor.currentId;
       this.noteList.setActive(this.currentId);
@@ -955,7 +957,7 @@ class App {
           editor: this.editor,
           ensureRecovery: () => this.#ensureRecovery(),
           announce: (message) => this.#announce(message),
-          refreshSearch: () => this.noteList.render(),
+          refreshSearch: () => this.noteList.scheduleRender(),
         });
         await this.phase5.ready;
         return this.phase5;

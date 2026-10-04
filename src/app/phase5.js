@@ -234,13 +234,25 @@ export class Phase5Controller {
 
   async #reconcileAliases(changedOnly, noteIds) {
     const token = this.db.captureMutationToken();
-    const allNotes = this.db.getNotesInScope('all').map((note) => Note.fromJSON(note.toJSON()));
-    const liveIds = new Set(allNotes.map((note) => note.id));
     const requested = Array.isArray(noteIds) ? new Set(noteIds) : null;
-    const notes = requested ? allNotes.filter((note) => requested.has(note.id)) : allNotes;
-    if (requested) for (const id of requested) if (!liveIds.has(id)) this.signatures.delete(id);
+    const sourceNotes = requested
+      ? [...requested].map((id) => this.db.notes.get(id)).filter(Boolean)
+      : this.db.getNotesInScope('all');
+    // Metadata-only emits need no YAML work. Preserve a detached planning input
+    // for changed sources, and rebuild an index if storage replaced its Note.
+    const notes = sourceNotes
+      .filter(
+        (note) =>
+          !changedOnly ||
+          !sameSignature(this.signatures.get(note.id), note) ||
+          !(note._propertySearchIndex instanceof Map),
+      )
+      .map((note) => Note.fromJSON(structuredClone(note.toJSON())));
+    for (const id of requested || this.signatures.keys()) if (!this.db.notes.has(id)) this.signatures.delete(id);
     const blockedById = new Map(
-      (changedOnly ? this.repairReport : []).filter((entry) => liveIds.has(entry.id)).map((entry) => [entry.id, entry]),
+      (changedOnly ? this.repairReport : [])
+        .filter((entry) => this.db.notes.has(entry.id))
+        .map((entry) => [entry.id, entry]),
     );
     const replacements = [];
     const captures = [];
@@ -318,12 +330,12 @@ export class Phase5Controller {
         },
       });
     }
-    const indexIds = requested || new Set(allNotes.map((note) => note.id));
+    const indexIds = new Set(notes.map((note) => note.id));
     for (const id of indexIds) {
       const note = this.db.notes.get(id);
       if (note) await this.#indexNote(note);
     }
-    this.refreshSearch();
+    if (notes.length) this.refreshSearch();
     if (blocked.length)
       this.announce(
         `${blocked.length} note${blocked.length === 1 ? '' : 's'} need YAML repair before aliases can move to frontmatter.`,

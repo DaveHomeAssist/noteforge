@@ -108,7 +108,19 @@ export class NoteList {
     return Boolean(control);
   }
 
+  scheduleRender() {
+    if (this._renderFrame != null) return;
+    this._renderFrame = requestAnimationFrame(() => {
+      this._renderFrame = null;
+      if (this.els.list.isConnected) this.render();
+    });
+  }
+
   render() {
+    if (this._renderFrame != null) {
+      cancelAnimationFrame(this._renderFrame);
+      this._renderFrame = null;
+    }
     if (this.els.sort) this.els.sort.value = this.#sortMode();
     this.#renderTags();
     this.#renderList();
@@ -152,14 +164,16 @@ export class NoteList {
   }
 
   #siblingComparator() {
+    // Reuse locale setup for this sort, including timestamp ties in large vaults.
+    const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+    const byTitle = (a, b) => collator.compare(a.title || '', b.title || '');
     const base = {
       updated: (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
       created: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      title: (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }),
+      title: byTitle,
     }[this.#sortMode()];
     // Equal timestamps (or titles) fall back to title, then id, so the order is
     // the same on every render instead of following storage load order.
-    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
     const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     return (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || base(a, b) || byTitle(a, b) || byId(a, b);
   }
@@ -192,7 +206,10 @@ export class NoteList {
         })
         .filter(Boolean);
       if (q) scored.sort((a, b) => b.score - a.score || new Date(b.note.updatedAt) - new Date(a.note.updatedAt));
-      else scored.sort((a, b) => this.#siblingComparator()(a.note, b.note));
+      else {
+        const compare = this.#siblingComparator();
+        scored.sort((a, b) => compare(a.note, b.note));
+      }
       return {
         searching,
         rows: scored.map((r) => ({

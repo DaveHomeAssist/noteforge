@@ -316,3 +316,75 @@ error recovery, warm offline operation and the route's actual usability contract
 qualified. Full editor/history scale measurements and the budget decision remain
 open; do not remove required safety code or relabel synchronous dependencies just
 to make a route counter pass.
+
+### Production editor and history qualification (2026-10-04)
+
+`test/e2e/editor-scale.spec.mjs` runs the actual production build in Chromium,
+Firefox and WebKit with 1,000 and 5,000 synthetic activated notes. Each case types
+500 characters using real keyboard events in 25 batches, retains the normal
+400 ms autosave debounce, discards five warm-up batches and measures twenty batches.
+The real revision service and rolling snapshots remain enabled. A second case at
+each size toggles another note's pin every fifth input, overlapping typing with
+metadata writes and database notifications.
+
+The test checks each batch's final exact save receipt, visible saved state,
+caret/focus, all retained committed revision sources and unknown metadata, unchanged other notes, per-note
+writes, portable backup integrity, reload, current sidebar ordering and bounded
+rendered rows. It does not replace history callbacks with no-ops or force flushes
+to bypass autosave during measurement. Setup/reload waits include optional
+controllers and indexing; `initializedMs` is not a first-paint metric. Timing uses
+the page's real clock. `beforeinput` to the next animation-frame callback is an
+upper-bound scheduling proxy for DOM reflection, not a physical display or IME
+measurement. Device/IME acceptance and backup restore remain separate gates.
+
+The original ordinary cases passed, but overlapping metadata updates failed the
+unchanged 50 ms input limit in WebKit: p95 61 ms at 1,000 notes and 122 ms at 5,000.
+Reusing locale setup alone, then coalescing the main subscriber's sidebar redraw,
+were insufficient. Property reconciliation still copied every note and requested
+another redraw for unchanged Markdown. Two new unit regressions demonstrated
+unrelated source serialization before repair. The final targeted WebKit rerun
+measured 22 ms and 29 ms respectively after narrowing property refresh and sharing
+the redraw boundary. Those are local targeted measurements, not CI or release
+acceptance. Full-suite/exact-head evidence is recorded with the implementation
+checkpoint. No interaction or bundle threshold was raised.
+
+The edited fixture uses the canonical block-body whitespace specified in NFM §17;
+untouched fixtures retain their final newline. An initial strict newline assertion
+failed because the specified editor normalization drops a final newline on edit.
+That retained diagnostic is not a new persistence defect, and this qualification
+does not claim arbitrary whitespace survives editing. Original failed/aborted
+attempts and their traces are retained alongside the final report.
+
+A host pause during automated typing can legitimately produce an intermediate
+autosave. The fixture tracks each submission and its history callback by exact
+source, waits for the batch's final source, and checks all committed sources up
+to the real retention limit. A deliberate pause in warmup exercises this path;
+neither the save count nor history count is assumed to equal the batch count.
+The first full run retained 528 passes, one intermediate-receipt assertion failure
+and one Chromium launch failure before the banner test began. The launch process
+exited with SIGKILL; its cause is unverified. Affected reruns are reported separately.
+
+The corrected affected run passes all 12 scale cases and six banner cases without
+retries/skips. Input p95 is 11–26 ms across engines and both sizes; background
+WebKit is 24/26 ms. Each case retains 26 exact committed revisions, including the
+controlled warmup pause. The original full run remains recorded as 528/530;
+these affected reruns do not retroactively turn it into a clean full-suite pass.
+
+### Reliability budget recommendation, pending review
+
+The measured repair emits 90,164 B shell and 255,447 B precache gzip. Recommend a
+deliberate reliability rebaseline to 99,328 B (97 KiB) and 281,600 B (275 KiB),
+using the original measured-size-plus-10%, whole-KiB policy. Recalculate against
+the final candidate before approval. These are proposed limits, not approved
+exceptions: the existing 82/238 KiB gates and the earlier held-shell decision
+remain in force, and no budget configuration has changed.
+
+Atomic writes, exact save state and basic failed-startup recovery belong to the
+required editing boundary. Making them optional first-save dependencies would
+weaken reliability; moving more code to lazy chunks would not reduce the complete
+offline precache. Conflict review, archive encoding and other optional features
+already have lazy routes. A general editor/controller rewrite would expand this
+repair without a measured benefit sufficient to justify its risk. The proposed
+additional download/cache allowance must be reviewed explicitly and entered in
+the budget log with an approver before the limits change. Local interaction
+measurements do not establish slow-network startup or physical-device performance.

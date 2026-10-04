@@ -942,3 +942,36 @@ interception count; normal recovery/archive tests continue with workers allowed.
 The earlier startup head 1a18984 completed CI37180954432 with 497 browser passes
 in each Node lane, no retries, and pinned visuals passing; only budgets failed.
 Those full-suite results are historical evidence for that head, not this change.
+
+## Production editing at representative vault sizes
+
+The maintained production test now measures actual typing, normal autosave,
+acknowledgements and revision completion at 1000/5000 notes in all three engines.
+Both ordinary input and concurrent metadata notifications must preserve all 500
+typed characters, caret/focus, each batch's exact receipt, all retained committed revisions, unknown fields,
+other notes, backup integrity and reopening. Sidebar ordering, active state and
+bounded rows remain asserted. Synthetic activation is test setup only; it does
+not qualify old-client compatibility or permit production activation.
+
+Overlapping metadata updates exposed a WebKit interaction-budget failure even
+though source and recovery assertions passed. The repair keeps conditional writes
+unchanged: it shares one frame for database/property-triggered sidebar redraws,
+reuses a comparator within each locale-aware sort, and reconciles only affected
+property sources. Pin changes no longer clone the entire vault or reparse YAML;
+replacement Note objects still rebuild missing derived indexes. Two maintained
+unit regressions fail before the property change and pass afterward. See
+[measurement scope and limitations](performance_budgets.md#production-editor-and-history-qualification-2026-10-04).
+
+The preceding archive head 6725878 completed CI37181978767 with 518 browser cases
+and 563 unit cases passing in each Node 22/24 lane, without retries, plus pinned
+visuals. Both lanes failed only shell/precache budgets. That CI does not cover the
+subsequent performance repair. Remaining caller/local-snapshot acceptance, actual
+old/new migration compatibility, bundle budgets and delivery remain release gates.
+
+The corrected affected run passes all 12 scale cases across Chromium, Firefox
+and WebKit plus all six banner cases, without retries or skips. Input p95 ranges
+from 11 to 26 ms; background WebKit measures 24/26 ms at 1000/5000 notes. Each case
+commits and retains 26 exact sources, including the deliberate intermediate
+warmup save. These are affected reruns after the full run's 528 passes and two
+failures, not a claim of one clean full run. Node22/24 each pass 565 cases. Static,
+typecheck ratchet, build and audit pass; shell/precache budgets remain failing.
