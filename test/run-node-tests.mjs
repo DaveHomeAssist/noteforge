@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const TEST_CASE_FLOOR = 540;
+export const TEST_CASE_FLOOR = 557;
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const REPORT_DIR = resolve(ROOT, 'test-results');

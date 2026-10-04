@@ -20,7 +20,7 @@ export function createLinkToolsElements(root = document.body) {
     <div class="modal__panel link-tools" role="dialog" aria-modal="true" aria-labelledby="link-tools-title" tabindex="-1">
       <header class="modal__header"><h2 class="modal__title" id="link-tools-title">Link tools</h2><button class="btn btn--ghost" data-close title="Close" aria-label="Close link tools">${icon('x')}</button></header>
       <div id="link-tools-content" class="link-tools__content"></div>
-      <footer class="link-tools__footer"><span id="link-tools-status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-close>Close</button><button type="button" class="btn btn--primary" id="link-tools-apply">Apply</button></div></footer>
+      <footer class="link-tools__footer"><span id="link-tools-status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-close>Close</button><button type="button" class="btn btn--ghost" id="link-tools-refresh" hidden>Refresh preview</button><button type="button" class="btn btn--primary" id="link-tools-apply">Apply</button></div></footer>
     </div>`;
   root.appendChild(overlay);
   return {
@@ -29,18 +29,28 @@ export function createLinkToolsElements(root = document.body) {
     content: overlay.querySelector('#link-tools-content'),
     status: overlay.querySelector('#link-tools-status'),
     apply: overlay.querySelector('#link-tools-apply'),
+    refresh: overlay.querySelector('#link-tools-refresh'),
   };
 }
 
 export class LinkToolsView {
-  constructor(els, db, { onApplied = () => {} } = {}) {
+  constructor(els, db, { onApplied = () => {}, refreshPreview } = {}) {
     this.els = els;
     this.db = db;
     this.links = new LinkOperations(db);
     this.onApplied = onApplied;
+    this.refreshPreview = refreshPreview;
+    this.epoch = 0;
+    this.busy = false;
+    this.stale = false;
+    this.intent = null;
     this.mode = null;
     this.plan = null;
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus() });
+    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus(), onEscape: () => this.close() });
+    this.els.overlay.addEventListener('click', (event) => {
+      if (event.target.closest('[data-close]')) this.close();
+    });
+    this.els.refresh?.addEventListener('click', () => this.#refresh());
     this.els.apply.addEventListener('click', () => this.#apply());
     this.els.content.addEventListener('click', (event) => {
       const rename = event.target.closest('[data-repair-rename]');
@@ -63,7 +73,7 @@ export class LinkToolsView {
   }
 
   showRename(noteId, proposedTitle) {
-    this.mode = 'rename';
+    this.#begin('rename', { noteId, proposedTitle });
     this.noteId = noteId;
     this.els.title.textContent = 'Rename note safely';
     this.els.apply.hidden = false;
@@ -78,7 +88,7 @@ export class LinkToolsView {
   }
 
   showMention(mention) {
-    this.mode = 'mention';
+    this.#begin('mention', structuredClone(mention));
     this.els.title.textContent = 'Convert mention to wikilink';
     this.els.apply.hidden = false;
     this.els.apply.textContent = 'Convert mention';
@@ -98,7 +108,7 @@ export class LinkToolsView {
   }
 
   showAliasRemoval(noteId, alias) {
-    this.mode = 'alias-repair';
+    this.#begin('alias-repair', { noteId, alias });
     this.els.title.textContent = 'Remove conflicting alias';
     this.els.apply.hidden = false;
     this.els.apply.textContent = 'Remove alias';
@@ -114,7 +124,7 @@ export class LinkToolsView {
   }
 
   showReport() {
-    this.mode = 'report';
+    this.#begin('report', null);
     this.plan = null;
     this.els.title.textContent = 'Link integrity report';
     this.els.apply.hidden = true;
@@ -145,6 +155,53 @@ export class LinkToolsView {
     this.#present();
   }
 
+  #begin(mode, intent) {
+    this.epoch++;
+    this.mode = mode;
+    this.intent = intent;
+    this.stale = false;
+    if (this.els.refresh) this.els.refresh.hidden = true;
+  }
+
+  close() {
+    this.epoch++;
+    this.modal.close();
+  }
+
+  async #refresh() {
+    if (this.busy || !this.intent) return;
+    const epoch = this.epoch;
+    const mode = this.mode;
+    const intent = structuredClone(this.intent);
+    this.busy = true;
+    this.#syncApply();
+    this.els.status.textContent = 'Refreshing saved notes for a new preview…';
+    try {
+      await this.refreshPreview?.();
+      if (epoch !== this.epoch || !this.open) return;
+      this.busy = false;
+      if (mode === 'rename') this.showRename(intent.noteId, intent.proposedTitle);
+      else if (mode === 'alias-repair') this.showAliasRemoval(intent.noteId, intent.alias);
+      else this.showMention(intent);
+    } catch (error) {
+      if (epoch === this.epoch && this.open) this.els.status.textContent = error?.message || String(error);
+    } finally {
+      this.busy = false;
+      this.#syncApply();
+    }
+  }
+
+  #syncApply() {
+    this.els.apply.disabled = this.busy || this.stale || !this.plan?.valid;
+    if (this.els.refresh) {
+      this.els.refresh.hidden = !this.stale;
+      this.els.refresh.disabled = this.busy;
+    }
+    this.els.content.querySelectorAll('input, button').forEach((control) => {
+      control.disabled = this.busy;
+    });
+  }
+
   #present() {
     if (this.modal.isOpen) this.modal.focusInitial();
     else this.modal.open();
@@ -155,6 +212,8 @@ export class LinkToolsView {
   }
 
   #previewRename(value) {
+    this.epoch++;
+    this.intent.proposedTitle = value;
     this.plan = this.links.planRename(this.noteId, value);
     const preview = this.els.content.querySelector('#link-tools-preview');
     if (!preview) return;
@@ -176,32 +235,38 @@ export class LinkToolsView {
   }
 
   #setPlanState() {
-    this.els.apply.disabled = !this.plan?.valid;
+    this.#syncApply();
     this.els.status.textContent = this.plan?.valid
       ? 'Preview ready. No data has been changed.'
       : this.plan?.message || '';
   }
 
   async #apply() {
-    if (!this.plan?.valid) return;
-    this.els.apply.disabled = true;
+    if (!this.plan?.valid || this.busy || this.stale) return;
+    const plan = this.plan;
+    const mode = this.mode;
+    const epoch = this.epoch;
+    this.busy = true;
+    this.#syncApply();
     this.els.status.textContent =
-      this.mode === 'rename'
+      mode === 'rename'
         ? 'Applying atomic rename…'
-        : this.mode === 'alias-repair'
+        : mode === 'alias-repair'
           ? 'Removing conflicting alias…'
           : 'Converting mention…';
     try {
       const result =
-        this.mode === 'rename'
-          ? await this.links.applyRenamePlan(this.plan)
-          : this.mode === 'alias-repair'
-            ? await this.links.applyAliasRemovalPlan(this.plan)
-            : await this.links.applyMentionPlan(this.plan);
+        mode === 'rename'
+          ? await this.links.applyRenamePlan(plan)
+          : mode === 'alias-repair'
+            ? await this.links.applyAliasRemovalPlan(plan)
+            : await this.links.applyMentionPlan(plan);
+      if (epoch !== this.epoch || !this.open) return;
+      this.plan = null;
       this.els.status.textContent =
-        this.mode === 'rename'
+        mode === 'rename'
           ? `Rename completed. ${result.linkCount} link${result.linkCount === 1 ? '' : 's'} updated.`
-          : this.mode === 'alias-repair'
+          : mode === 'alias-repair'
             ? `Alias “${result.alias}” removed.`
             : 'Mention converted to a wikilink.';
       this.els.apply.hidden = true;
@@ -210,10 +275,16 @@ export class LinkToolsView {
         '<p class="link-tools__healthy" tabindex="-1">Change saved with a local safety revision.</p>',
       );
       this.els.content.querySelector('.link-tools__healthy')?.focus();
-      this.onApplied({ mode: this.mode, result });
+      this.onApplied({ mode, result });
     } catch (error) {
-      this.els.status.textContent = error?.message || String(error);
-      this.els.apply.disabled = false;
+      if (epoch !== this.epoch || !this.open) return;
+      this.stale = error?.code === 'stale_plan';
+      this.els.status.textContent = this.stale
+        ? 'Notes changed. Refresh the preview and review it before applying.'
+        : error?.message || String(error);
+    } finally {
+      this.busy = false;
+      this.#syncApply();
     }
   }
 }

@@ -13,13 +13,12 @@
 // app is now branded "NoteForge" — renaming them would point at a fresh, empty
 // IndexedDB and orphan every existing user's notes. The display name is cosmetic;
 // the storage identity must stay stable.
+import { readVault, initializeVault, commitVault } from './vault-transactions.js';
+
 const NS = 'my-notes-app:'; // legacy localStorage namespace (migration source)
 const DB_NAME = 'my-notes-app';
 const STORE = 'kv';
 const DB_VERSION = 1;
-const LOCK_PREFIX = '__internal_lock__:';
-const LEASE_MS = 60_000;
-const LOCK_WAIT_MS = 30_000;
 
 // --- IndexedDB plumbing -----------------------------------------------------
 
@@ -54,6 +53,12 @@ function openDB() {
     req.onblocked = () => resolve(null);
   });
   return dbPromise;
+}
+
+async function requireDB() {
+  const db = await openDB();
+  if (!db) throw new Error('Safe storage is unavailable. Export drafts before leaving.');
+  return db;
 }
 
 function idbRequest(db, mode, run) {
@@ -135,89 +140,6 @@ function idbKeys(db, prefix) {
     tx.oncomplete = () => resolve(keys.sort());
     tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
   });
-}
-
-function idbTryAcquireLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    let acquired = false;
-    const request = store.get(key);
-    request.onsuccess = () => {
-      const current = request.result;
-      const now = Date.now();
-      if (!current || current.owner === owner || !Number.isFinite(current.expiresAt) || current.expiresAt <= now) {
-        store.put({ owner, expiresAt: now + LEASE_MS }, key);
-        acquired = true;
-      }
-    };
-    tx.oncomplete = () => resolve(acquired);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock transaction failed'));
-  });
-}
-
-function idbRenewLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    let renewed = false;
-    const request = store.get(key);
-    request.onsuccess = () => {
-      if (request.result?.owner === owner) {
-        store.put({ owner, expiresAt: Date.now() + LEASE_MS }, key);
-        renewed = true;
-      }
-    };
-    tx.oncomplete = () => resolve(renewed);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock renewal failed'));
-  });
-}
-
-function idbReleaseLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    const request = store.get(key);
-    request.onsuccess = () => {
-      if (request.result?.owner === owner) store.delete(key);
-    };
-    tx.oncomplete = () => resolve();
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock release failed'));
-  });
-}
-
-const lockDelay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-async function withDurableLease(db, name, operation) {
-  const key = `${LOCK_PREFIX}${name}`;
-  const owner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  while (!(await idbTryAcquireLease(db, key, owner))) {
-    if (Date.now() >= deadline) throw new Error(`Timed out waiting for the ${name} storage lock`);
-    await lockDelay(25 + Math.floor(Math.random() * 25));
-  }
-
-  let leaseLost = false;
-  const renewal = setInterval(
-    () => {
-      void idbRenewLease(db, key, owner)
-        .then((renewed) => {
-          if (!renewed) leaseLost = true;
-        })
-        .catch(() => {
-          leaseLost = true;
-        });
-    },
-    Math.floor(LEASE_MS / 3),
-  );
-  try {
-    const result = await operation();
-    if (leaseLost) throw new Error(`Lost the ${name} storage lock before the operation completed`);
-    return result;
-  } finally {
-    clearInterval(renewal);
-    await idbReleaseLease(db, key, owner).catch(() => {});
-  }
 }
 
 // --- localStorage fallback / migration source -------------------------------
@@ -336,6 +258,46 @@ async function quotaEstimate() {
 // --- public API -------------------------------------------------------------
 
 export const storage = {
+  /** Read the legacy authority for recovery without migrating or rewriting it. */
+  async readLegacyVault() {
+    const keys = ['notes', 'config', 'schemaVersion', 'persistenceStatus'];
+    const db = await openDB();
+    const values = db ? await idbLoadMany(db, keys) : [];
+    const defaults = [[], {}, 0, {}];
+    return Object.fromEntries(
+      keys.map((key, index) => [key, values[index] !== undefined ? values[index] : legacyLoad(key, defaults[index])]),
+    );
+  },
+
+  async readCurrentVault() {
+    const db = await openDB();
+    if (!db) return null;
+    return readVault(db, STORE);
+  },
+
+  async initializeCurrentVault(legacy, migrated, { allowLegacyMigration = false } = {}) {
+    const db = await requireDB();
+    if (!allowLegacyMigration) {
+      const error = new Error('Vault upgrade required.');
+      error.name = 'VaultUpgradeRequired';
+      throw error;
+    }
+    return initializeVault(db, STORE, legacy, migrated, crypto.randomUUID());
+  },
+
+  async commitCurrentVault(mutation) {
+    const db = await requireDB();
+    const result = await commitVault(db, STORE, mutation);
+    globalThis.dispatchEvent?.(new Event('noteforge:vault-change'));
+    return result;
+  },
+
+  async readResolvedConflicts() {
+    const db = await requireDB();
+    const keys = await idbKeys(db, 'vault:resolved-conflict:');
+    return (await idbLoadMany(db, keys)).filter(Boolean);
+  },
+
   /** Warm up the backend. Resolves true if IndexedDB is in use, false otherwise. */
   async ready() {
     return (await openDB()) != null;
@@ -501,6 +463,7 @@ export const storage = {
     }
     const db = await openDB();
     if (!db) return operation(); // revision callers will fail closed as unavailable
+    const { withDurableLease } = await import('./storage-lease.js');
     return withDurableLease(db, lockName, operation);
   },
 

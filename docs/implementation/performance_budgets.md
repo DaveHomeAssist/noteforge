@@ -48,6 +48,9 @@ over. CI runs it after every build on Node 22 and 24.
 | settings | settings, Trash | 4,193 B | 5,120 B |
 | dialogs | in-app confirm dialog and toasts, on first use | 3,001 B | 4,096 B |
 | banner | note banner picker, gradient presets, Reposition (added 2026-10-01) | 2,181 B | 3,072 B |
+| conflicts | comparison, draft recovery and resolution (Phase 1 repair) | 6,252 B | 7,168 B |
+| storageRecovery | read-only recovery reader before activation | 2,183 B | 3,072 B |
+| vaultRefresh | clean-window reconciliation and resume watcher | 2,254 B | 3,072 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
 ### Measurements
@@ -58,6 +61,49 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-09-27 | marked 18, Vite 8 (Rolldown groups for the runtime and YAML) | 74.1 KiB | 18.5 KiB | 41.1 KiB | 210.9 KiB |
 | 2026-10-01 | Before Tier 1 split (`db9971f`) | 82,352 B | 19,631 B | 42,177 B | 230,324 B |
 | 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
+| 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
+| 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
+| 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
+
+The session-state change adds no dependencies and does not raise any limit.
+Its build remains blocked by the existing shell/precache budgets. It separates
+window navigation from the durable write queue; layout storage failure does not
+become a note-save failure. Final emitted sizes must be rechecked after the
+remaining Phase 1 integration and compatibility work.
+
+The window refresh route uses the same new-route calculation. Existing shell
+and precache limits remain unchanged and failing; there is no approved exception.
+The following local persistence diagnostics use synthetic 1,000/5,000-note
+vaults in Playwright Chromium, Firefox and WebKit on this Mac. Twenty measured
+ordinary saves follow five warm-up saves. Timings span Database mutation through
+the completed current-write flush; optional history is replaced by a no-op, and
+these are not full editor, paint, physical-device or release performance gates.
+
+| Engine | Notes | Save p95 | One clean refresh |
+| --- | ---: | ---: | ---: |
+| Chromium | 1,000 | 0.3 ms | 10.9 ms |
+| Chromium | 5,000 | 0.2 ms | 47.2 ms |
+| Firefox | 1,000 | 1 ms | 20 ms |
+| Firefox | 5,000 | 1 ms | 84 ms |
+| WebKit | 1,000 | 1 ms | 50 ms |
+| WebKit | 5,000 | 1 ms | 184 ms |
+
+Each 25-save run wrote the changed note 25 times and made 75 total IDB puts
+(note, vault metadata and persistence timestamp), with no cursor scans during
+those saves. The separate refresh reads the full vault and rebuilds derived
+state. These measurements do not establish constant-time serialization, indexing,
+refresh or user interaction. Timer resolution and host load affect short samples.
+The maintained scenario is `test/e2e/vault-refresh.spec.mjs`; the reviewed run
+completed all 177 durability cases with no failures.
+
+The conflict checkpoint adds two lazy routes using the policy v2 new-route
+calculation (measured gzip plus 10%, rounded up to KiB). Existing limits are
+unchanged. The optional revision lease now belongs to the recovery route, which
+measures 26,349 B against 29,696 B. No dependency was added. The shell remains
+54 B over its existing limit; the offline cache is 105 B over. This is
+a failed release gate, not an approved exception. Additional Phase 1 work must
+address the actual emitted output before release; these intermediate sizes are
+not promises of final headroom.
 
 Vite 8 without the Rolldown groups put the YAML parser in the Daily route (49.0 KiB against 22 KiB); the budget gate caught it (PR #14).
 
@@ -208,10 +254,38 @@ textarea editor) left `styles.css`. No dependency was added.
 
 - Backlink, unlinked-mention, task, calendar, property, and recent-note indexes are derived and rebuildable. They are excluded from authoritative JSON backups.
 - Derived indexes update incrementally after a durable note save. A full rebuild is allowed at migration/startup or after detected corruption, never on each keystroke.
-- Navigation history retains 100 entries per session. Persisted recents retain 50 unique live note IDs.
-- Workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state.
+- Navigation history retains 100 entries per session. Session-persisted recents retain 50 unique live note IDs.
+- Per-window session workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state. Neither field is a new shared-vault write.
 - Transclusion renders to a maximum depth of 5 and tracks visited note/fragment references to terminate cycles.
 
 ## Gate policy
 
 A budget breach blocks phase release unless the repository maintainer approves a written exception that includes the measured regression, user impact, mitigation, and follow-up owner. Correctness, data preservation, accessibility, and current-note durability take precedence over retaining optional history or caches.
+
+### History preview checkpoint
+
+The reviewed History restore change builds successfully but remains over the
+existing limits: shell 85,451 / 83,968 gzip bytes (+1,483), precache 246,722 /
+243,712 (+3,010). Relative to the per-window checkpoint this adds 182 shell bytes
+and 493 precache bytes. Recovery is 26,717 / 29,696 bytes. No limit was raised
+and no exception is claimed. This is not a release pass. The per-note save path
+is unchanged; earlier synthetic persistence timings are historical measurements,
+not a new full UI/history performance qualification.
+
+### Planned mutation review checkpoint
+
+The explicit refresh/retained-draft controls and bounded bulk review list build
+successfully. Shell is 85,527 / 83,968 gzip bytes (+1,559); precache is 250,407 /
+243,712 (+6,695). Relative to the History checkpoint these add 76 shell bytes and
+3,685 precache bytes. Recovery is 27,069 / 29,696 bytes. Both existing failing
+budgets remain release blockers; no limit or approval exception changed. The
+correctness contract must survive any subsequent loading/bundle optimization.
+
+### Editor adoption checkpoint
+
+The source-baseline and buffered-draft adoption changes measure 85,729 / 83,968
+gzip bytes for shell (+1,761) and 250,706 / 243,712 for precache (+6,994).
+These add 202 shell bytes and 299 precache bytes to the planned-review checkpoint.
+Recovery is 27,108 / 29,696 bytes. The existing shell/precache failures remain
+release blockers; no limit was raised. These are build-size measurements, not
+end-to-end editor or history latency acceptance.

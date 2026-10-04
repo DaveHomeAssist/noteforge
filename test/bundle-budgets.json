@@ -33,7 +33,8 @@
         "src/components/backup-view.js",
         "src/core/revision-store.js",
         "src/core/recovery-service.js",
-        "src/core/backup.js"
+        "src/core/backup.js",
+        "src/core/storage-lease.js"
       ],
       "gzipBudget": 29696
     },
@@ -106,6 +107,26 @@
       "entries": [
         "src/components/banner-picker.js"
       ],
+      "gzipBudget": 3072
+    },
+    "conflicts": {
+      "description": "Conflict comparison, draft recovery and resolution; explicit replacement also loads the recovery route for safety history.",
+      "entries": [
+        "src/components/conflict-view.js",
+        "src/core/conflict-recovery.js"
+      ],
+      "gzipBudget": 7168
+    },
+    "storageRecovery": {
+      "description": "Read-only recovery reader before vault activation; verified backup export also loads the backup core from the recovery route.",
+      "entries": [
+        "src/app/storage-recovery.js"
+      ],
+      "gzipBudget": 3072
+    },
+    "vaultRefresh": {
+      "description": "Cross-window refresh hints and consistent clean-window adoption, loaded after the initial usable app.",
+      "entries": ["src/app/vault-refresh.js", "src/core/vault-refresh.js"],
       "gzipBudget": 3072
     },
     "precache": {

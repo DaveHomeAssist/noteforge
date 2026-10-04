@@ -78,7 +78,7 @@ export function detectVersion(storedVersion) {
 
 /**
  * Run `payload` forward from `fromVersion` to CURRENT_SCHEMA_VERSION.
- * @returns {{ data: object, version: number, migrated: boolean }}
+ * @returns {{ data: { notes?: object[], config?: object }, version: number, migrated: boolean }}
  */
 export function runMigrations(payload, fromVersion) {
   let data = payload || {};

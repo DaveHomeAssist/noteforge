@@ -13,7 +13,7 @@
     "test": "node test/run-node-tests.mjs",
     "test:browser": "playwright test --project=features",
     "test:budget": "node test/bundle-budget.mjs",
-    "test:all": "npm run check && npm run typecheck && npm test && playwright test --project=features --project=a11y && npm run build && npm run test:budget",
+    "test:all": "npm run check && npm run typecheck && npm test && playwright test --project=features --project=a11y --project=durability-chromium --project=durability-firefox --project=durability-webkit && npm run build && npm run test:budget",
     "lint": "biome lint",
     "typecheck": "node test/typecheck-ratchet.mjs",
     "format": "biome format --write",

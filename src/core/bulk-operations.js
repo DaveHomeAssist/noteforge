@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 import { Note } from './note.js';
 import { normalizeTitle } from '../utils/helpers.js';
 import { isDescendant } from '../utils/tree.js';
@@ -55,6 +56,7 @@ export class BulkOperations {
     }
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'vault_replace',
       query: String(query),
       replacement: String(replacement ?? ''),
@@ -81,11 +83,11 @@ export class BulkOperations {
       current.length !== plan.expected.length ||
       fingerprint(current) !== plan.fingerprint
     ) {
-      throw new Error('Notes changed after this preview. Review the updated replacement plan before applying it.');
+      throw stalePlan('Notes changed after this preview. Review the updated replacement plan before applying it.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
     try {
-      await this.db.commitPlannedNotes(plan.replacements, current, 'pre_bulk_replace');
+      await this.db.commitPlannedNotes(plan.replacements, plan.expected, 'pre_bulk_replace', plan.token);
       return { changed: plan.changed, unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
     } catch (error) {
       error.report = { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: plan.changed };
@@ -175,6 +177,7 @@ export class BulkOperations {
     const expected = selected.map((note) => note.toJSON());
     return Object.freeze({
       valid: true,
+      token: this.db.captureMutationToken(),
       kind: 'note_batch',
       action,
       payload: Object.freeze({ ...payload, tag }),
@@ -197,7 +200,7 @@ export class BulkOperations {
       current.length !== plan.expected.length ||
       fingerprint(current) !== plan.fingerprint
     ) {
-      throw new Error('Notes changed after this batch preview. Review the action again.');
+      throw stalePlan('Notes changed after this batch preview. Review the action again.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, failed: [] };
     try {
@@ -206,6 +209,7 @@ export class BulkOperations {
         plan.replacements,
         current.filter((note) => changedIds.has(note.id)),
         'pre_bulk_action',
+        plan.token,
       );
       return { changed: plan.changed, unchanged: plan.unchanged, failed: [] };
     } catch (error) {
