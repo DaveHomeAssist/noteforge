@@ -197,6 +197,7 @@ class App {
       const first = this.db.getNote(savedId) || this.db.getNotesSorted()[0];
       if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
+    if (this.db.conflicts.size) this.#showStorageError();
   }
 
   // --- note selection -----------------------------------------------------
@@ -501,14 +502,27 @@ class App {
     bar.className = 'storage-error';
     bar.setAttribute('role', 'alert');
     const msg = document.createElement('span');
-    msg.innerHTML = `${icon('triangle-alert')} <span>Your changes couldn't be saved to storage. Export your notes (More actions, then Export JSON) to avoid losing them.</span>`;
+    msg.textContent = 'Changes need review. Compare or export drafts before leaving.';
+    const review = document.createElement('button');
+    review.type = 'button';
+    review.textContent = 'Review and export';
+    review.className = 'btn';
+    review.addEventListener('click', async () => {
+      try {
+        this.editor?.flushPending();
+        const { openConflictRecovery } = await import('../components/conflict-view.js');
+        await openConflictRecovery(this, () => this.#ensureRecovery());
+      } catch (error) {
+        msg.textContent = `Recovery unavailable: ${error.message}. Keep this window open.`;
+      }
+    });
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'storage-error__close';
     close.setAttribute('aria-label', 'Dismiss');
     close.innerHTML = icon('x');
     close.addEventListener('click', () => bar.remove());
-    bar.append(msg, close);
+    bar.append(msg, review, close);
     this._storageErrorBar = bar;
     document.body.appendChild(bar);
   }

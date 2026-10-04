@@ -90,6 +90,46 @@ test('a stale multi-note plan changes nothing and a tombstone prevents resurrect
   }
 });
 
+test('invalid note or setting batches cannot partially mutate the vault', async ({ browser }) => {
+  const { context, page } = await fixture(browser);
+  try {
+    const result = await page.evaluate(async () => {
+      const valid = { id: 'a', expected: 1, value: { id: 'a', content: 'Must not commit' } };
+      const attempts = [
+        { notes: [valid, valid] },
+        { notes: [valid, { id: 'b', expected: -1, value: null }] },
+        { notes: [valid, { id: 'b', expected: 1.5, value: null }] },
+        { notes: [valid, { id: '', expected: 1, value: null }] },
+        { notes: [valid, { id: 'b', expected: 1, value: { id: 'a' } }] },
+        { notes: [valid], config: [{ key: 'theme', expected: -1, value: 'dark' }] },
+        { notes: [valid], config: [{ key: '', expected: 0, value: 'dark' }] },
+        {
+          notes: [valid],
+          config: [
+            { key: 'theme', expected: 1, value: 'dark' },
+            { key: 'theme', expected: 1, value: 'light' },
+          ],
+        },
+      ];
+      const before = await window.read();
+      const rejected = [];
+      for (const mutation of attempts) {
+        try {
+          await window.write(mutation.notes, mutation);
+          rejected.push(false);
+        } catch {
+          rejected.push(true);
+        }
+      }
+      return { before, after: await window.read(), rejected };
+    });
+    expect(result.rejected).toEqual(Array(8).fill(true));
+    expect(result.after).toEqual(result.before);
+  } finally {
+    await context.close();
+  }
+});
+
 test('configuration compares fields independently and safely preserves prototype-shaped keys', async ({ browser }) => {
   const { context, page } = await fixture(browser);
   try {

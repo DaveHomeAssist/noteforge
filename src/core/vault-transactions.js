@@ -4,13 +4,31 @@ export const VAULT_META = 'vault:meta';
 export const VAULT_CONFIG = 'vault:config';
 export const NOTE_PREFIX = 'note:';
 export const CONFLICT_PREFIX = 'vault:conflict:';
+export const RESOLVED_CONFLICT_PREFIX = 'vault:resolved-conflict:';
+
+function sameDraft(left = [], right = []) {
+  const withoutVersions = (writes) => JSON.stringify(writes.map((write) => ({ ...write, expected: 0 })));
+  return withoutVersions(left) === withoutVersions(right);
+}
+
+/** @param {(NoteWrite | ConfigWrite)[]} writes
+ * @param {'id' | 'key'} identity
+ */
+function validateWrites(writes, identity) {
+  if (
+    new Set(writes.map((write) => write[identity])).size !== writes.length ||
+    writes.some((write) => !write[identity] || !Number.isSafeInteger(write.expected) || write.expected < 0)
+  )
+    throw new TypeError('Invalid or duplicate mutation.');
+}
 
 /** @typedef {{id:string, [key:string]:unknown}} RawNote */
 /** @typedef {{version:number, value:RawNote|null}} RecordValue */
 /** @typedef {{id:string, expected:number, value:RawNote|null}} NoteWrite */
 /** @typedef {{key:string, expected:number, value:unknown, remove?:boolean}} ConfigWrite */
 /** @typedef {{generation:string, sequence?:number, notes?:NoteWrite[], config?:ConfigWrite[],
- * conflictId?:string, timestamp:string, replacement?:{notes:RawNote[], config:object, schemaVersion:number}}} Mutation */
+ * conflictId?:string, timestamp:string, resolution?:{id:string,fingerprint:string,action:'keep-current'|'save-copy'|'use-draft'},
+ * replacement?:{notes:RawNote[], config:object, schemaVersion:number}}} Mutation */
 
 /** Resolve only after transaction completion; a request success is not a commit. */
 function transactionResult(transaction, result) {
@@ -108,28 +126,35 @@ export function initializeVault(db, storeName, legacy, migrated, generation) {
  * @param {Mutation} mutation
  */
 export function commitVault(db, storeName, mutation) {
+  mutation = structuredClone(mutation);
   const notes = mutation.notes ?? [];
   const config = mutation.config ?? [];
-  if (new Set(notes.map((write) => write.id)).size !== notes.length) throw new TypeError('Duplicate note mutation.');
-  if (new Set(config.map((write) => write.key)).size !== config.length)
-    throw new TypeError('Duplicate setting mutation.');
-  for (const write of notes) {
+  const resolution = mutation.resolution;
+  if (resolution) {
     if (
-      !write.id ||
-      !Number.isSafeInteger(write.expected) ||
-      write.expected < 0 ||
-      (write.value !== null && write.value.id !== write.id)
+      !resolution.id ||
+      typeof resolution.fingerprint !== 'string' ||
+      !['keep-current', 'save-copy', 'use-draft'].includes(resolution.action) ||
+      !Number.isSafeInteger(mutation.sequence) ||
+      mutation.replacement
     )
-      throw new TypeError('Invalid note mutation.');
+      throw new TypeError('Invalid resolution.');
+    if (resolution.action === 'keep-current' && (notes.length || config.length))
+      throw new TypeError('Keep-current cannot write notes or settings.');
+    if (
+      resolution.action === 'save-copy' &&
+      (!notes.length || config.length || notes.some((note) => note.expected !== 0 || !note.value))
+    )
+      throw new TypeError('Copies require new note IDs.');
   }
-  for (const write of config) {
-    if (!write.key || !Number.isSafeInteger(write.expected) || write.expected < 0)
-      throw new TypeError('Invalid setting mutation.');
+  validateWrites(notes, 'id');
+  validateWrites(config, 'key');
+  for (const write of notes) {
+    if (write.value !== null && write.value.id !== write.id) throw new TypeError('Invalid note.');
   }
   if (mutation.replacement) {
     const ids = mutation.replacement.notes.map((note) => note.id);
-    if (ids.some((id) => !id) || new Set(ids).size !== ids.length)
-      throw new TypeError('Invalid replacement identities.');
+    if (ids.some((id) => !id) || new Set(ids).size !== ids.length) throw new TypeError('Invalid replacement IDs.');
   }
   const tx = db.transaction(storeName, 'readwrite');
   const store = tx.objectStore(storeName);
@@ -138,13 +163,40 @@ export function commitVault(db, storeName, mutation) {
   const metaRequest = store.get(VAULT_META);
   const configRequest = store.get(VAULT_CONFIG);
   const noteRequests = notes.map((write) => store.get(NOTE_PREFIX + write.id));
-  const all = [metaRequest, configRequest, ...noteRequests];
+  const conflictRequest = resolution ? store.get(CONFLICT_PREFIX + resolution.id) : null;
+  const all = [metaRequest, configRequest, ...noteRequests, ...(conflictRequest ? [conflictRequest] : [])];
   let pending = all.length;
   for (const request of all) {
     request.onsuccess = () => {
       if (--pending) return;
       const meta = metaRequest.result;
       const settings = configRequest.result ?? { values: {}, versions: {} };
+      const reviewedConflict = conflictRequest?.result;
+      if (resolution) {
+        if (!reviewedConflict || JSON.stringify(reviewedConflict) !== resolution.fingerprint) {
+          result = { status: 'stale', reason: 'conflict_changed', meta };
+          return;
+        }
+        const original = reviewedConflict.mutation;
+        if (
+          resolution.action === 'use-draft' &&
+          (original.generation !== mutation.generation ||
+            original.sequence !== undefined ||
+            original.replacement ||
+            !sameDraft(notes, original.notes) ||
+            !sameDraft(config, original.config))
+        ) {
+          result = { status: 'stale', reason: 'replan_required', meta };
+          return;
+        }
+        if (
+          resolution.action === 'save-copy' &&
+          notes.some((note) => (original.notes ?? []).some((draft) => draft.id === note.id))
+        ) {
+          result = { status: 'stale', reason: 'copy_identity', meta };
+          return;
+        }
+      }
       const conflicts = [];
       if (!meta || meta.generation !== mutation.generation) conflicts.push({ kind: 'generation' });
       if (mutation.sequence !== undefined && meta?.sequence !== mutation.sequence) conflicts.push({ kind: 'plan' });
@@ -160,6 +212,10 @@ export function commitVault(db, storeName, mutation) {
         }
       }
       if (conflicts.length) {
+        if (resolution) {
+          result = { status: 'stale', reason: 'vault_changed', conflicts, meta };
+          return;
+        }
         const conflict = { id: mutation.conflictId, mutation, conflicts, detectedAt: mutation.timestamp };
         if (mutation.conflictId) store.put(conflict, CONFLICT_PREFIX + mutation.conflictId);
         result = { status: 'conflict', conflict, meta };
@@ -197,25 +253,43 @@ export function commitVault(db, storeName, mutation) {
         };
         return;
       }
+      const previousConfig = config.map((write) => [
+        write.key,
+        {
+          value: settings.values[write.key],
+          present: Object.hasOwn(settings.values, write.key),
+          version: Object.hasOwn(settings.versions, write.key) ? settings.versions[write.key] : 0,
+        },
+      ]);
       for (const write of notes) store.put({ version: write.expected + 1, value: write.value }, NOTE_PREFIX + write.id);
       for (const write of config) {
         if (write.remove) delete settings.values[write.key];
-        else
-          Object.defineProperty(settings.values, write.key, {
-            value: write.value,
-            enumerable: true,
-            configurable: true,
-            writable: true,
-          });
-        Object.defineProperty(settings.versions, write.key, {
-          value: write.expected + 1,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
+        else settings.values = { ...settings.values, [write.key]: write.value };
+        settings.versions = { ...settings.versions, [write.key]: write.expected + 1 };
       }
       if (config.length) store.put(settings, VAULT_CONFIG);
       const nextMeta = { ...meta, sequence: meta.sequence + 1 };
+      if (resolution) {
+        // Resolving never erases the last recoverable draft or replaced version.
+        // The archive, note/config writes and active-conflict removal commit together.
+        store.put(
+          {
+            conflict: reviewedConflict,
+            resolution: {
+              action: resolution.action,
+              timestamp: mutation.timestamp,
+              generation: meta.generation,
+              sequence: nextMeta.sequence,
+            },
+            before: {
+              notes: notes.map((write, index) => [write.id, noteRequests[index].result ?? null]),
+              config: previousConfig,
+            },
+          },
+          `${RESOLVED_CONFLICT_PREFIX}${resolution.id}:${meta.generation}:${nextMeta.sequence}`,
+        );
+        store.delete(CONFLICT_PREFIX + resolution.id);
+      }
       store.put(nextMeta, VAULT_META);
       store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
       result = { status: 'committed', meta: nextMeta };

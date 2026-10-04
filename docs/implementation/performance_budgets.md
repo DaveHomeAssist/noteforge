@@ -48,6 +48,8 @@ over. CI runs it after every build on Node 22 and 24.
 | settings | settings, Trash | 4,193 B | 5,120 B |
 | dialogs | in-app confirm dialog and toasts, on first use | 3,001 B | 4,096 B |
 | banner | note banner picker, gradient presets, Reposition (added 2026-10-01) | 2,181 B | 3,072 B |
+| conflicts | comparison, draft recovery and resolution (Phase 1 repair) | 6,252 B | 7,168 B |
+| storageRecovery | read-only recovery reader before activation | 2,183 B | 3,072 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
 ### Measurements
@@ -58,6 +60,16 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-09-27 | marked 18, Vite 8 (Rolldown groups for the runtime and YAML) | 74.1 KiB | 18.5 KiB | 41.1 KiB | 210.9 KiB |
 | 2026-10-01 | Before Tier 1 split (`db9971f`) | 82,352 B | 19,631 B | 42,177 B | 230,324 B |
 | 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
+| 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
+
+The conflict checkpoint adds two lazy routes using the policy v2 new-route
+calculation (measured gzip plus 10%, rounded up to KiB). Existing limits are
+unchanged. The optional revision lease now belongs to the recovery route, which
+measures 26,349 B against 29,696 B. No dependency was added. The shell remains
+54 B over its existing limit; the offline cache is 105 B over. This is
+a failed release gate, not an approved exception. Additional Phase 1 work must
+address the actual emitted output before release; these intermediate sizes are
+not promises of final headroom.
 
 Vite 8 without the Rolldown groups put the YAML parser in the Daily route (49.0 KiB against 22 KiB); the budget gate caught it (PR #14).
 

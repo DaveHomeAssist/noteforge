@@ -483,6 +483,20 @@ export class Database {
     };
   }
 
+  async previewConflict(id) {
+    const { previewConflict } = await import('./conflict-recovery.js');
+    return previewConflict(this, id);
+  }
+
+  async resolveConflict(preview, action) {
+    const { resolveConflict } = await import('./conflict-recovery.js');
+    return resolveConflict(this, preview, action, (snapshot) => {
+      this.#adoptVault(snapshot);
+      this._mutationRevision++;
+      this.#emit();
+    });
+  }
+
   /** A portable backup must contain one committed vault, never a mix of windows. */
   async readCommittedVault() {
     const revision = this._mutationRevision;

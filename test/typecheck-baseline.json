@@ -1,13 +1,12 @@
 {
   "$comment": "Per-file tsc --checkJs error ceiling; lower it with `npm run typecheck -- --update`, never raise it by hand.",
-  "total": 48,
+  "total": 47,
   "files": {
     "src/core/capture-service.js": 1,
     "src/core/database.js": 10,
     "src/core/link-operations.js": 6,
     "src/core/reconciliation-service.js": 4,
     "src/core/revision-store.js": 5,
-    "src/core/storage.js": 1,
     "src/core/task-service.js": 1,
     "src/utils/helpers.js": 2,
     "src/utils/local-date.js": 1,

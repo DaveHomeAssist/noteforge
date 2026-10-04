@@ -15,8 +15,9 @@ opens a dedicated read-only recovery reader until compatibility is proved. The
 reader exports the original loaded storage snapshot and a separately verified
 portable backup without starting an editor, sample creation, history, or startup
 configuration writes. Legacy recovery reads no longer copy localStorage into
-IndexedDB. The application still needs a complete upgrade/activation protocol,
-conflict resolution UI, and clean/dirty window refresh integration. Do not merge
+IndexedDB. Conflict comparison, resolution and export now have a lazy recovery
+UI for explicitly activated vaults. The application still needs a complete
+upgrade/activation protocol and clean/dirty window refresh integration. Do not merge
 or deploy this intermediate state.
 
 ## Persistence writer inventory
@@ -154,8 +155,8 @@ the local execution artifacts. Complete Phase 1 acceptance remains open.
    The IndexedDB specification explicitly rejects lower-version opens and waits
    for old connections to close; a version bump is therefore not a full client
    compatibility solution. [IndexedDB open algorithm](https://www.w3.org/TR/IndexedDB/#opening)
-2. Complete the upgrade action, conflict comparison/resolution, draft export and
-   exact save-state UI. The read-only recovery reader now avoids automatic sample
+2. Complete the upgrade action and exact save-state UI; broaden conflict recovery
+   acceptance across real editor callers. The read-only recovery reader avoids automatic sample
    creation and startup config writes; it does not authorize activation or replace
    the required editing/conflict recovery experience.
 3. Refresh clean views on notifications/resume while preserving dirty editors and
@@ -210,3 +211,65 @@ This closes the unusable gated-startup recovery path, not the migration or
 ordinary editing acceptance. Full application smoke/visual gates must still
 pass once safe activation is implemented. The previous integration commit's
 visual CI job failed; no merge or deployment is authorized by these local passes.
+
+## Conflict recovery checkpoint
+
+An activated vault now offers Review and export from the persistence warning,
+including conflicts loaded after reopening. The bounded modal compares saved
+source with retained drafts, exposes complete metadata, and supports keeping the
+saved version, creating a new note copy, or explicitly replacing a saved version.
+Settings conflicts use the same conditional boundary. Planned operations and
+old-generation drafts cannot be blindly reapplied; they need a new plan or copy.
+
+The preview keeps a private, detached commit contract. Resolution compares the
+vault generation/sequence and exact conflict record in one IndexedDB transaction.
+The transaction archives the original conflict and any replaced note/config
+values before removing the active conflict. Archive identities include the
+generation and commit sequence, so a later draft cannot overwrite an older
+resolution archive. A failed/aborted resolution leaves current data and the
+original conflict intact. Explicit note replacement captures safety history for
+the exact saved version before the conditional commit.
+
+Queue entries are removed only when they are the entries actually resolved.
+Newer queued drafts and raw model edits during acknowledgement are preserved on
+their original base and must resolve any resulting conflict. Local edits after
+review invalidate the choice. Conflicts from other windows discovered during
+preview remain visible after adopting the committed snapshot. Adoption uses the
+transaction-proven snapshot rather than a fallible post-commit read.
+
+Recovery JSON includes local notes/config, known and newly read stored conflicts,
+and archived resolutions. Active conflicts are read before the archive so a
+concurrent resolution cannot vanish between those reads. If either read fails,
+local draft export remains available and records the missing data. This file is explicitly not a portable backup;
+users must not substitute it for a verified vault backup. Resolved archives have
+no automatic pruning policy yet; retention/export UX and storage growth need
+qualification before release. The recovery UI remains lazy; the revision-only
+lease fallback is also deferred. Current-note correctness never depends on that
+lease or Web Locks.
+
+This checkpoint does not close safe activation, window refresh/resume, all
+affected-caller acceptance, malformed/future-schema recovery, performance,
+ordinary application/visual CI, or either deployed-origin gate. Migration remains
+disabled and the branch must remain draft until the complete phase is releasable.
+
+Checkpoint verification:
+
+- 129/129 durability cases pass across Chromium, Firefox and WebKit: Database,
+  conflict recovery, read-only recovery, atomic primitive and old-client hazard
+  diagnostics. Six passing legacy diagnostics still establish unsafe upgrade
+  behavior, not safe activation. UI checks include axe, viewport bounds and
+  downloaded recovery files. The added invalid-batch cases prove validation
+  cannot partially write a valid note alongside an invalid note/setting.
+- Node 22.22.1 and 24.21.0 each pass 549/549 sequentially; audit reports zero
+  vulnerabilities. Static check passes and the typecheck ratchet falls from 48
+  to 47 after typing the extracted lease-release promise. No allowance was raised.
+- After the final export change, six affected UI cases pass across all three
+  engines, including newly stored conflicts and local draft export when both
+  stored-conflict and archive reads fail. The mobile screenshot was inspected.
+- Production build passes. Budget gate fails: shell 84,022/83,968 B and precache
+  243,817/243,712 B gzip. Existing limits remain unchanged. The conflict and
+  read-only recovery routes use the documented new-route budget calculation.
+- The full application/visual release gates remain incomplete while startup
+  activation is gated. These local checks do not establish CI, deployment or
+  either live origin. The development warm-up's previously recorded unclassified
+  error diagnostic remains visible in the logs.
