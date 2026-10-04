@@ -166,8 +166,7 @@ test('stale history controls support keyboard refresh and accessible light and d
         expect(await writer.evaluate((value) => window.save(value), content)).toBe(true);
         await app.locator('#history-restore').click();
         await expect(app.getByRole('button', { name: 'Refresh comparison' })).toBeVisible();
-        // Match the existing accessibility lane: measure settled theme colors.
-        await app.waitForTimeout(250);
+        await waitForReviewPaint(app);
         const scan = await new AxeBuilder({ page: app })
           .include('#history-overlay')
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -206,12 +205,52 @@ async function saved(writer) {
   );
 }
 
+async function waitForReviewPaint(app) {
+  await app.evaluate(async () => {
+    await document.fonts.ready;
+    // A hide/show geometry probe and theme update need a rendered frame before
+    // a newly created CSS animation or transition can report completion.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await app.waitForFunction(() =>
+    document.getAnimations().every((animation) => !animation.pending && animation.playState !== 'running'),
+  );
+}
+
 async function checkReviewAccessibility(app, selector) {
   for (const width of [1440, 375]) {
     await app.setViewportSize({ width, height: width === 375 ? 812 : 900 });
     for (const theme of ['light', 'dark']) {
       await app.evaluate((mode) => window.app.theme.setMode(mode, { persist: false }), theme);
-      await app.waitForTimeout(250);
+      await waitForReviewPaint(app);
+      const rendering = await app.evaluate((target) => {
+        const panel = document.querySelector(target);
+        return {
+          theme: document.documentElement.dataset.theme,
+          elements: [panel, ...panel.querySelectorAll('.modal__panel, button, dd')].map((element) => {
+            const style = getComputedStyle(element);
+            return {
+              tag: element.tagName,
+              id: element.id,
+              text: element.textContent.slice(0, 70),
+              color: style.color,
+              background: style.backgroundColor,
+              opacity: style.opacity,
+            };
+          }),
+          animations: document.getAnimations().map((animation) => ({
+            target: animation.effect?.target?.outerHTML.slice(0, 180),
+            name: animation.animationName || animation.transitionProperty,
+            state: animation.playState,
+            time: animation.currentTime,
+            timing: animation.effect?.getComputedTiming(),
+          })),
+        };
+      }, selector);
+      await test.info().attach(`review-rendering-${selector}-${width}-${theme}`, {
+        body: JSON.stringify(rendering),
+        contentType: 'application/json',
+      });
       const scan = await new AxeBuilder({ page: app })
         .include(selector)
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -238,6 +277,27 @@ async function checkReviewAccessibility(app, selector) {
     }
   }
   await app.setViewportSize({ width: 1440, height: 900 });
+}
+
+for (const [button, selector] of [
+  ['#find-replace-btn', '#find-replace-panel'],
+  ['#backup-btn', '#backup-overlay'],
+]) {
+  test(`review accessibility waits for slow transitions in ${selector}`, async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+      const { app } = await openWork(context);
+      // A duration longer than the former fixed delay makes the readiness
+      // requirement deterministic instead of relying on a busy CI renderer.
+      await app.addStyleTag({
+        content: '.btn { transition-duration: 2s !important; } .modal__panel { animation-duration: 2s !important; }',
+      });
+      await menu(app, button);
+      await checkReviewAccessibility(app, selector);
+    } finally {
+      await context.close();
+    }
+  });
 }
 
 test('rename keeps its proposed title and requires explicit refreshed review after a remote edit', async ({

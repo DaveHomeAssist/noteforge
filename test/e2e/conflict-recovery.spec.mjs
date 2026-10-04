@@ -207,6 +207,13 @@ test('reopened conflicts are compared, exported and resolved through the applica
     const app = await context.newPage();
     await app.goto(devUrl());
     await app.evaluate(() => window.app.ready);
+    // app.ready covers the shell; deferred alias reconciliation can still
+    // commit configuration and invalidate a recovery preview afterwards.
+    await app.waitForFunction(() => window.app.phase5 && window.app.phase6);
+    await app.evaluate(async () => {
+      await Promise.all([window.app.phase5.ready, window.app.phase6.ready, window.app.vaultRefreshReady]);
+      await window.app.db.flush();
+    });
     await app.getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
@@ -250,6 +257,71 @@ test('reopened conflicts are compared, exported and resolved through the applica
       ),
     ).toBe(1);
   } finally {
+    await context.close();
+  }
+});
+
+test('deferred startup invalidates an open recovery review and requires another explicit choice', async ({
+  browser,
+}) => {
+  const { context, b } = await conflict(browser);
+  let releaseStartup;
+  const startupGate = new Promise((resolve) => {
+    releaseStartup = resolve;
+  });
+  try {
+    await b.close();
+    const app = await context.newPage();
+    await app.route('**/src/app/phase5.js*', async (route) => {
+      await startupGate;
+      await route.continue();
+    });
+    await app.goto(devUrl());
+    await app.evaluate(() => window.app.ready);
+    await app.waitForFunction(() => window.app.phase6);
+    await app.evaluate(() => window.app.phase6.ready);
+    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
+    await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved in A/);
+    const before = await app.evaluate(() => ({
+      revision: window.app.db._mutationRevision,
+      marker: window.app.db.config.frontmatterAliasMigration,
+    }));
+    expect(before.marker).toBeUndefined();
+    releaseStartup();
+    await app.waitForFunction(() => window.app.phase5);
+    await app.evaluate(async () => {
+      await window.app.phase5.ready;
+      await window.app.db.flush();
+    });
+    expect(await app.evaluate(() => window.app.db._mutationRevision)).toBeGreaterThan(before.revision);
+    await dialog.getByRole('button', { name: 'Save draft as a copy', exact: true }).click();
+    await expect(dialog.getByRole('status')).toContainText('Review again before retrying');
+    const afterRejection = await app.evaluate(async () => ({
+      archive: await window.app.db.storage.readResolvedConflicts(),
+      notes: [...window.app.db.notes.values()].map((note) => note.toJSON()),
+      conflicts: [...window.app.db.conflicts.values()],
+    }));
+    expect(afterRejection.archive).toEqual([]);
+    expect(afterRejection.notes.find((note) => note.id === 'a').content).toBe('Saved in A');
+    expect(afterRejection.notes.some((note) => note.content === 'Draft in B')).toBe(false);
+    expect(afterRejection.conflicts).toHaveLength(1);
+    expect(afterRejection.conflicts[0].mutation.notes[0].value.content).toBe('Draft in B');
+    await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
+    await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved in A/);
+    await dialog.getByRole('button', { name: 'Save draft as a copy', exact: true }).click();
+    await expect(dialog.getByRole('status')).toContainText('Recovery choice saved');
+    const reopened = await open(context);
+    expect(
+      await reopened.evaluate(
+        () => [...window.db.notes.values()].filter((note) => note.content === 'Draft in B').length,
+      ),
+    ).toBe(1);
+    expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Saved in A');
+    expect(await reopened.evaluate(() => window.db.storage.readResolvedConflicts())).toHaveLength(1);
+  } finally {
+    releaseStartup();
     await context.close();
   }
 });

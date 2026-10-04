@@ -546,3 +546,45 @@ preserved; these are a full run plus a targeted correction, not a claimed single
 Static checks pass and typecheck retains 47 baseline diagnostics. Build/audit
 pass; shell/precache budgets still fail. CI, visual review and deployment remain
 independent gates. All application fixtures here use synthetic activation.
+
+## Recovery review initialization and rendering qualification
+
+The application shell's `ready` promise does not cover deferred alias
+reconciliation. That reconciliation can persist the frontmatter migration
+marker after a conflict comparison has opened. The resulting local revision
+change correctly invalidates the old choice. The ordinary recovery UI fixture
+now waits for deferred Phase 5/6 initialization and current writes before
+opening its comparison. A separate maintained test holds the actual Phase 5
+module request until after review, releases it, verifies rejection without a
+copy/archive write, and requires another explicit choice. Both original
+contents survive; the accepted second choice creates exactly one recovered
+copy and archive after reopen. Three repetitions in each engine pass (18/18
+including the ordinary fixture). No storage precondition was relaxed.
+
+The planned-review accessibility helper now waits for fonts, rendered frames
+and completion of CSS animations/transitions, matching the existing main
+accessibility lane's settled-rendering contract. Its former fixed 250 ms delay
+failed a controlled slow-theme transition with measured contrast below the
+unchanged 4.5:1 requirement. Maintained find/replace and backup cases exercise
+two-second transitions/entrance animations. Review scans retain computed
+colors, opacity and animation metadata for diagnosis, along with their existing
+geometry evidence. This does not change application colors, suppress axe rules,
+or change screenshot/accessibility baselines.
+
+The original WebKit CI failures were intermittent. Six ordinary instrumented
+local repetitions passed with no active animations in their 24 samples. The
+slow-transition control proves the missing readiness guarantee, not the precise
+renderer timing of those historical failures. Exact-head CI remains the next
+qualification gate. Migration activation, exact save acknowledgement UI,
+budgets and the other Phase 1 acceptance items above remain open.
+
+CI retains Playwright reports after successful browser jobs as well as failed
+ones. This preserves flaky first attempts and rendering attachments even when
+the browser step succeeds and a later build or budget step fails. Retention is
+still seven days; this does not alter retry policy or any gate result.
+
+The complete affected conflict-recovery and planned-preview suites pass
+105/105 across Chromium, Firefox and WebKit, including both slow-transition
+controls. Static checks pass; typecheck remains at 47 baseline diagnostics.
+The Playwright setup built the unchanged application successfully. The original
+failed slow-transition report and all subsequent reports remain preserved.
