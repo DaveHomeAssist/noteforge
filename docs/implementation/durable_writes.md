@@ -779,3 +779,23 @@ differences outside the editor were inspected separately. The previous visual
 comparison correctly rejects the old baselines. A subsequent exact-head
 comparison, the ongoing full 431-case run and existing release gates still need
 terminal evidence; baseline generation alone is not comparison success.
+
+Local full-run result: 428/431 passed, including all 27 application checks and
+47 axe scans. The three failures were the same existing refresh assertion in
+three engines: its unscoped Review and export locator now found both the new
+pane action and the original storage-banner action. Traces establish the strict
+locator error. Existing banner-recovery tests now explicitly address the banner;
+new pane tests independently exercise the pane action. The affected recovery,
+refresh and editor-save suites pass 132/132 after that correction. The failed
+full report is retained; this is not described as a single clean 431-case run.
+
+Pinned comparison passes at 8a8a74e with the 50 reviewed baseline updates.
+Node 22/24 pass 557/557 each, static/typecheck pass with the 47 existing diagnostics,
+fresh builds succeed and audit reports zero vulnerabilities. Shell/precache
+remain over budget. Phone screenshots confirm reachable new controls, while root
+geometry remains 375×860 inside a 375×812 viewport in all three engines: existing
+F07 is still open. Final exact-head combined CI/review is independently required.
+
+The final retry scenario also verifies resubmission without any newer typing
+(3/3 engines), alongside the existing newer-draft retry path. Both require the
+current saved record to match the intended content.

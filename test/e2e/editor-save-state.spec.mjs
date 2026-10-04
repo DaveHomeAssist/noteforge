@@ -163,6 +163,28 @@ test('failed saves retain a draft and retry the current content without duplicat
       ),
     ).toBe('Newer retained draft');
     await expect(page.getByRole('button', { name: 'Retry save' })).toBeHidden();
+    // The ordinary retry path has no new input to trigger Editor.#save.
+    await page.evaluate(() => {
+      window.db.storage.commitCurrentVault = async () => {
+        throw new Error('Injected repeated failure');
+      };
+    });
+    await block(page).fill('Retry unchanged snapshot');
+    await page.evaluate(async () => {
+      window.editors[0].flushPending();
+      await window.db.flushCurrentWrites();
+    });
+    await expect(status(page)).toContainText('Save failed');
+    await page.evaluate(() => {
+      window.db.storage.commitCurrentVault = window.commit;
+    });
+    await page.getByRole('button', { name: 'Retry save' }).click();
+    await expect(status(page)).toHaveText('Saved on this device');
+    expect(
+      await page.evaluate(
+        async () => (await window.db.storage.readCurrentVault()).records.find(([id]) => id === 'a')[1].value.content,
+      ),
+    ).toBe('Retry unchanged snapshot');
   } finally {
     await close(context, page);
   }

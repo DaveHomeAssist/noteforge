@@ -519,8 +519,7 @@ class App {
     await openConflictRecovery(this, () => this.#ensureRecovery());
   }
 
-  /** Persistent, dismissible banner shown when a save fails on both storage
-   *  backends — the only user-visible signal that edits are no longer durable. */
+  /** Persistent recovery access when a write fails or needs conflict review. */
   #showStorageError() {
     if (this._storageErrorBar && document.body.contains(this._storageErrorBar)) return;
     const bar = document.createElement('div');

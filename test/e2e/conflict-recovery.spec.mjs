@@ -219,7 +219,7 @@ test('reopened conflicts are compared, exported and resolved through the applica
     const app = await context.newPage();
     await app.goto(devUrl());
     await waitForRecoveryStartup(app);
-    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    await app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
     await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved in A/);
@@ -285,7 +285,7 @@ test('deferred startup invalidates an open recovery review and requires another 
     await app.evaluate(() => window.app.ready);
     await app.waitForFunction(() => window.app.phase6);
     await app.evaluate(() => window.app.phase6.ready);
-    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    await app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
     await expect(dialog.getByLabel('Saved version', { exact: true })).toHaveValue(/Saved in A/);
@@ -356,7 +356,7 @@ test('an invalidated initial comparison can be refreshed without applying a reco
         return preview(...args);
       };
     });
-    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    await app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await app.waitForFunction(() => window.releaseReviewRead);
     await app.evaluate(async () => {
@@ -396,7 +396,7 @@ test('refresh retains the selected conflict and ignores an older read failure', 
     await app.goto(devUrl());
     await waitForRecoveryStartup(app);
     await app.evaluate(() => window.app.stopVaultRefresh?.());
-    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    await app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     const choice = dialog.getByLabel('Conflict', { exact: true });
     await expect(choice.locator('option')).toHaveCount(2);
@@ -469,7 +469,7 @@ test('recovery export includes newly stored conflicts and still exports local dr
     const app = await context.newPage();
     await app.goto(devUrl());
     await waitForRecoveryStartup(app);
-    await app.getByRole('button', { name: 'Review and export', exact: true }).click();
+    await app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }).click();
     const dialog = app.getByRole('dialog', { name: 'Recover unsaved changes' });
     await expect(dialog.getByLabel('Your draft', { exact: true })).toHaveValue(/Draft in B/);
     const c = await open(context);

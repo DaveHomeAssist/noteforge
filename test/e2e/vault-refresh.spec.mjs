@@ -303,7 +303,9 @@ test('application resume refreshes a clean editor while an active draft survives
       window.app.editor.flushPending();
       await window.app.db.flush();
     });
-    await expect(app.getByRole('button', { name: 'Review and export', exact: true })).toBeVisible();
+    await expect(
+      app.locator('.storage-error').getByRole('button', { name: 'Review and export', exact: true }),
+    ).toBeVisible();
     const reopened = await open(context);
     expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Later external version');
     expect(
