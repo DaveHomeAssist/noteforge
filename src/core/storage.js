@@ -24,6 +24,7 @@ const DB_VERSION = 1;
 
 let dbPromise; // memoized Promise<IDBDatabase | null>
 let lastBackendError = null;
+let openFailure = null;
 
 function openDB() {
   if (dbPromise) return dbPromise;
@@ -45,12 +46,24 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    let blocked = false;
+    req.onsuccess = () => {
+      if (blocked) req.result.close();
+      else resolve(req.result);
+    };
     req.onerror = () => {
+      openFailure = req.error;
       console.warn('[storage] IndexedDB unavailable, using localStorage:', req.error);
       resolve(null);
     };
-    req.onblocked = () => resolve(null);
+    req.onblocked = () => {
+      blocked = true;
+      openFailure = Object.assign(
+        new Error('The saved database is blocked by another open window. Close other NoteForge windows and reload.'),
+        { name: 'BlockedError' },
+      );
+      resolve(null);
+    };
   });
   return dbPromise;
 }
@@ -299,6 +312,12 @@ export const storage = {
 
   async readCurrentVault() {
     const db = await openDB();
+    if (!db && ['VersionError', 'BlockedError'].includes(openFailure?.name))
+      throw new Error(
+        openFailure.name === 'VersionError'
+          ? 'The saved database uses a newer version. Export a storage archive before using a compatible application.'
+          : openFailure.message,
+      );
     if (!db) return null;
     return readVault(db, STORE);
   },

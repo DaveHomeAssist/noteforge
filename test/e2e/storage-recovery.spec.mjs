@@ -86,6 +86,22 @@ for (const backend of ['indexeddb', 'localstorage', 'unavailable']) {
       expect(backup.notes).toEqual(original.notes);
       expect(backup.config).toMatchObject(original.config);
       await expect(page.getByRole('status')).toContainText('Portable backup verified');
+      const archiveDownload = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Download storage archive', exact: true }).click();
+      const archivePath = testInfo.outputPath('complete-storage.json');
+      await (await archiveDownload).saveAs(archivePath);
+      const archive = JSON.parse(await readFile(archivePath, 'utf8'));
+      expect(archive.indexedDBStatus).toBe(backend === 'unavailable' ? 'unavailable' : 'read');
+      const { decodeRecoveryValue } = await import('../../src/core/recovery-archive-codec.js');
+      const allSource = decodeRecoveryValue(archive.source);
+      if (backend === 'indexeddb')
+        expect(allSource.indexedDB.stores.find((store) => store.name === 'kv').entries).toContainEqual([
+          'notes',
+          original.notes,
+        ]);
+      else expect(allSource.localStorage['my-notes-app:notes']).toBe(JSON.stringify(original.notes));
+      if (backend === 'unavailable') await expect(page.getByRole('status')).toContainText('IndexedDB was unavailable');
+
       await page.getByRole('button', { name: 'Theme: light', exact: true }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
       await page.getByRole('button', { name: 'Theme: dark', exact: true }).click();
@@ -362,6 +378,235 @@ test('unreadable legacy storage disables exports until reload can read the sourc
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('my-notes-app:notes')))).toEqual(
       startupLegacy.notes,
     );
+  } finally {
+    await context.close();
+  }
+});
+
+for (const extension of ['js', 'css']) {
+  test(`basic recovery is available without a lazy recovery ${extension} asset`, async ({ browser }) => {
+    const context = await browser.newContext();
+    try {
+      await context.route(new RegExp(`/assets/storage-recovery-[^/]+\\.${extension}$`), (route) => route.abort());
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(previewRoot());
+      await expect(page.getByRole('heading', { name: 'This vault is read only' })).toBeVisible();
+      expect(errors).toEqual([]);
+      await expect(page.getByRole('button', { name: 'Download recovery source', exact: true })).toBeEnabled();
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('storage archive preserves future stores, history and fallback source without converting the vault', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({ acceptDownloads: true });
+  try {
+    const page = await context.newPage();
+    await page.route('**/seed-recovery.html', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<title>Seed recovery</title>' }),
+    );
+    await page.goto(new URL('seed-recovery.html', previewRoot()).href);
+    await page.evaluate(async () => {
+      localStorage.setItem('my-notes-app:notes', '{ malformed legacy bytes');
+      localStorage.setItem('my-notes-app:future-setting', 'exact raw value');
+      localStorage.setItem('unrelated-application', 'must not export');
+      await new Promise((resolve, reject) => {
+        const r = indexedDB.open('my-notes-app', 2);
+        r.onupgradeneeded = () => {
+          r.result.createObjectStore('kv');
+          const future = r.result.createObjectStore('future-attachments', { keyPath: 'id', autoIncrement: true });
+          future.createIndex('by-kind', 'kind');
+        };
+        r.onsuccess = () => {
+          const db = r.result;
+          const tx = db.transaction(['kv', 'future-attachments'], 'readwrite');
+          tx.objectStore('kv').put({ schemaVersion: 99, generation: 'future', sequence: 0 }, 'vault:meta');
+          tx.objectStore('kv').put({ unknown: 'history source' }, 'revision:future');
+          tx.objectStore('future-attachments').put({ id: 1, kind: 'binary', bytes: new Uint8Array([0, 255, 42]) });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onabort = () => reject(tx.error);
+        };
+        r.onerror = () => reject(r.error);
+      });
+    });
+    await page.goto(previewRoot());
+    await expect(page.getByRole('heading', { name: 'This vault is read only' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download verified backup', exact: true })).toBeDisabled();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download storage archive', exact: true }).click();
+    const path = testInfo.outputPath('storage-archive.json');
+    await (await download).saveAs(path);
+    const raw = JSON.parse(await readFile(path, 'utf8'));
+    expect(raw.format).toBe('noteforge-storage-archive');
+    expect(raw.version).toBe(1);
+    // The archive decoder is deliberately separate from portable vault restore.
+    const { decodeRecoveryValue } = await import('../../src/core/recovery-archive-codec.js');
+    const source = decodeRecoveryValue(raw.source);
+    expect(source.indexedDB.version).toBe(2);
+    expect(source.indexedDB.stores.find((s) => s.name === 'kv').entries).toContainEqual([
+      'revision:future',
+      { unknown: 'history source' },
+    ]);
+    const future = source.indexedDB.stores.find((s) => s.name === 'future-attachments');
+    expect(future).toMatchObject({
+      keyPath: 'id',
+      autoIncrement: true,
+      indexes: [{ name: 'by-kind', keyPath: 'kind', unique: false, multiEntry: false }],
+    });
+    expect(future.entries[0]).toEqual([1, { id: 1, kind: 'binary', bytes: new Uint8Array([0, 255, 42]) }]);
+    expect(source.localStorage).toEqual({
+      'my-notes-app:notes': '{ malformed legacy bytes',
+      'my-notes-app:future-setting': 'exact raw value',
+    });
+    expect(await page.evaluate(() => window.app.db.getPersistenceStatus())).toMatchObject({
+      readOnly: true,
+      pendingWrites: 0,
+    });
+    expect(await page.evaluate(() => localStorage.getItem('unrelated-application'))).toBe('must not export');
+  } finally {
+    await context.close();
+  }
+});
+
+for (const failure of ['asset', 'transaction', 'local-read']) {
+  test(`archive ${failure} failure leaves recovery usable and never downloads partial source`, async ({
+    browser,
+  }, testInfo) => {
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      serviceWorkers: failure === 'asset' ? 'block' : 'allow',
+    });
+    try {
+      const page = await context.newPage();
+      const downloads = [],
+        errors = [];
+      page.on('download', (event) => downloads.push(event));
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(previewRoot());
+      await page.waitForFunction(() => Boolean(window.app?.ready));
+      await page.evaluate(() => window.app.ready);
+      let intercepted = 0;
+      if (failure === 'asset')
+        await page.route('**/assets/storage-archive-*.js', (route) => {
+          intercepted++;
+          return route.abort();
+        });
+      else
+        await page.evaluate((failure) => {
+          localStorage.setItem('my-notes-app:future-value', 'preserve');
+          if (failure === 'transaction') {
+            const original = IDBDatabase.prototype.transaction;
+            IDBDatabase.prototype.transaction = function (...args) {
+              const tx = original.apply(this, args);
+              if (args[1] === 'readonly') queueMicrotask(() => tx.abort());
+              return tx;
+            };
+            window.__restoreArchiveAccess = () => {
+              IDBDatabase.prototype.transaction = original;
+            };
+          } else {
+            const original = Storage.prototype.getItem;
+            Storage.prototype.getItem = function (key) {
+              if (this === localStorage && key.startsWith('my-notes-app:'))
+                throw new DOMException('Archive read denied', 'SecurityError');
+              return original.call(this, key);
+            };
+            window.__restoreArchiveAccess = () => {
+              Storage.prototype.getItem = original;
+            };
+          }
+        }, failure);
+      await page.getByRole('button', { name: 'Download storage archive', exact: true }).click();
+      await expect(page.getByRole('status')).toContainText('Storage archive could not be exported');
+      if (failure === 'asset') expect(intercepted).toBeGreaterThan(0);
+      expect(downloads).toHaveLength(0);
+      expect(errors).toEqual([]);
+      await expect(page.getByRole('button', { name: 'Download storage archive', exact: true })).toBeEnabled();
+      if (failure !== 'asset') {
+        await page.evaluate(() => window.__restoreArchiveAccess());
+        const download = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Download storage archive', exact: true }).click();
+        await (await download).saveAs(testInfo.outputPath('retried-archive.json'));
+        await expect(page.getByRole('status')).toContainText('Storage archive exported');
+        expect(await page.evaluate(() => localStorage.getItem('my-notes-app:future-value'))).toBe('preserve');
+      } else {
+        const download = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Download recovery source', exact: true }).click();
+        await (await download).saveAs(testInfo.outputPath('source-after-asset-failure.json'));
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('queued archive open times out and closes a late connection without blocking the next upgrade', async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  try {
+    await context.addInitScript(() => {
+      const connections = new Set();
+      const open = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function (...args) {
+        const request = open.apply(this, args);
+        if (args.length === 1) window.__archiveOpenSeen = true;
+        request.addEventListener('success', () => connections.add(request.result));
+        return request;
+      };
+      window.__closeRecoveryConnections = () => {
+        for (const db of connections) db.close();
+        connections.clear();
+      };
+    });
+    const page = await context.newPage();
+    await page.goto(previewRoot());
+    await page.waitForFunction(() => Boolean(window.app?.ready));
+    await page.evaluate(() => window.app.ready);
+    await page.clock.install();
+    await page.evaluate(
+      () =>
+        new Promise((resolve, reject) => {
+          const request = indexedDB.open('my-notes-app', 2);
+          request.onblocked = () => resolve('blocked');
+          request.onsuccess = () => {
+            request.result.close();
+            window.__upgradeFinished = true;
+          };
+          request.onerror = () => reject(request.error);
+        }),
+    );
+    const downloads = [];
+    page.on('download', (event) => downloads.push(event));
+    await page.getByRole('button', { name: 'Download storage archive', exact: true }).click();
+    await page.waitForFunction(() => window.__archiveOpenSeen);
+    await page.clock.fastForward(11000);
+    await expect(page.getByRole('status')).toContainText('Storage archive open timed out');
+    expect(downloads).toHaveLength(0);
+    await page.evaluate(() => window.__closeRecoveryConnections());
+    await page.waitForFunction(() => window.__upgradeFinished);
+    expect(
+      await page.evaluate(
+        () =>
+          new Promise((resolve, reject) => {
+            const request = indexedDB.open('my-notes-app', 3);
+            request.onblocked = () => resolve('blocked');
+            request.onsuccess = () => {
+              request.result.close();
+              resolve('upgraded');
+            };
+            request.onerror = () => reject(request.error);
+          }),
+      ),
+    ).toBe('upgraded');
   } finally {
     await context.close();
   }

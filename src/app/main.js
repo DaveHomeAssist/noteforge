@@ -15,6 +15,7 @@ import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { icon } from '../ui/icons.js';
 import { moveMenuFocus } from '../ui/menu-nav.js';
 import { WindowState } from '../core/window-state.js';
+import { showStorageRecovery } from './storage-recovery.js';
 
 class App {
   constructor() {
@@ -134,7 +135,6 @@ class App {
       console.warn('[app] startup opened recovery:', error);
     }
     if (this.db.getPersistenceStatus().readOnly) {
-      const { showStorageRecovery } = await import('./storage-recovery.js');
       showStorageRecovery(this.db);
       return;
     }

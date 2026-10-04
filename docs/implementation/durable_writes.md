@@ -906,3 +906,39 @@ before changing the saved source; page errors remain asserted rather than ignore
 This does not resolve cached-old-client compatibility, asset-load failure recovery,
 full namespace/archive export, end-to-end editor/history scale qualification, or
 shell/precache budget gates. Production migration remains disabled.
+
+
+## Storage archive and recovery availability
+
+The follow-up in [storage_recovery_archive.md](storage_recovery_archive.md) places
+basic recovery and its styling in the shell. Three new maintained baseline cases
+failed before repair: lazy recovery JS abort, CSS abort, and preservation of a
+future-version database's unknown store/history/binary records.
+
+Storage archive export now reads all stores in one readonly IndexedDB transaction,
+then separately captures namespaced localStorage raw bytes. A versioned graph
+retains structured source without assuming the current note schema. Failed reads
+or unsupported source types prevent partial downloads. Queued opens have a bounded
+timeout and late-connection cleanup. A newer database version or blocked primary
+open cannot be treated as an empty legacy source. No automatic restore or upgrade
+is performed. Archive availability, cross-backend consistency and browser-internal
+key-generator limitations are explicit.
+
+The first repaired run found that additional guidance put the status outside the
+visible phone summary. The status now occupies a fixed summary row while guidance
+scrolls within its own bounded area. Existing root/axe/status checks remain intact.
+
+This completes the loaded-source export's missing namespace/history capture path,
+not the remaining migration, caller, end-to-end performance or release gates.
+The initial-shell cost increases deliberately to make basic recovery independently
+available; shell/precache budget remediation remains mandatory before release.
+
+
+Qualification: 108/108 affected browser cases pass without retries in Chromium,
+Firefox and WebKit. The preceding 106/108 run retained two archive-asset injections
+that did not intercept the cached module (the archive succeeded). The transport
+fault fixture now disables service workers for that case and requires a positive
+interception count; normal recovery/archive tests continue with workers allowed.
+The earlier startup head 1a18984 completed CI37180954432 with 497 browser passes
+in each Node lane, no retries, and pinned visuals passing; only budgets failed.
+Those full-suite results are historical evidence for that head, not this change.

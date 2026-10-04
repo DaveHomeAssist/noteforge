@@ -22,6 +22,12 @@
 }
 .storage-recovery__summary {
   max-height: 50dvh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.storage-recovery__details {
+  min-height: 0;
   overflow: auto;
 }
 .storage-recovery__summary p {

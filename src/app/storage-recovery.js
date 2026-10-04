@@ -13,13 +13,17 @@ export function showStorageRecovery(db) {
       <button type="button" data-theme-toggle></button>
     </header>
     <section class="storage-recovery__summary" aria-labelledby="storage-recovery-title">
+      <div class="storage-recovery__details">
       <h2 id="storage-recovery-title" tabindex="-1">This vault is read only</h2>
       <p data-reason></p>
       <p data-guidance>You can read and export the notes loaded when this window opened. Reload to read later changes.</p>
       <div class="storage-recovery__actions">
         <button type="button" data-backup>Download verified backup</button>
         <button type="button" data-source>Download recovery source</button>
+        <button type="button" data-archive>Download storage archive</button>
         <button type="button" data-reload>Reload vault</button>
+      </div>
+      <p>For a storage archive, close other NoteForge windows first. It preserves saved records and history without converting them to a portable backup.</p>
       </div>
       <p role="status" aria-live="polite" data-status></p>
     </section>
@@ -72,6 +76,24 @@ export function showStorageRecovery(db) {
       status.textContent = `Recovery source could not be exported: ${error.message}`;
     }
   });
+  const archive = root.querySelector('[data-archive]');
+  archive.addEventListener('click', async () => {
+    archive.disabled = true;
+    status.textContent = 'Reading saved storage for an archive…';
+    try {
+      const { createStorageArchive } = await import('../core/storage-archive.js');
+      const source = await createStorageArchive();
+      downloadText(JSON.stringify(source), 'noteforge-storage-archive.json', 'application/json');
+      status.textContent =
+        source.indexedDBStatus === 'unavailable'
+          ? 'Local storage exported. IndexedDB was unavailable, so this archive cannot include its saved records.'
+          : 'Storage archive exported. It is separate from a portable backup and does not change the vault.';
+    } catch (error) {
+      status.textContent = `Storage archive could not be exported: ${error.message}. Saved data has not been changed.`;
+    } finally {
+      archive.disabled = false;
+    }
+  });
   const backup = root.querySelector('[data-backup]');
   backup.disabled = Boolean(db.startupError);
   backup.addEventListener('click', async () => {
@@ -86,7 +108,7 @@ export function showStorageRecovery(db) {
     } catch (error) {
       status.textContent = `Backup could not be verified: ${error.message}. Download recovery source to preserve the original data.`;
     } finally {
-      backup.disabled = false;
+      backup.disabled = Boolean(db.startupError);
     }
   });
   document.body.replaceChildren(root);

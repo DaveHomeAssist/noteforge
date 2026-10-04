@@ -296,3 +296,23 @@ end-to-end editor or history latency acceptance.
 runtime dependency. Existing limits remain unchanged; the phase must resolve
 these emitted-size failures before release. These measurements include the
 preceding receipt/capture work and are not the incremental cost of this UI alone.
+
+### Phase 1 recovery archive measurement (2026-10-04)
+
+Basic startup recovery now belongs to the initial shell because it must remain
+usable when a lazy recovery asset fails. Archive encoding/capture stays lazy and
+adds about 1.8 KiB gzip, within the existing 3 KiB storageRecovery limit. No limit
+was raised. Current shell is about 88.0 KiB against 82 KiB; precache is about
+249.3 KiB against 238 KiB. Both remain failing release gates.
+
+A local Rolldown module profile identifies the dominant initial JavaScript inputs:
+block editor (75,922 rendered characters), application controller (64,958),
+DOMPurify (61,541), marked (57,086), Database (49,384), editor wrapper (19,387) and
+note list (18,091). These are module rendered-code lengths before final chunk
+minification, not additive per-module gzip measurements. They locate candidates
+for further analysis; they do not establish the value of a lazy boundary or
+end-to-end startup improvement. Any boundary change must keep first-note behavior,
+error recovery, warm offline operation and the route's actual usability contract
+qualified. Full editor/history scale measurements and the budget decision remain
+open; do not remove required safety code or relabel synchronous dependencies just
+to make a route counter pass.

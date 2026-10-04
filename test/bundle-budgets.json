@@ -118,9 +118,10 @@
       "gzipBudget": 7168
     },
     "storageRecovery": {
-      "description": "Read-only recovery reader before vault activation; verified backup export also loads the backup core from the recovery route.",
+      "description": "Storage archive export. Basic read-only recovery is in the shell; portable export also loads backup core.",
       "entries": [
-        "src/app/storage-recovery.js"
+        "src/app/storage-recovery.js",
+        "src/core/storage-archive.js"
       ],
       "gzipBudget": 3072
     },
