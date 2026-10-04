@@ -155,6 +155,7 @@ class App {
       previewMention: (mention) => this.#showMention(mention),
       showProperties: (id) => this.#showProperties(id),
       announce: (message) => this.#announce(message),
+      reviewStorage: () => this.#reviewStorage(),
     };
 
     this.editor = new Editor(this.el.editor, this.db, actions);
@@ -512,6 +513,12 @@ class App {
     this.#setMenuOpen(false);
   }
 
+  async #reviewStorage() {
+    this.editor?.flushPending();
+    const { openConflictRecovery } = await import('../components/conflict-view.js');
+    await openConflictRecovery(this, () => this.#ensureRecovery());
+  }
+
   /** Persistent, dismissible banner shown when a save fails on both storage
    *  backends — the only user-visible signal that edits are no longer durable. */
   #showStorageError() {
@@ -527,9 +534,7 @@ class App {
     review.className = 'btn';
     review.addEventListener('click', async () => {
       try {
-        this.editor?.flushPending();
-        const { openConflictRecovery } = await import('../components/conflict-view.js');
-        await openConflictRecovery(this, () => this.#ensureRecovery());
+        await this.#reviewStorage();
       } catch (error) {
         msg.textContent = `Recovery unavailable: ${error.message}. Keep this window open.`;
       }

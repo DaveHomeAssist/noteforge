@@ -289,3 +289,9 @@ These add 202 shell bytes and 299 precache bytes to the planned-review checkpoin
 Recovery is 27,108 / 29,696 bytes. The existing shell/precache failures remain
 release blockers; no limit was raised. These are build-size measurements, not
 end-to-end editor or history latency acceptance.
+
+2026-10-04 per-pane save-state checkpoint: shell 87,153/83,968 B and precache
+252,692/243,712 B gzip fail. The visible status/retry/recovery controls add no
+runtime dependency. Existing limits remain unchanged; the phase must resolve
+these emitted-size failures before release. These measurements include the
+preceding receipt/capture work and are not the incremental cost of this UI alone.

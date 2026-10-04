@@ -88,3 +88,12 @@ happy-path fixture now asserts that no versioned acknowledgement is available;
 actual IndexedDB create/reuse/append/history/reopen cases cover successful saving.
 See `durable_writes.md`. Per-pane indicators, creation identity concurrency and
 production activation remain open; this is unreleased branch evidence.
+
+Per-pane save-state follow-up: editors now distinguish the displayed draft from
+its committed snapshot, including buffered title/content and composition. Retry
+and recovery/export actions are pane-local; persistence changes do not rebuild
+focused content. Three-engine regression and actual-app/axe evidence lives in
+`editor-save-state.spec.mjs` and is detailed in `durable_writes.md`. Workspace
+teardown releases the secondary editor's subscription. Current full CI, intended
+visual baseline review, migration/creation identity/performance/budget acceptance
+and physical-device proof are independent gates; Phase 1 remains unreleased.

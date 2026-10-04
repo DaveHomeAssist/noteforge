@@ -729,3 +729,43 @@ bytes; the daily route passes at 20,277/22,528. No limits or visual baselines
 changed. Combined exact-head CI and visual qualification of this checkpoint are
 still required; previous c12e379 CI passed 371 browser cases cleanly in both
 Node lanes and pinned visuals, then failed budgets.
+
+### Per-pane save state (2026-10-04, unreleased)
+
+Each editor pane renders an in-place live status alongside Retry save and Review
+and export actions when applicable. The status checks the current note's versioned
+persistence state and the actual buffered content/title/composition. An older
+acknowledgement or an unrelated note's successful write cannot label newer typing
+as saved. "Saved on this device" describes the matching committed note snapshot;
+it does not promise a remote backup or acknowledge an unconfirmed title change.
+
+Pending/in-flight writes show Saving. Buffered content and composition remain
+unsaved; title input awaiting the existing rename flow is explicitly unapplied.
+Conflicts, failed transactions and unavailable storage take priority over the
+buffered indication and retain recovery access. Retry submits the current draft
+with its existing base; it does not silently overwrite a conflict. Review uses the
+same recovery/export boundary as the persistent storage warning.
+
+Persistence notifications update only the status and controls. They do not rebuild
+the block editor or change title selection/focus. Editor destruction submits
+buffered content, cancels its debounce, unsubscribes and tears down its owned
+views; workspace destruction disposes the secondary editor while preserving the
+primary editor returned to its parent.
+
+`editor-save-state.spec.mjs` exercises buffered writes during delayed receipt,
+title/content composition, unrelated-note isolation, failed-save retry, conflict
+recovery, navigation to a different draft, read-only indication and listener
+cleanup in Chromium, Firefox and WebKit. The real application case opens recovery
+from a pane and scans the new status/actions with axe. The two original indicator
+regressions failed before the implementation. The initial combined save-state,
+adoption and capture run passed 93/93; the final title-composition follow-up passed
+21/21 save-state cases. Full application/a11y and pinned visual gates remain
+separately recorded release evidence. Physical IME/phone acceptance and the
+existing F07 page-overflow finding remain open.
+
+Prior capture-head CI at 97a7313 completed with 410/410 clean browser passes and
+557 unit cases in each Node 22/24 lane; pinned visuals passed. Both lanes then
+failed shell/precache budgets. That result covers the previous head, not these
+new visible indicators. Migration activation, atomic creation identity, remaining
+caller and end-to-end performance acceptance, budgets and release proof remain
+required before this branch is releasable.

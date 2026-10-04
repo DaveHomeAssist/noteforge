@@ -297,6 +297,7 @@ export class WorkspaceView {
   }
 
   destroy() {
+    this.secondaryEditor.destroy();
     for (const timer of this.scrollTimers.values()) clearTimeout(timer);
     this.scrollTimers.clear();
     const parent = this.element.parentNode;

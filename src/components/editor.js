@@ -13,7 +13,7 @@ export class Editor {
    * @param {import('../core/database.js').Database} db
    * @param {{ openNote:(id:string,opts?:object)=>void, openOrCreateByTitle:(t:string,fragment?:string)=>void,
    *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void,
-   *   showProperties?:(id:string)=>void, announce?:(message:string)=>void }} actions
+   *   showProperties?:(id:string)=>void, reviewStorage?:()=>Promise<void>|void, announce?:(message:string)=>void }} actions
    */
   constructor(container, db, actions) {
     this.container = container;
@@ -26,6 +26,7 @@ export class Editor {
     this.outlineReady = null;
     this.phase5Enhancer = null;
     this.autosave = debounce(() => this.#save(), Number(db.config?.autosaveMs) || 400);
+    this.unsubscribePersistence = db.subscribePersistence?.(() => this.#reflectSaveState());
     this.#renderEmpty();
   }
 
@@ -116,6 +117,7 @@ export class Editor {
     this.#render(note, replaced);
     const nextTitle = this.container.querySelector('.editor__title');
     if (titleDraft !== null && nextTitle) nextTitle.value = titleDraft;
+    this.#reflectSaveState();
     if (wasTitle && nextTitle) {
       nextTitle.focus();
       nextTitle.setSelectionRange(...titleSelection);
@@ -161,12 +163,27 @@ export class Editor {
     const input = this.container.querySelector('.editor__title');
     const note = this.db.getNote(id);
     if (input && note) input.value = this._sourceTitle = note.title;
+    this.#reflectSaveState();
+  }
+
+  destroy() {
+    this.flushPending();
+    this.autosave.cancel();
+    this.unsubscribePersistence?.();
+    this.unsubscribePersistence = null;
+    this.currentId = null;
+    this.#teardown();
+    this.container.replaceChildren();
   }
 
   // --- rendering ----------------------------------------------------------
 
   #teardown() {
     this._titleInput = null;
+    this.titleComposing = false;
+    this.saveStatus = null;
+    this.saveRetry = null;
+    this.saveReview = null;
     if (this.blockEditor) {
       this.blockEditor.destroy();
       this.blockEditor = null;
@@ -219,6 +236,11 @@ export class Editor {
         </div>
       </div>
 
+      <div class="editor__save">
+        <span class="editor__save-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button type="button" class="btn btn--ghost editor__save-retry" hidden>Retry save</button>
+        <button type="button" class="btn btn--ghost editor__save-review" hidden>Review and export</button>
+      </div>
       <div class="editor__tags">
         ${note.tags
           .map(
@@ -284,6 +306,7 @@ export class Editor {
       history,
       onChange: () => {
         this.autosave();
+        this.#reflectSaveState();
         this.outline?.update(this.blockEditor.serialize());
       },
       onOpenWikilink: (title, fragment) => {
@@ -307,6 +330,12 @@ export class Editor {
     });
 
     this.#wire(note);
+    // Composition input is deliberately withheld from BlockEditor.onChange.
+    // Observe it after its own handlers without replacing focused editor DOM.
+    for (const type of ['input', 'compositionstart', 'compositionend']) {
+      host.addEventListener(type, () => this.#reflectSaveState());
+    }
+    this.#reflectSaveState();
   }
 
   #mountOutline(markdown) {
@@ -343,6 +372,31 @@ export class Editor {
 
     const titleInput = this.container.querySelector('.editor__title');
     this._titleInput = titleInput;
+    titleInput.addEventListener('input', () => this.#reflectSaveState());
+    for (const type of ['compositionstart', 'compositionend']) {
+      titleInput.addEventListener(type, () => {
+        this.titleComposing = type === 'compositionstart';
+        this.#reflectSaveState();
+      });
+    }
+    this.saveStatus = this.container.querySelector('.editor__save-status');
+    this.saveRetry = this.container.querySelector('.editor__save-retry');
+    this.saveReview = this.container.querySelector('.editor__save-review');
+    this.saveRetry.addEventListener('click', () => {
+      const current = this.currentId && this.db.getNote(this.currentId);
+      if (!current || this.db.getNoteSaveState(this.currentId).status !== 'failed') return;
+      this.flushPending();
+      if (this.db.getNoteSaveState(this.currentId).status === 'failed') this.db.saveNoteWithReceipt(current);
+    });
+    this.saveReview.addEventListener('click', async () => {
+      const owner = this.saveStatus;
+      try {
+        this.flushPending();
+        await this.actions.reviewStorage?.();
+      } catch {
+        if (this.saveStatus === owner) owner.textContent = 'Recovery unavailable. Keep this window open.';
+      }
+    });
     titleInput.addEventListener('change', () => {
       if (this._titleInput !== titleInput) return;
       const proposed = titleInput.value.trim() || 'Untitled';
@@ -455,6 +509,35 @@ export class Editor {
   }
 
   // --- persistence --------------------------------------------------------
+
+  #reflectSaveState() {
+    if (!this.currentId || !this.saveStatus) return;
+    const note = this.db.getNote(this.currentId);
+    const state = this.db.getNoteSaveState?.(this.currentId) ?? { status: 'unavailable' };
+    const titleDraft = this.titleComposing || (this._titleInput && this._titleInput.value !== note?.title);
+    const contentDraft = this.blockEditor?.isComposing || this.getSourceMarkdown() !== note?.content;
+    const messages = {
+      committed: 'Saved on this device',
+      pending: 'Saving…',
+      'in-flight': 'Saving…',
+      dirty: 'Unsaved changes',
+      failed: 'Save failed — draft kept in this window',
+      conflict: 'Conflict — review your draft',
+      unavailable: 'Storage unavailable — export your draft',
+      missing: 'Note unavailable — preserve this draft',
+    };
+    // Failures remain actionable even when there is newer buffered typing.
+    const needsRecovery = ['conflict', 'failed', 'unavailable', 'missing'].includes(state.status);
+    const status = !needsRecovery && (titleDraft || contentDraft) ? 'dirty' : state.status;
+    const message =
+      status === 'dirty' && titleDraft && !contentDraft
+        ? 'Title change not applied'
+        : messages[status] || messages.dirty;
+    if (this.saveStatus.textContent !== message) this.saveStatus.textContent = message;
+    this.saveStatus.dataset.state = status;
+    this.saveRetry.hidden = state.status !== 'failed';
+    this.saveReview.hidden = !needsRecovery || !this.actions.reviewStorage;
+  }
 
   #save() {
     if (!this.currentId) return;
