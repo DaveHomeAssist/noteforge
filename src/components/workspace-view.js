@@ -23,6 +23,7 @@ export class WorkspaceView {
     primaryElement,
     primaryEditor,
     db,
+    windowState,
     actions,
     beforeHandoff,
     onCommitOpen,
@@ -32,6 +33,7 @@ export class WorkspaceView {
     announce = () => {},
   }) {
     this.db = db;
+    this.windowState = windowState;
     this.actions = actions;
     this.beforeHandoff = beforeHandoff;
     this.onCommitOpen = onCommitOpen;
@@ -40,7 +42,7 @@ export class WorkspaceView {
     this.onStorageError = onStorageError;
     this.announce = announce;
     this.primaryEditor = primaryEditor;
-    this.state = normalizeWorkspaceState(db.config.workspace, [...db.notes.values()]);
+    this.state = normalizeWorkspaceState(windowState.get('workspace'), [...db.notes.values()]);
     if (!this.state.panes.primary.tabs.length && !this.state.panes.secondary.tabs.length && primaryEditor.currentId) {
       this.state = openWorkspaceNote(this.state, primaryEditor.currentId, 'primary');
     }
@@ -321,7 +323,7 @@ export class WorkspaceView {
   }
 
   #persist() {
-    this.db.setConfig({ workspace: structuredClone(this.state) });
+    this.windowState.set({ workspace: this.state });
   }
 
   #render() {

@@ -160,8 +160,8 @@ the local execution artifacts. Complete Phase 1 acceptance remains open.
    acceptance across real editor callers. The read-only recovery reader avoids automatic sample
    creation and startup config writes; it does not authorize activation or replace
    the required editing/conflict recovery experience.
-3. Qualify refresh across the remaining application views, session workspace
-   policy and lifecycle combinations. Revalidate every affected caller with real editor drafts,
+3. Qualify refresh across the remaining application views and lifecycle
+   combinations. Revalidate every affected caller with real editor drafts,
    history/backup failures and migration interruptions.
 4. Complete performance measurements, full Node/browser/a11y/golden/visual gates,
    exact-head CI/review, merge/deploy, provenance and both-origin live acceptance.
@@ -314,7 +314,57 @@ are collaborative edits. A draft that later saves against a changed note or
 generation reaches the existing explicit conflict flow. This avoids rebasing
 an old draft onto a new generation merely to make the display appear current.
 
-Startup migration is still gated. Shared versus session configuration policy,
-all derived-view acceptance, real suspended-page/offline behavior and production
+Startup migration is still gated. All derived-view acceptance,
+real suspended-page/offline behavior and production
 delivery remain requirements; passing resume-event injection is not a claim of
 physical browser suspension acceptance.
+
+## Shared configuration and window state
+
+`WindowState` owns only `workspace`, `recentNoteIds` and `collapsed` in versioned
+`sessionStorage`. App startup, the navigation controller, NoteList and WorkspaceView use
+that store explicitly. Opening, closing, reordering, splitting and scrolling
+tabs do not enqueue shared configuration writes or advance the vault sequence.
+Each top-level window restores its own layout on reload; a duplicated browser
+tab may inherit the browser's initial sessionStorage copy and then diverges.
+Closing a session does not promise cross-session workspace restoration.
+
+Legacy config can seed a window that has no session record. The seed is detached;
+it is never kept synchronized with other windows. Existing legacy fields remain
+in preserved data/backups for compatibility, but new navigation does not update
+them. Session layout contains note IDs/presentation only, not source or drafts.
+Existing workspace/recent normalizers prune missing/deleted IDs and retain limits.
+
+Shared preferences (theme, font, width, autosave, templates, sort and
+sidebar), saved searches, folder mappings, property schemas and backup
+metadata retain field-level version checks. Different fields can commit
+independently; competing changes to one field preserve an explicit conflict.
+Array/object fields are replaced conditionally as a unit, never blindly merged.
+
+If sessionStorage reads/writes fail, navigation continues in memory with one
+accessible warning about layout persistence. It never falls back to shared
+vault or localStorage writes. Malformed/future session records are left intact
+and unused; durable note writes retain their own independent success/failure
+contract. Portable backup authority remains the committed vault, not the current
+window's open tabs or navigation history.
+
+Session-state checkpoint verification:
+
+- Final durability matrix: 183/183 across Chromium, Firefox and WebKit. The
+  six window-state cases exercise nested-note expansion, independent layout and
+  recents, reload, unavailable session storage, unchanged vault sequence/plan
+  token and durable note writes. All activation remains synthetic.
+- In-page feature suite: 505/505 checks after adapting the isolated component
+  fixtures to the explicit window-state dependency. The initial missing
+  WorkspaceView fixture dependency failed visibly and its trace/log are retained.
+  An earlier nested fixture used the wrong parent-setting API; that attempt was
+  deliberately interrupted and corrected, not counted as a pass.
+- Node 22/24: 553 cases each, zero failures; case floor raised to 553. Static
+  checks and the 47-diagnostic typecheck ratchet pass. Production build passes
+  and audit reports zero vulnerabilities. Shell/precache budget failures remain
+  as recorded in `performance_budgets.md`, with no raised limit or exception.
+- Remaining delivery gates are unchanged. In particular, the rename dialog
+  currently re-enables its old preview after a stale-plan error; explicit
+  re-preview across planned mutation callers is still required. Production
+  migration, full application/visual CI, both deployments and live acceptance
+  are not established by these local tests.

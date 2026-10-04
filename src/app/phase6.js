@@ -4,6 +4,7 @@ import '../components/accessibility-hardening.css';
 export class Phase6Controller {
   constructor({
     db,
+    windowState,
     primaryEditor,
     primaryElement,
     onWorkspaceCreated,
@@ -18,6 +19,7 @@ export class Phase6Controller {
   }) {
     this.confirm = confirm;
     this.db = db;
+    this.windowState = windowState;
     this.primaryEditor = primaryEditor;
     this.primaryElement = primaryElement;
     this.onWorkspaceCreated = onWorkspaceCreated;
@@ -46,6 +48,7 @@ export class Phase6Controller {
       primaryElement: this.primaryElement,
       primaryEditor: this.primaryEditor,
       db: this.db,
+      windowState: this.windowState,
       actions: this.primaryEditor.actions,
       beforeHandoff: () => this.db.flushCurrentWrites(),
       onCommitOpen: (id, options) => this.commitOpen(id, options),

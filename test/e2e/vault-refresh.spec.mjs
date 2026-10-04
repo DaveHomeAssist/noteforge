@@ -371,6 +371,89 @@ test('external source refresh resets stale undo and external deletion clears app
   }
 });
 
+for (const denied of [false, true]) {
+  test(`window navigation is independent of shared settings (session storage denied ${denied})`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext();
+    try {
+      const seed = await open(context, true);
+      await seed.evaluate(async () => {
+        window.db.setParent('b', 'a');
+        await window.db.flush();
+      });
+      expect(await seed.evaluate(() => window.db.getNote('b').parentId)).toBe('a');
+      if (denied)
+        await context.addInitScript(() =>
+          Object.defineProperty(window, 'sessionStorage', {
+            get() {
+              throw new Error('Injected denied session storage');
+            },
+          }),
+        );
+      const ready = async (page) => {
+        await page.evaluate(() => window.app.ready);
+        await page.waitForFunction(() => window.app.phase6 && window.app.navigationController);
+        await page.evaluate(async () => {
+          await window.app.phase6.ready;
+          await window.app.db.flush();
+        });
+      };
+      const a = await context.newPage();
+      await a.goto(devUrl());
+      await ready(a);
+      const b = await context.newPage();
+      await b.goto(devUrl());
+      await ready(b);
+      const before = await seed.evaluate(() => window.db.storage.readCurrentVault());
+      const previewToken = await a.evaluate(() => window.app.db.captureMutationToken());
+      await a.locator('.note-item[data-id="a"] [data-twist]').click();
+      await b.locator('.note-item[data-id="a"] [data-twist]').click();
+      await a.evaluate(async () => {
+        await window.app.openNote('a');
+        await window.app.workspace.toggleSplit();
+        await window.app.db.flush();
+      });
+      await b.evaluate(async () => {
+        await window.app.openNote('b');
+        await window.app.db.flush();
+      });
+      const inspect = (page) =>
+        page.evaluate(() => ({
+          current: window.app.currentId,
+          split: window.app.workspace.state.split.enabled,
+          recent: window.app.windowState.get('recentNoteIds')[0],
+          collapsed: window.app.windowState.get('collapsed'),
+          conflicts: window.app.db.conflicts.size,
+        }));
+      const aState = { current: 'a', split: true, recent: 'a', collapsed: ['a'], conflicts: 0 };
+      const bState = { current: 'b', split: false, recent: 'b', collapsed: [], conflicts: 0 };
+      await expect.poll(() => inspect(a)).toEqual(aState);
+      await expect.poll(() => inspect(b)).toEqual(bState);
+      const after = await seed.evaluate(() => window.db.storage.readCurrentVault());
+      expect(after.config).toEqual(before.config);
+      expect(after.meta).toEqual(before.meta);
+      expect(await a.evaluate(() => window.app.db.captureMutationToken())).toEqual(previewToken);
+      if (!denied) {
+        await a.reload();
+        await ready(a);
+        await b.reload();
+        await ready(b);
+        await expect.poll(() => inspect(a)).toEqual(aState);
+        await expect.poll(() => inspect(b)).toEqual(bState);
+      }
+      await a.evaluate(async () => {
+        window.app.editor.applyFindReplacement('Note saving remains durable');
+        await window.app.db.flush();
+      });
+      const reopened = await open(context);
+      expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Note saving remains durable');
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 for (const count of [1000, 5000]) {
   test(`ordinary saves touch one note at ${count} notes; record persistence and refresh cost`, async ({
     browser,

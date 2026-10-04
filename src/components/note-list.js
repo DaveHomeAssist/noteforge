@@ -22,10 +22,12 @@ export class NoteList {
    * @param {{ onOpen:(id:string)=>void, onTogglePin:(id:string)=>void,
    *           onOpenArchived?:(id:string)=>void, onReparent?:(id:string, parentId:string|null)=>void,
    *           onNewChild?:(parentId:string)=>void, onSelectionChange?:(ids:string[])=>void }} handlers
+   * @param {import('../core/window-state.js').WindowState} windowState
    */
-  constructor(els, db, handlers) {
+  constructor(els, db, handlers, windowState) {
     this.els = els;
     this.db = db;
+    this.windowState = windowState;
     this.onOpen = handlers.onOpen;
     this.onOpenArchived = handlers.onOpenArchived || handlers.onOpen;
     this.onTogglePin = handlers.onTogglePin;
@@ -37,7 +39,8 @@ export class NoteList {
     this.activeId = null;
     this.dragId = null;
     this.selection = createSelection();
-    this.collapsed = new Set(Array.isArray(db.config.collapsed) ? db.config.collapsed : []);
+    const collapsed = windowState.get('collapsed');
+    this.collapsed = new Set(Array.isArray(collapsed) ? collapsed : []);
 
     this.els.search.addEventListener('input', () => {
       this.query = this.els.search.value;
@@ -203,7 +206,7 @@ export class NoteList {
     }
 
     // Outline tree. First prune collapsed ids that no longer refer to a parent
-    // note (deleted/purged), so config.collapsed can't grow without bound.
+    // note (deleted/purged), so session state can't grow without bound.
     if (this.collapsed.size) {
       const parentIds = new Set();
       for (const n of live) if (n.parentId) parentIds.add(n.parentId);
@@ -213,7 +216,7 @@ export class NoteList {
           this.collapsed.delete(id);
           pruned = true;
         }
-      if (pruned) this.db.setConfig({ collapsed: [...this.collapsed] });
+      if (pruned) this.windowState.set({ collapsed: [...this.collapsed] });
     }
     const forest = buildForest(live, { sort: this.#siblingComparator() });
     return { searching, rows: flattenForest(forest, this.collapsed).map((r) => ({ ...r, titlePositions: [] })) };
@@ -371,7 +374,7 @@ export class NoteList {
   #toggleCollapse(id) {
     if (this.collapsed.has(id)) this.collapsed.delete(id);
     else this.collapsed.add(id);
-    this.db.setConfig({ collapsed: [...this.collapsed] });
+    this.windowState.set({ collapsed: [...this.collapsed] });
     this.#renderList();
   }
 
@@ -381,7 +384,7 @@ export class NoteList {
     for (const anc of this.db.ancestorsOf(id)) {
       if (this.collapsed.delete(anc.id)) changed = true;
     }
-    if (changed) this.db.setConfig({ collapsed: [...this.collapsed] });
+    if (changed) this.windowState.set({ collapsed: [...this.collapsed] });
     return changed;
   }
 

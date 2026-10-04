@@ -63,6 +63,13 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
 | 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
 | 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
+| 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
+
+The session-state change adds no dependencies and does not raise any limit.
+Its build remains blocked by the existing shell/precache budgets. It separates
+window navigation from the durable write queue; layout storage failure does not
+become a note-save failure. Final emitted sizes must be rechecked after the
+remaining Phase 1 integration and compatibility work.
 
 The window refresh route uses the same new-route calculation. Existing shell
 and precache limits remain unchanged and failing; there is no approved exception.
@@ -247,8 +254,8 @@ textarea editor) left `styles.css`. No dependency was added.
 
 - Backlink, unlinked-mention, task, calendar, property, and recent-note indexes are derived and rebuildable. They are excluded from authoritative JSON backups.
 - Derived indexes update incrementally after a durable note save. A full rebuild is allowed at migration/startup or after detected corruption, never on each keystroke.
-- Navigation history retains 100 entries per session. Persisted recents retain 50 unique live note IDs.
-- Workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state.
+- Navigation history retains 100 entries per session. Session-persisted recents retain 50 unique live note IDs.
+- Per-window session workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state. Neither field is a new shared-vault write.
 - Transclusion renders to a maximum depth of 5 and tracks visited note/fragment references to terminate cycles.
 
 ## Gate policy

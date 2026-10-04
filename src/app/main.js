@@ -14,6 +14,7 @@ import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { icon } from '../ui/icons.js';
 import { moveMenuFocus } from '../ui/menu-nav.js';
+import { WindowState } from '../core/window-state.js';
 
 class App {
   constructor() {
@@ -132,11 +133,13 @@ class App {
       showStorageRecovery(this.db);
       return;
     }
-    this.recentNoteIds = [...new Set(Array.isArray(this.db.config.recentNoteIds) ? this.db.config.recentNoteIds : [])]
+    this.windowState = new WindowState(this.db.config, { onUnavailable: (message) => this.#announce(message) });
+    const recent = this.windowState.get('recentNoteIds');
+    this.recentNoteIds = [...new Set(Array.isArray(recent) ? recent : [])]
       .filter((id) => typeof id === 'string' && this.db.getNote(id))
       .slice(0, 50);
-    if (JSON.stringify(this.recentNoteIds) !== JSON.stringify(this.db.config.recentNoteIds || [])) {
-      this.db.setConfig({ recentNoteIds: this.recentNoteIds });
+    if (JSON.stringify(this.recentNoteIds) !== JSON.stringify(recent || [])) {
+      this.windowState.set({ recentNoteIds: this.recentNoteIds });
     }
     // Surface a persistence failure (both storage backends down) so silent
     // data loss becomes a visible, dismissible warning instead of console-only.
@@ -166,6 +169,7 @@ class App {
         onNewChild: (parentId) => this.newChild(parentId),
         onSelectionChange: (ids) => this.#selectionChanged(ids),
       },
+      this.windowState,
     );
     this.theme = new Theme(this.db, [this.el.themeBtn, this.el.mobileThemeBtn]);
     this.history = null; // loaded on first open to keep recovery UI out of the initial shell
@@ -201,7 +205,7 @@ class App {
       await this.#seed();
     } else {
       this.noteList.render();
-      const savedWorkspace = this.db.config.workspace;
+      const savedWorkspace = this.windowState.get('workspace');
       const savedPane = savedWorkspace?.panes?.[savedWorkspace?.activePane];
       const savedId =
         savedPane?.activeNoteId ||
@@ -720,6 +724,7 @@ class App {
         this.navigationController = new NavigationController(this.db, {
           state: this.navigation,
           recentIds: this.recentNoteIds,
+          saveRecent: (recentNoteIds) => this.windowState.set({ recentNoteIds }),
         });
         this.#syncNavigationFrom(this.navigationController);
         return this.navigationController;
@@ -954,6 +959,7 @@ class App {
       .then(async ({ Phase6Controller }) => {
         this.phase6 = new Phase6Controller({
           db: this.db,
+          windowState: this.windowState,
           primaryEditor,
           primaryElement: this.el.editor,
           onWorkspaceCreated: (workspace) => {
