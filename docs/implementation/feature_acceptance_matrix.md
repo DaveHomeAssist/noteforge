@@ -78,3 +78,13 @@ checkpoint evidence and outstanding release requirements.
 Component axe checks and unchanged shell geometry do not close F07 phone root
 overflow. Physical-device acceptance, budgets, exact-head CI/review, deployments
 and live behavior remain separate release gates.
+
+
+Quick Capture durability follow-up: exact submitted-note receipts, retained
+in-session retry requests, newer form input and dialog-session ownership now have
+39 browser checks across Chromium/Firefox/WebKit, including the real launcher
+with an unrelated retained conflict. The former unversioned Node
+happy-path fixture now asserts that no versioned acknowledgement is available;
+actual IndexedDB create/reuse/append/history/reopen cases cover successful saving.
+See `durable_writes.md`. Per-pane indicators, creation identity concurrency and
+production activation remain open; this is unreleased branch evidence.

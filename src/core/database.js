@@ -959,7 +959,14 @@ export class Database {
     return { note, completion };
   }
 
-  createNote(fields = {}, { allowIdentityConflicts = false } = {}) {
+  createNote(fields = {}, options = {}) {
+    return this.createNoteWithReceipt(fields, options).note;
+  }
+
+  createNoteWithReceipt(
+    fields = {},
+    { allowIdentityConflicts = false, captureRevision = false, reason = 'autosave' } = {},
+  ) {
     const note = new Note(fields);
     if (!allowIdentityConflicts) {
       const identity = this.#validateIdentityCandidate(null, note.title, note.aliases);
@@ -974,7 +981,7 @@ export class Database {
     }
     // A brand-new blank/default state is not useful history. Its first durable
     // user edit becomes the initial revision boundary instead.
-    return this.saveNote(note, { captureRevision: false });
+    return this.saveNoteWithReceipt(note, { captureRevision, reason });
   }
 
   /** Live child notes of `id` (direct children only). */

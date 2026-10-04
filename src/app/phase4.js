@@ -112,8 +112,8 @@ export class Phase4Controller {
     ])
       .then(([{ QuickCaptureView, createQuickCaptureElements }, { CaptureService }]) => {
         this.quickCapture = new QuickCaptureView(createQuickCaptureElements(), this.db, new CaptureService(this.db), {
-          onSaved: ({ note }) => {
-            this.openNote(note.id);
+          onSaved: async ({ note }) => {
+            if ((await this.openNote(note.id)) === false) throw new Error('Capture destination could not be opened.');
             this.announce(`Quick Capture saved to ${note.title}.`);
           },
         });
@@ -175,7 +175,9 @@ export class Phase4Controller {
   async showQuickCapture(options = {}) {
     const view = await this.#ensureQuickCapture();
     this.editor?.flushPending();
-    if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
+    // A conflict in another note must not block opening a capture draft.
+    // Each submitted destination has its own acknowledgement and recovery.
+    if (!(await this.db.flushCurrentWrites())) this.showStorageError();
     view.show(options);
   }
 

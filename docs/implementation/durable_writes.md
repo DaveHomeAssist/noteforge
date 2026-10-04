@@ -32,7 +32,7 @@ or deploy this intermediate state.
 | LinkOperations | Preview fingerprint checked before asynchronous commit | Capture immutable source/dependency versions at preview and revalidate at commit |
 | BulkOperations / TaskService | Planned changes through commitPlannedNotes | Shared conditional plan contract, including scope dependencies |
 | Phase5Controller | Properties and alias migration prepare replacements across awaits | Snapshot inputs before awaits; reject stale source and identity plans |
-| CaptureService | Synchronous append prepares note; awaits flush | Exact note result; keep draft on conflict; safe creation identity |
+| CaptureService | Exact submitted note receipt; retained request for retry; current dialog owns completion | Per-pane/open-editor integration and atomic creation identity still need qualification |
 | RecoveryService.restore | prepareRestore awaits, then unconditional saveNote | Conditional restoration of the reviewed version after safety capture |
 | RecoveryService backups/snapshots | Reads in-memory vault following flush | Consistent committed snapshot plus explicit pending/conflict recovery |
 | RecoveryService.restoreBackup | Rechecks imported backup, captures safety, calls replaceVault | Vault-generation/sequence precondition spanning preview and safety capture |
@@ -664,3 +664,68 @@ succeeds. Gzip budgets still fail: shell 86,275 / 83,968 bytes and precache
 251,148 / 243,712 bytes; conflicts is 6,247 / 7,168 bytes. Limits, accessibility
 rules and visual baselines are unchanged. Migration activation, UI/caller
 acknowledgements, remaining acceptance and release verification remain open.
+
+
+## Quick Capture acknowledgement and form ownership
+
+Quick Capture now waits for its own versioned submission receipt. An unrelated
+note conflict does not turn an acknowledged capture into a failure. The returned
+note is the detached committed snapshot; later destination typing is neither
+reported as the captured content nor replaced by the completion callback.
+`createNoteWithReceipt` adds the same contract for creation while preserving
+`createNote`'s existing return value. Capture opts into `quick_capture` history
+for its initial nonblank note as well as appends; ordinary blank creation keeps
+its prior history behavior.
+
+One request object identifies one capture attempt across retries. CaptureService
+retains its original submission in a WeakMap. A retry resubmits that exact snapshot
+only while the local destination still matches it; it never appends the Markdown
+again. A changed destination requires review. Repeating an already successful
+request returns the same acknowledgement without another write. Returned note
+and receipt data are detached from retained request state. Callers must retain
+the request object for retries and use a new object for a new capture; this is an
+in-session contract, not persistent exactly-once delivery across browser restarts.
+
+The capture dialog snapshots all text, title, URL, image and destination fields
+before asynchronous image preparation. Closing before submission cancels that
+preparation. Once queued, the write still completes, but a closed or reopened
+dialog cannot be changed or navigated by an old completion. New input entered
+while saving remains in the form and is explicitly described as unsaved. A
+failed submission exposes Retry capture for the retained request. Successful
+post-save navigation is separate from storage acknowledgement; navigation failure
+does not turn a committed capture into an apparent failed save.
+
+Four maintained baseline cases fail before this change: unrelated conflict,
+returned newer content, lost newer form text, and duplicate append on retry.
+The final capture suite passes 39/39 across Chromium, Firefox and WebKit,
+including creation/history/reopen, immutable repeated acknowledgement, changed
+retry destination, old dialog completion, real image preparation/dismissal and
+post-save navigation failure. The launcher no longer blocks opening Capture
+because another note is conflicted: it flushes editor buffers, retains the
+storage warning and lets each destination submission decide its own outcome.
+A real application regression first reproduces the blocked dialog, then proves
+independent capture/reopen while the other editor draft remains recoverable.
+A blocked post-save handoff is explicitly reported separately from the saved
+capture. One invalid destination locator in the image
+fixture was diagnosed from a live trace and corrected; its interrupted report
+is preserved. The unversioned Node fixture now asserts unavailable acknowledgement;
+real IndexedDB browser tests cover the previous happy-path integration. No fake
+version is supplied to make a legacy backend look durable.
+
+This checkpoint does not complete editor save indicators, all caller acceptance,
+atomic creation-name/alias concurrency, migration activation, performance or
+release gates. In particular, successful creation receipts alone do not prove
+that two stale windows cannot independently create the same title or Inbox.
+
+
+Final local capture checkpoint gates: 39/39 three-engine capture checks and
+27/27 final application checks (including the 505-check in-page suite and offline
+service-worker smoke). Before the final launcher-only change, the full
+application/axe lane passed 74/74, including all 47 axe scans. Node 22/24 each
+pass 557/557 on the final runtime; static/typecheck pass (47 retained typecheck
+diagnostics), fresh build succeeds and audit reports zero vulnerabilities.
+Budgets remain failing: shell 86,285/83,968 and precache 251,769/243,712 gzip
+bytes; the daily route passes at 20,277/22,528. No limits or visual baselines
+changed. Combined exact-head CI and visual qualification of this checkpoint are
+still required; previous c12e379 CI passed 371 browser cases cleanly in both
+Node lanes and pinned visuals, then failed budgets.
