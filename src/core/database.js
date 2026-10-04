@@ -70,6 +70,8 @@ export class Database {
     this._vaultMeta = null;
     this._noteVersions = new Map();
     this._configVersions = {};
+    this._savedNotes = new Map();
+    this._savedConfig = {};
     this._mutationRevision = 0;
     this.conflicts = new Map();
     this.onConflict = null;
@@ -86,8 +88,8 @@ export class Database {
     return () => this.listeners.delete(fn);
   }
 
-  #emit(noteIds = null) {
-    for (const fn of this.listeners) fn(this, noteIds);
+  #emit(noteIds = null, external = false) {
+    for (const fn of this.listeners) fn(this, noteIds, external);
   }
 
   // --- lifecycle / persistence -------------------------------------------
@@ -181,18 +183,54 @@ export class Database {
     return Array.from(this.notes.values());
   }
 
-  #adoptVault(snapshot) {
+  #adoptVault(snapshot, allowPending = false) {
+    if (
+      snapshot.meta?.schemaVersion !== CURRENT_SCHEMA_VERSION ||
+      typeof snapshot.meta.generation !== 'string' ||
+      !snapshot.meta.generation ||
+      !Number.isSafeInteger(snapshot.meta.sequence) ||
+      snapshot.meta.sequence < 0 ||
+      [snapshot.config?.values, snapshot.config?.versions].some(
+        (value) => !value || typeof value !== 'object' || Array.isArray(value),
+      )
+    )
+      throw new Error('The saved vault format is unsupported or invalid.');
+    // Prepare the entire replacement before touching the current model. A bad
+    // record must not turn a failed refresh into a partially emptied window.
+    const records = snapshot.records.map(([id, record]) => {
+      if (
+        typeof id !== 'string' ||
+        !id ||
+        !Number.isSafeInteger(record.version) ||
+        record.version < (allowPending ? 0 : 1)
+      )
+        throw new Error('Invalid saved note version.');
+      const note = record.value === null ? null : Note.fromJSON(record.value);
+      if (note && note.id !== id) throw new Error('Invalid saved note identity.');
+      if (note && (typeof note.title !== 'string' || typeof note.content !== 'string'))
+        throw new Error('Invalid saved note source.');
+      return { id, version: record.version, note };
+    });
+    if (new Set(records.map(({ id }) => id)).size !== records.length) throw new Error('Duplicate saved note identity.');
+    const conflicts = new Map(snapshot.conflicts.map((conflict) => [conflict.id, conflict]));
+    const config = { showGraph: false, ...snapshot.config.values };
+    const savedConfig = structuredClone(config);
+    const savedNotes = new Map(
+      records.filter(({ note }) => note).map(({ id, note }) => [id, JSON.stringify(note.toJSON())]),
+    );
     this._vaultMeta = snapshot.meta;
     this.notes.clear();
     this._noteVersions.clear();
-    for (const [id, record] of snapshot.records) {
-      this._noteVersions.set(id, record.version);
-      if (record.value) this.notes.set(id, Note.fromJSON(record.value));
+    for (const { id, version, note } of records) {
+      this._noteVersions.set(id, version);
+      if (note) this.notes.set(id, note);
     }
-    this.config = { showGraph: false, ...snapshot.config.values };
+    this.config = config;
+    this._savedNotes = savedNotes;
+    this._savedConfig = savedConfig;
     this._configVersions = snapshot.config.versions;
     this.lastPersistedAt = snapshot.persistence?.lastPersistedAt ?? null;
-    this.conflicts = new Map(snapshot.conflicts.map((conflict) => [conflict.id, conflict]));
+    this.conflicts = conflicts;
     this.#rebuildLinkState();
   }
 
@@ -387,10 +425,14 @@ export class Database {
     if (result.meta.sequence === this._vaultMeta.sequence + 1) this._vaultMeta = result.meta;
     for (const write of mutation.notes) {
       this._noteVersions.set(write.id, write.expected + 1);
+      if (write.value) this._savedNotes.set(write.id, JSON.stringify(write.value));
+      else this._savedNotes.delete(write.id);
       const queued = this._writeQueue.get(key);
       if (queued !== entry && queued?.expected === write.expected) queued.expected = write.expected + 1;
     }
     for (const write of mutation.config) {
+      if (write.remove) delete this._savedConfig[write.key];
+      else this._savedConfig = { ...this._savedConfig, [write.key]: structuredClone(write.value) };
       Object.defineProperty(this._configVersions, write.key, {
         value: write.expected + 1,
         enumerable: true,
@@ -488,10 +530,20 @@ export class Database {
     return previewConflict(this, id);
   }
 
+  /** Refresh only a clean window; callers also guard drafts still owned by the UI. */
+  async refreshCurrentVault(canAdopt = () => true) {
+    const { refreshVault } = await import('./vault-refresh.js');
+    return refreshVault(this, canAdopt, (snapshot, noteIds) => {
+      this.#adoptVault(snapshot);
+      this._mutationRevision++;
+      this.#emit(noteIds, true);
+    });
+  }
+
   async resolveConflict(preview, action) {
     const { resolveConflict } = await import('./conflict-recovery.js');
     return resolveConflict(this, preview, action, (snapshot) => {
-      this.#adoptVault(snapshot);
+      this.#adoptVault(snapshot, true);
       this._mutationRevision++;
       this.#emit();
     });
@@ -1113,7 +1165,10 @@ export class Database {
           throw new Error('Notes changed after this preview. Review an updated plan before applying it.');
         }
         this._vaultMeta = result.meta;
-        for (const write of mutation.notes) this._noteVersions.set(write.id, write.expected + 1);
+        for (const write of mutation.notes) {
+          this._noteVersions.set(write.id, write.expected + 1);
+          this._savedNotes.set(write.id, JSON.stringify(write.value));
+        }
         saved = true;
       } else {
         // Compatibility for injected legacy backends. Production IDB uses the

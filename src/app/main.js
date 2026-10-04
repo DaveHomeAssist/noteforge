@@ -97,6 +97,14 @@ class App {
         this.#scheduleSavedSearchesInitialization();
         this.#schedulePhase5Initialization();
         this.#schedulePhase6Initialization();
+        this.vaultRefreshReady = import('./vault-refresh.js')
+          .then(({ watchVault }) => {
+            this.stopVaultRefresh = watchVault(this, (message) => this.#announce(message));
+          })
+          .catch((error) => {
+            this.#announce('Automatic refresh is unavailable. Reload after saving to see changes from other windows.');
+            console.warn('[vault] refresh unavailable:', error);
+          });
         const intakeUrl = new URL(window.location.href);
         if (['clipper', 'clipboard'].includes(intakeUrl.searchParams.get('capture'))) {
           window.history.replaceState(window.history.state, '', `${intakeUrl.pathname}${intakeUrl.hash}`);
@@ -167,10 +175,15 @@ class App {
     this.#applySidebarLayout();
 
     // Re-render list/graph whenever the store changes; editor refreshes itself.
-    this.db.subscribe(() => {
+    this.db.subscribe((_, noteIds, external) => {
+      if (external) {
+        this.editor.syncAuthoritative(noteIds);
+        this.#applySettings(normalizeSettings(this.db.config));
+      }
       this.noteList.render();
-      this.noteList.setActive(this.currentId);
       this.editor.refresh();
+      if (external) this.currentId = this.editor.currentId;
+      this.noteList.setActive(this.currentId);
       this.el.historyBtn.disabled = !this.currentId || !this.db.getNote(this.currentId);
       this.#pruneNavigationState();
       if (this.view === 'graph') this.graph?.render(this.currentId);

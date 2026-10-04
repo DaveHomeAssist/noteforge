@@ -244,6 +244,9 @@ export class WorkspaceView {
   flushPending() {
     for (const editor of Object.values(this.editors)) editor.flushPending();
   }
+  canRefreshFromStorage() {
+    return Object.values(this.editors).every((editor) => editor.canRefreshFromStorage());
+  }
   refresh() {
     const normalized = normalizeWorkspaceState(this.state, [...this.db.notes.values()]);
     const changed = JSON.stringify(normalized) !== JSON.stringify(this.state);
@@ -259,7 +262,7 @@ export class WorkspaceView {
     const ids = new Set(Array.isArray(noteIds) ? noteIds : []);
     for (const pane of WORKSPACE_PANES) {
       const id = this.editors[pane].currentId;
-      if (id && ids.has(id)) this.editors[pane].open(id, { discardPending: true });
+      if (id && ids.has(id)) this.editors[pane].syncAuthoritative(noteIds);
     }
   }
   reflectPin(id) {

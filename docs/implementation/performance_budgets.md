@@ -50,6 +50,7 @@ over. CI runs it after every build on Node 22 and 24.
 | banner | note banner picker, gradient presets, Reposition (added 2026-10-01) | 2,181 B | 3,072 B |
 | conflicts | comparison, draft recovery and resolution (Phase 1 repair) | 6,252 B | 7,168 B |
 | storageRecovery | read-only recovery reader before activation | 2,183 B | 3,072 B |
+| vaultRefresh | clean-window reconciliation and resume watcher | 2,254 B | 3,072 B |
 | precache | everything offline | 220,873 B | 243,712 B |
 
 ### Measurements
@@ -61,6 +62,32 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-10-01 | Before Tier 1 split (`db9971f`) | 82,352 B | 19,631 B | 42,177 B | 230,324 B |
 | 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
 | 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
+| 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
+
+The window refresh route uses the same new-route calculation. Existing shell
+and precache limits remain unchanged and failing; there is no approved exception.
+The following local persistence diagnostics use synthetic 1,000/5,000-note
+vaults in Playwright Chromium, Firefox and WebKit on this Mac. Twenty measured
+ordinary saves follow five warm-up saves. Timings span Database mutation through
+the completed current-write flush; optional history is replaced by a no-op, and
+these are not full editor, paint, physical-device or release performance gates.
+
+| Engine | Notes | Save p95 | One clean refresh |
+| --- | ---: | ---: | ---: |
+| Chromium | 1,000 | 0.3 ms | 10.9 ms |
+| Chromium | 5,000 | 0.2 ms | 47.2 ms |
+| Firefox | 1,000 | 1 ms | 20 ms |
+| Firefox | 5,000 | 1 ms | 84 ms |
+| WebKit | 1,000 | 1 ms | 50 ms |
+| WebKit | 5,000 | 1 ms | 184 ms |
+
+Each 25-save run wrote the changed note 25 times and made 75 total IDB puts
+(note, vault metadata and persistence timestamp), with no cursor scans during
+those saves. The separate refresh reads the full vault and rebuilds derived
+state. These measurements do not establish constant-time serialization, indexing,
+refresh or user interaction. Timer resolution and host load affect short samples.
+The maintained scenario is `test/e2e/vault-refresh.spec.mjs`; the reviewed run
+completed all 177 durability cases with no failures.
 
 The conflict checkpoint adds two lazy routes using the policy v2 new-route
 calculation (measured gzip plus 10%, rounded up to KiB). Existing limits are

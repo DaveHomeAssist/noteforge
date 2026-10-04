@@ -287,7 +287,9 @@ export const storage = {
 
   async commitCurrentVault(mutation) {
     const db = await requireDB();
-    return commitVault(db, STORE, mutation);
+    const result = await commitVault(db, STORE, mutation);
+    globalThis.dispatchEvent?.(new Event('noteforge:vault-change'));
+    return result;
   },
 
   async readResolvedConflicts() {

@@ -124,6 +124,11 @@
       ],
       "gzipBudget": 3072
     },
+    "vaultRefresh": {
+      "description": "Cross-window refresh hints and consistent clean-window adoption, loaded after the initial usable app.",
+      "entries": ["src/app/vault-refresh.js", "src/core/vault-refresh.js"],
+      "gzipBudget": 3072
+    },
     "precache": {
       "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
       "all": true,

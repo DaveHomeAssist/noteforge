@@ -59,7 +59,7 @@ export class Editor {
     this.blockEditor?.setEnhancer(enhancer);
   }
 
-  open(id, { focus = null, discardPending = false, headingAnchor = null, blockId = null } = {}) {
+  open(id, { focus = null, discardPending = false, headingAnchor = null, blockId = null, resetHistory = false } = {}) {
     // Persist the OUTGOING note's buffered (debounced) edits before we switch —
     // flush runs #save() synchronously while currentId/blockEditor still point at
     // the note being left, so a fast note-switch never drops unsaved typing.
@@ -68,7 +68,7 @@ export class Editor {
     const note = this.db.getNote(id);
     if (!note) return this.#renderEmpty();
     this.currentId = id;
-    this.#render(note);
+    this.#render(note, resetHistory);
     if (focus === 'title') {
       const el = this.container.querySelector('.editor__title');
       if (el) {
@@ -118,6 +118,25 @@ export class Editor {
     }
   }
 
+  canRefreshFromStorage() {
+    const note = this.currentId ? this.db.getNote(this.currentId) : null;
+    return (
+      !this.container.contains(document.activeElement) &&
+      !this.blockEditor?.isEditing() &&
+      !this.banner?.isBusy() &&
+      (!this.blockEditor || this.blockEditor.serialize() === note?.content) &&
+      (!note || this.container.querySelector('.editor__title')?.value === note.title)
+    );
+  }
+
+  syncAuthoritative(noteIds) {
+    if (noteIds.includes(this.currentId))
+      this.open(this.currentId, {
+        discardPending: true,
+        resetHistory: this.blockEditor?.serialize() !== this.db.getNote(this.currentId)?.content,
+      });
+  }
+
   /** Update just the pin button in place — used when a full refresh() is
    *  suppressed (e.g. a non-text block is selected), so the toolbar can't go stale. */
   reflectPin(id) {
@@ -165,10 +184,13 @@ export class Editor {
       </div>`;
   }
 
-  #render(note) {
+  #render(note, resetHistory = false) {
     // Carry the block editor's undo/redo history across a re-render of the SAME
     // note (metadata edits trigger refresh()), so it isn't silently wiped.
-    const history = this.blockEditor && this._blockEditorNoteId === note.id ? this.blockEditor.exportHistory() : null;
+    const history =
+      !resetHistory && this.blockEditor && this._blockEditorNoteId === note.id
+        ? this.blockEditor.exportHistory()
+        : null;
     this.#teardown();
     const backlinks = this.db.backlinkOccurrencesFor(note.id);
     const mentions = this.db.unlinkedMentionsFor(note.id);

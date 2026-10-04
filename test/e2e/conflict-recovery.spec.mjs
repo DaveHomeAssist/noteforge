@@ -435,6 +435,39 @@ test('a previous vault generation can be recovered as a copy but cannot replace 
   }
 });
 
+test('a new note queued during resolution acknowledgement survives the pending overlay', async ({ browser }) => {
+  const { context, b } = await conflict(browser);
+  try {
+    await b.evaluate(async () => {
+      const preview = await window.db.previewConflict([...window.db.conflicts.keys()][0]);
+      const commit = window.db.storage.commitCurrentVault.bind(window.db.storage);
+      window.db.storage.commitCurrentVault = async (mutation) => {
+        const result = await commit(mutation);
+        if (mutation.resolution)
+          await new Promise((resolve) => {
+            window.releaseCommit = resolve;
+          });
+        return result;
+      };
+      window.resolution = window.db.resolveConflict(preview, 'keep-current');
+    });
+    await b.waitForFunction(() => window.releaseCommit);
+    await b.evaluate(async () => {
+      const { Note } = await import('../src/core/note.js');
+      window.db.saveNote(new Note({ id: 'new-during-resolution', title: 'New draft', content: 'New note content' }));
+      window.releaseCommit();
+      await window.resolution;
+      await window.db.flush();
+    });
+    expect(await b.evaluate(() => window.db.getNote('new-during-resolution').content)).toBe('New note content');
+    const reopened = await open(context);
+    expect(await reopened.evaluate(() => window.db.getNote('new-during-resolution').content)).toBe('New note content');
+    expect(await reopened.evaluate(() => window.db.getNote('a').content)).toBe('Saved in A');
+  } finally {
+    await context.close();
+  }
+});
+
 test('deferred revision leases serialize windows without Web Locks', async ({ browser }) => {
   const context = await browser.newContext();
   await context.addInitScript(() => Object.defineProperty(navigator, 'locks', { value: undefined }));

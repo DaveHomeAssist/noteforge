@@ -17,7 +17,8 @@ portable backup without starting an editor, sample creation, history, or startup
 configuration writes. Legacy recovery reads no longer copy localStorage into
 IndexedDB. Conflict comparison, resolution and export now have a lazy recovery
 UI for explicitly activated vaults. The application still needs a complete
-upgrade/activation protocol and clean/dirty window refresh integration. Do not merge
+upgrade/activation protocol and complete release qualification. Clean-window
+refresh is implemented with conservative dirty-window deferral below. Do not merge
 or deploy this intermediate state.
 
 ## Persistence writer inventory
@@ -159,8 +160,8 @@ the local execution artifacts. Complete Phase 1 acceptance remains open.
    acceptance across real editor callers. The read-only recovery reader avoids automatic sample
    creation and startup config writes; it does not authorize activation or replace
    the required editing/conflict recovery experience.
-3. Refresh clean views on notifications/resume while preserving dirty editors and
-   pending conflicts. Revalidate every affected caller with real editor drafts,
+3. Qualify refresh across the remaining application views, session workspace
+   policy and lifecycle combinations. Revalidate every affected caller with real editor drafts,
    history/backup failures and migration interruptions.
 4. Complete performance measurements, full Node/browser/a11y/golden/visual gates,
    exact-head CI/review, merge/deploy, provenance and both-origin live acceptance.
@@ -273,3 +274,47 @@ Checkpoint verification:
   activation is gated. These local checks do not establish CI, deployment or
   either live origin. The development warm-up's previously recorded unclassified
   error diagnostic remains visible in the logs.
+
+## Window refresh contract
+
+After the usable editor is ready, a lazy watcher listens for committed-write
+hints, BroadcastChannel notifications, window focus/pageshow, visibility changes
+and focus departure. A visible window also checks every 15 seconds so notification
+loss is not permanent. Hidden windows do not read for polling. Disposal removes
+listeners/timers and prevents an in-flight read from adopting after teardown.
+Messages contain no note content and do not acknowledge or authorize writes.
+
+The Database tracks detached serialized note baselines and saved configuration
+values from adoption and exact write acknowledgements. A refresh is deferred if
+there are queued writes, a drain/replacement in progress, a raw model/config edit,
+an active or dirty editor, a banner operation or a modal. The same guards run
+after the consistent read; a changed local revision or another completed refresh
+also rejects the old read. Failed reads leave local state and tokens intact.
+
+Clean adoption updates notes, tombstones, settings, conflict records and derived
+indexes together, invalidates earlier local plans, and emits changed IDs with an
+external-origin flag. Editor source replacement resets incompatible undo/redo
+history; metadata-only refresh retains that history. The app updates settings
+without persisting them again and removes an invalid deleted-note selection.
+Workspace normalization may select another valid note or show an empty editor.
+Current pane state remains local; refresh does not open another window's tabs.
+
+Checkpoint verification: the fixed-source durability matrix passed 177/177
+cases across Chromium, Firefox and WebKit. Node 22 and Node 24 each passed all
+549 cases, static/typecheck gates passed, the production build succeeded and
+audit reported zero vulnerabilities. Shell and precache budgets still fail;
+measurements and scope are recorded in `performance_budgets.md`. No production
+activation, exact-head CI acceptance, merge, deployment or live proof is claimed.
+Earlier fixture errors and the integrated run deliberately interrupted to fix
+pending version-zero adoption remain preserved as failed/incomplete evidence.
+
+This deliberately defers the whole window while dirty. It does not claim that
+every clean pane advances independently of a dirty pane, or that remote changes
+are collaborative edits. A draft that later saves against a changed note or
+generation reaches the existing explicit conflict flow. This avoids rebasing
+an old draft onto a new generation merely to make the display appear current.
+
+Startup migration is still gated. Shared versus session configuration policy,
+all derived-view acceptance, real suspended-page/offline behavior and production
+delivery remain requirements; passing resume-event injection is not a claim of
+physical browser suspension acceptance.
