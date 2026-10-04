@@ -82,7 +82,7 @@ export class PropertiesView {
     this.noteId = noteId;
     this.els.status.textContent = 'Loading properties…';
     this.modal.open();
-    await this.refresh();
+    await this.refresh({ focusKey: true });
   }
 
   close() {
@@ -92,7 +92,7 @@ export class PropertiesView {
     this.modal.close();
   }
 
-  async refresh({ focusKey = false, preserveDraft = false } = {}) {
+  async refresh({ focusKey = false, preserveDraft = false, refreshSaved = true } = {}) {
     const epoch = this.epoch;
     const version = ++this.loadVersion;
     const raw =
@@ -101,8 +101,9 @@ export class PropertiesView {
         : null;
     this.loading = true;
     this.#syncActions();
+    if (this.open && !this.els.overlay.contains(document.activeElement)) this.modal.focusInitial();
     try {
-      await this.service.refreshPreview?.();
+      if (refreshSaved) await this.service.refreshPreview?.();
       if (epoch !== this.epoch || version !== this.loadVersion || !this.open) return;
       const parsed = await this.service.read(this.noteId);
       if (epoch !== this.epoch || version !== this.loadVersion || !this.open) return;
@@ -133,8 +134,11 @@ export class PropertiesView {
     } finally {
       if (version === this.loadVersion) this.loading = false;
       this.#syncActions();
-      if (epoch === this.epoch && version === this.loadVersion && this.open && focusKey && !this.stale)
-        this.els.form.elements.key.focus();
+      if (epoch === this.epoch && version === this.loadVersion && this.open && focusKey) {
+        if (this.stale) this.els.refresh?.focus();
+        else if (this.parsed?.status === 'invalid') this.els.rawForm.elements.raw.focus();
+        else this.els.form.elements.key.focus();
+      }
       if (epoch === this.epoch && version === this.loadVersion && this.open && preserveDraft && !this.stale)
         this.els.rawForm.elements.raw.focus();
     }
@@ -178,7 +182,10 @@ export class PropertiesView {
     try {
       await action();
       if (epoch !== this.epoch || !this.open) return;
-      await this.refresh();
+      // The action already adopted its committed result. Read that model now;
+      // a second storage refresh can race derived alias/config writes and
+      // incorrectly report a successful save as an active-draft failure.
+      await this.refresh({ refreshSaved: false });
       if (epoch === this.epoch && this.open && !this.stale) success();
     } catch (error) {
       if (epoch !== this.epoch || !this.open) return;

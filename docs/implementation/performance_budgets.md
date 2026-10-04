@@ -280,3 +280,12 @@ successfully. Shell is 85,527 / 83,968 gzip bytes (+1,559); precache is 250,407 
 3,685 precache bytes. Recovery is 27,069 / 29,696 bytes. Both existing failing
 budgets remain release blockers; no limit or approval exception changed. The
 correctness contract must survive any subsequent loading/bundle optimization.
+
+### Editor adoption checkpoint
+
+The source-baseline and buffered-draft adoption changes measure 85,729 / 83,968
+gzip bytes for shell (+1,761) and 250,706 / 243,712 for precache (+6,994).
+These add 202 shell bytes and 299 precache bytes to the planned-review checkpoint.
+Recovery is 27,108 / 29,696 bytes. The existing shell/precache failures remain
+release blockers; no limit was raised. These are build-size measurements, not
+end-to-end editor or history latency acceptance.

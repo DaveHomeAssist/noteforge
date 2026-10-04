@@ -170,10 +170,10 @@ export class Phase5Controller {
     const updated = this.db.getNote(note.id);
     if (updated) await this.#indexNote(updated);
     if (this.editor?.currentId === note.id) {
-      this.editor.open(note.id, { discardPending: true });
+      this.editor.open(note.id);
       // Property persistence rebuilds the editor while its modal remains open;
       // restore focus to the replacement trigger, not the detached old button.
-      this.properties?.modal.setReturnFocus(this.editor.container?.querySelector('.editor__properties'));
+      this.properties?.modal.setReturnFocus(() => this.editor.container?.querySelector('.editor__properties'));
     }
     this.refreshSearch();
     return true;

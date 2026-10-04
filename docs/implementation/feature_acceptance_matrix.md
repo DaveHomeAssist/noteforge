@@ -72,6 +72,7 @@ checkpoint evidence and outstanding release requirements.
 | Bulk actions | Retained action input; updated affected-note review; explicit retry | Selection changes and rejected retry across all bulk actions |
 | Backup and reconciliation | Reverified source/current destination; original commit token; renewed confirmation/decisions | Local snapshots, source failures, interrupted migration, dismissal during preparation and full derived-view refresh |
 | Properties | Reviewed source/token captured when loaded; retained raw draft and separately displayed saved YAML | Typed/remove variants, editor drafts and storage/history failures |
+| Editor adoption | Source baseline; clean-pane replacement; buffered drafts flushed on original versions before adoption; same-note composition retained | Exact per-version save status, remaining caller/failure combinations, physical IME and end-to-end performance |
 | Production activation | Recovery reader; activation gate retained | Actual cached old/new builds, suspended pages, service-worker transition and divergent fallback fencing |
 
 Component axe checks and unchanged shell geometry do not close F07 phone root

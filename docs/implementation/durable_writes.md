@@ -482,3 +482,67 @@ Final checkpoint verification:
 - Shell/precache budgets still fail; exact values are in `performance_budgets.md`.
   Full application/visual CI, safe activation, review and deployment are open.
   This is a verified implementation checkpoint, not Phase 1 completion.
+
+## Editor adoption and buffered drafts
+
+The editor tracks its rendered/submitted Markdown separately from the current
+Database value. This is a local source baseline, not a claim of durable saving.
+A clean pane adopts committed source changes and resets incompatible undo history;
+a dirty pane retains its text. Focused replacement content remains editable, and
+unfinished title text/selection survive a source refresh. Change events from a
+detached title input cannot start a new rename during that refresh.
+
+The app supplies one synchronous draft flush covering all mounted workspace
+editors. Planned writes and whole-vault replacement invoke it before validating
+their preview. Planned writes, replacement and conflict resolution also flush
+immediately after transaction acknowledgement but before advancing local versions
+or replacing the model. New drafts therefore enter the existing queue with their
+original version/generation and retain conflict recovery instead of silently
+undoing the just-committed operation. No arbitrary asynchronous UI work runs
+inside an IndexedDB transaction.
+
+Application completion callbacks use a normal reopen or `syncAuthoritative` to
+retain buffered typing; explicit `discardPending` remains an opt-in editor API.
+History compatibility is checked after flushing the draft, so a same-source
+rebuild retains legitimate undo steps. A clean obsolete source is a save no-op.
+Composition text is serialized even
+before its delayed input handler schedules autosave, and a same-note completion
+does not replace a composing editor. Synthetic composition-event coverage is
+automated race evidence, not physical IME acceptance.
+
+The pre-fix application regression reproduced a stale clean pane and loss of
+typing during acknowledgement. Maintained coverage includes safety-capture edits,
+focused replacement/continued typing, title selection, both panes of a rename,
+replacement generations, Properties completion and conflict resolution. See
+`test/e2e/editor-adoption.spec.mjs`. Exact per-version acknowledgement UI, other
+caller/failure combinations, end-to-end performance and production activation
+remain release gates; this contract does not infer saved status from an empty queue.
+
+Application behavior, accessibility and visual fixtures explicitly activate an
+empty disposable vault before opening a fresh app instance. Each fixture first
+asserts the ordinary startup is an empty read-only recovery reader. This lets
+the existing application gates exercise editing without changing or bypassing
+the production activation policy. These tests prove behavior after synthetic
+activation, not safe migration of a real existing profile. The offline fixture
+keeps its first page alive until the installing service worker controls it;
+the subsequent page must independently satisfy the existing control/offline
+assertions.
+
+Properties keeps focus inside its loading dialog and returns to the current
+trigger after editor replacement. A successful property mutation reads the
+adopted model without a redundant storage refresh that can race derived writes;
+opening the dialog or explicitly refreshing a stale review still performs the
+guarded storage read. The malformed-YAML repair smoke verifies repaired source,
+unchanged body and reload persistence, rather than merely checking a notice.
+
+Checkpoint evidence: the complete local run finished with 330/332 passing
+(256/258 durability, 27/27 application tests, 47/47 axe tests). The two failures
+were the same conflict fixture in Chromium/Firefox: clean-window refresh could
+adopt the independent write before the test began its conflicting edit. The
+fixture now takes editor focus before that write and asserts a conflict exists;
+three repetitions in each engine pass (9/9). The original failing report is
+preserved; these are a full run plus a targeted correction, not a claimed single
+332/332 local run. In-page checks are 505/505; Node 22/24 are 557/557 each.
+Static checks pass and typecheck retains 47 baseline diagnostics. Build/audit
+pass; shell/precache budgets still fail. CI, visual review and deployment remain
+independent gates. All application fixtures here use synthetic activation.

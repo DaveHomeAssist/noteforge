@@ -7,6 +7,7 @@ const previews = new WeakMap();
 const stale = () => new Error('The draft or saved vault changed. Review an updated comparison before choosing again.');
 
 export async function previewConflict(db, id) {
+  db.onFlushDrafts?.();
   if (db._readOnly || !db._vaultMeta || db._vaultReplacing)
     throw new Error('Conflict recovery is unavailable right now.');
   await db.flushCurrentWrites();
@@ -109,6 +110,7 @@ function committedSnapshot(snapshot, mutation, meta, conflicts) {
 }
 
 export async function resolveConflict(db, shown, action, adopt) {
+  db.onFlushDrafts?.();
   const prepared = previews.get(shown);
   if (!prepared || prepared.db !== db || prepared.revision !== db._mutationRevision) throw stale();
   const { snapshot, conflict, preview, revision } = prepared;
@@ -151,6 +153,7 @@ export async function resolveConflict(db, shown, action, adopt) {
         await db.onNotesPersisted(captures);
       }
     }
+    db.onFlushDrafts?.();
     if (
       revision !== db._mutationRevision ||
       beforeNotes.size !== db.notes.size ||
@@ -159,6 +162,7 @@ export async function resolveConflict(db, shown, action, adopt) {
       throw stale();
     const result = await db.storage.commitCurrentVault(mutation);
     if (result.status !== 'committed') throw stale();
+    db.onFlushDrafts?.();
     previews.delete(shown);
     // If an edit arrived during commit, retain it on its original base. It must
     // conflict explicitly rather than automatically overwriting the resolution.

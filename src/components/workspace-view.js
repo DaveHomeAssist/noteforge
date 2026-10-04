@@ -70,8 +70,8 @@ export class WorkspaceView {
       this.#restoreScroll('primary');
       return this;
     }
-    if (primaryId && primaryId !== outgoingId) this.primaryEditor.open(primaryId, { discardPending: true });
-    if (secondaryId) this.secondaryEditor.open(secondaryId, { discardPending: true });
+    if (primaryId && primaryId !== outgoingId) this.primaryEditor.open(primaryId);
+    if (secondaryId) this.secondaryEditor.open(secondaryId);
     if (activeId && activeId !== outgoingId) {
       this.state.activePane = this.#locate(activeId)?.pane || this.state.activePane;
       await this.onCommitOpen(activeId, {
@@ -400,7 +400,7 @@ export class WorkspaceView {
   #syncPaneEditor(pane) {
     const expected = this.state.panes[pane].activeNoteId;
     if (this.editors[pane].currentId === expected) return;
-    this.editors[pane].open(expected, { discardPending: true });
+    this.editors[pane].open(expected);
     this.#restoreScroll(pane);
   }
 

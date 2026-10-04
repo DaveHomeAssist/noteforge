@@ -827,7 +827,11 @@ export class BlockEditor {
     if (!this.focusedId) return;
     const block = this.#byId(this.focusedId);
     const content = this.#contentEl(this.focusedId);
-    if (block && content) this.#commit(block, content);
+    if (block && content) {
+      const before = block.text;
+      this.#commit(block, content);
+      if (block.text !== before) this.sourceDirty = true;
+    }
   }
 
   /** Move focus+caret into a block, re-rendering to raw first. */

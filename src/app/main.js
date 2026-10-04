@@ -158,6 +158,7 @@ class App {
     };
 
     this.editor = new Editor(this.el.editor, this.db, actions);
+    this.db.onFlushDrafts = () => this.editor?.flushPending();
     this.noteList = new NoteList(
       { list: this.el.list, tags: this.el.tags, count: this.el.count, search: this.el.search, sort: this.el.sort },
       this.db,
@@ -606,9 +607,9 @@ class App {
         this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
           refreshPreview: () => this.#refreshMutationPreview(),
           onApplied: ({ mode, result }) => {
-            if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
+            if (mode === 'rename' && result.note) this.openNote(result.note.id, { replay: true });
             else if (mode === 'mention' && result.target) this.editor?.refresh();
-            this.linkTools?.modal.setReturnFocus(this.editor?.container?.querySelector('.editor__title'));
+            this.linkTools?.modal.setReturnFocus(() => this.editor?.container?.querySelector('.editor__title'));
           },
         });
         return this.linkTools;
@@ -663,7 +664,7 @@ class App {
       refreshPreview: () => this.#refreshMutationPreview(),
       confirmRestore: ({ message }) =>
         this.confirm({ title: 'Restore this revision?', message, confirmLabel: 'Restore' }),
-      onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
+      onRestored: ({ note }) => this.openNote(note.id),
       onRestoreCopy: ({ note }) => this.openNote(note.id),
     });
     return this.history;
@@ -850,7 +851,7 @@ class App {
     this.archiveReady = import('../components/archive-view.js')
       .then(({ ArchiveView, createArchiveElements }) => {
         this.archive = new ArchiveView(createArchiveElements(), this.db, {
-          onRestored: (id) => this.openNote(id, { discardPending: true }),
+          onRestored: (id) => this.openNote(id),
         });
         return this.archive;
       })
@@ -1140,7 +1141,7 @@ class App {
   #openFirstRestoredNote() {
     this.currentId = null;
     const first = this.db.getNotesSorted()[0];
-    if (first) this.openNote(first.id, { discardPending: true });
+    if (first) this.openNote(first.id);
     else this.editor?.refresh();
   }
 

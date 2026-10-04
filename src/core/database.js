@@ -68,6 +68,7 @@ export class Database {
     this.onNotesPersisted = onNotesPersisted; // optional async ({ note, reason }[]) => void
     this.onNotesPurged = onNotesPurged; // optional async (noteIds[]) => void
     this.onHistoryError = null; // optional (error) => void hook for degraded recovery
+    this.onFlushDrafts = null; // synchronous app-owned flush of all mounted editor drafts
     this._vaultMeta = null;
     this._noteVersions = new Map();
     this._configVersions = {};
@@ -581,6 +582,7 @@ export class Database {
     token = this.captureMutationToken(),
     { rejectStale = false } = {},
   ) {
+    this.onFlushDrafts?.();
     this.#assertMutationToken(token);
     if (!Array.isArray(notes) || !config || typeof config !== 'object' || Array.isArray(config)) {
       throw new TypeError('A restore requires notes and configuration.');
@@ -601,6 +603,7 @@ export class Database {
     const rawConfig = structuredClone(config);
 
     await this.flush();
+    this.onFlushDrafts?.();
     this.#assertMutationToken(token);
     if (this._readOnly || this._writeQueue.size > 0 || this._draining || this._vaultReplacing) {
       this.#reportPersistError(NOTES_KEY);
@@ -681,6 +684,7 @@ export class Database {
         if (rejectStale) throw stalePlan();
         return false;
       }
+      this.onFlushDrafts?.();
       // A draft produced while the replacement commits still belongs to the old
       // generation. Retain it locally and let its queued write fail that fence.
       const drafts = new Map(
@@ -1130,11 +1134,13 @@ export class Database {
     token = this.captureMutationToken(),
     captureSafety = (notes, why) => this.captureRevisionBoundary(notes, why),
   ) {
+    this.onFlushDrafts?.();
     this.#assertMutationToken(token);
     const expected = captures.map((note) => structuredClone(typeof note?.toJSON === 'function' ? note.toJSON() : note));
     const replacementById = new Map(replacements.map((raw) => [raw.id, Note.fromJSON(structuredClone(raw))]));
     if (replacementById.size !== replacements.length) throw new TypeError('Duplicate planned note identity.');
     const assertSources = () => {
+      this.onFlushDrafts?.();
       this.#assertMutationToken(token);
       if (expected.some((raw) => !jsonEquivalent(this.notes.get(raw.id)?.toJSON(), raw))) {
         throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
@@ -1171,6 +1177,9 @@ export class Database {
           this.conflicts.set(result.conflict.id, result.conflict);
           throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
         }
+        // Flush against the original versions before acknowledging this batch.
+        // Buffered UI typing is a draft even when its debounce has not fired.
+        this.onFlushDrafts?.();
         this._vaultMeta = result.meta;
         for (const write of mutation.notes) {
           this._noteVersions.set(write.id, write.expected + 1);

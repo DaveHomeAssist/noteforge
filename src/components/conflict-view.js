@@ -9,7 +9,7 @@ export async function openConflictRecovery(app, ensureSafety) {
     ensureSafety,
     onResolved: ({ noteIds }) => {
       if (app.workspace) app.workspace.syncAuthoritative(noteIds);
-      else if (noteIds.includes(app.currentId)) app.editor.open(app.currentId, { discardPending: true });
+      else app.editor?.syncAuthoritative(noteIds);
       if (!app.db.conflicts.size && !app.db.getPersistenceStatus().pendingWrites) app._storageErrorBar?.remove();
     },
   });

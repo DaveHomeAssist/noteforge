@@ -113,7 +113,7 @@ export class Phase4Controller {
       .then(([{ QuickCaptureView, createQuickCaptureElements }, { CaptureService }]) => {
         this.quickCapture = new QuickCaptureView(createQuickCaptureElements(), this.db, new CaptureService(this.db), {
           onSaved: ({ note }) => {
-            this.openNote(note.id, { discardPending: true });
+            this.openNote(note.id);
             this.announce(`Quick Capture saved to ${note.title}.`);
           },
         });
