@@ -264,9 +264,37 @@ export const storage = {
     const db = await openDB();
     const values = db ? await idbLoadMany(db, keys) : [];
     const defaults = [[], {}, 0, {}];
-    return Object.fromEntries(
-      keys.map((key, index) => [key, values[index] !== undefined ? values[index] : legacyLoad(key, defaults[index])]),
+    // Collect raw fallback bytes before decoding any field. Invalid JSON must
+    // remain exportable; an unavailable read must never look like an empty vault.
+    const raw = Object.fromEntries(
+      keys.filter((_, index) => values[index] === undefined).map((key) => [NS + key, localStorage.getItem(NS + key)]),
     );
+    try {
+      return Object.fromEntries(
+        keys.map((key, index) => [
+          key,
+          values[index] !== undefined
+            ? values[index]
+            : raw[NS + key] === null
+              ? defaults[index]
+              : JSON.parse(raw[NS + key]),
+        ]),
+      );
+    } catch {
+      throw Object.assign(
+        new Error('The saved local data could not be decoded. Export its original source before replacing it.'),
+        {
+          recoverySource: {
+            format: 'noteforge-recovery-source',
+            version: 1,
+            indexedDB: Object.fromEntries(
+              keys.flatMap((key, index) => (values[index] === undefined ? [] : [[key, values[index]]])),
+            ),
+            localStorage: raw,
+          },
+        },
+      );
+    }
   },
 
   async readCurrentVault() {

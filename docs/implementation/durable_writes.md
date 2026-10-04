@@ -12,7 +12,7 @@ it is not evidence that production upgrades are safe.
 
 Normal startup does not activate either empty or populated legacy storage. It
 opens a dedicated read-only recovery reader until compatibility is proved. The
-reader exports the original loaded storage snapshot and a separately verified
+reader exports the loaded storage source and, for supported legacy schemas, a separately verified
 portable backup without starting an editor, sample creation, history, or startup
 configuration writes. Legacy recovery reads no longer copy localStorage into
 IndexedDB. Conflict comparison, resolution and export now have a lazy recovery
@@ -873,3 +873,36 @@ current schema, and malformed current source reject before recovery controls mou
 Future legacy schema opens the recovery reader; its portable-export version policy
 also needs validation before release. Those findings belong to the still-open
 malformed/future startup acceptance lane, not the completed identity cases.
+
+
+## Failed startup recovery
+
+Legacy source is validated before migration or projection into note identities.
+Future schema versions, malformed note collections/content, duplicate IDs and
+current records without an activation marker now stop editable initialization.
+The application presents recovery controls without creating an editor or queue.
+The loaded malformed/future source remains available as recovery JSON; malformed
+localStorage JSON is carried as its original string, together with other raw
+fallback fields and available IndexedDB values. Stored bytes are not rewritten.
+This export is the loaded source, not a complete archive of every storage key or
+a portable backup. Future namespaces and ancillary history need a separate full
+storage archive contract before relying on that archive for recovery.
+
+Portable conversion is disabled in both the UI and Database for a failed first
+load. Supported legacy export migrates a clone of the original source, retaining
+unknown note fields rather than reserializing the reader's Note projection. A
+failed storage read cannot offer a misleading empty export. After access returns,
+Reload rereads the actual source. This startup path cannot clear an already ready
+Database: runtime refresh retains its existing failure and dirty-draft guards.
+
+The maintained storage-recovery tests cover these cases in all three browser
+engines, source downloads, unchanged storage, disabled writers and denied-read
+retry, plus axe and root bounds at 1440×900 and 375×812. Seven new regressions
+failed on the pre-repair runtime. The first repaired run exposed a fixture race:
+the fixture reloaded the seed page before its lazy recovery CSS finished loading;
+WebKit reported that cancelled asset. The fixture now awaits application readiness
+before changing the saved source; page errors remain asserted rather than ignored.
+
+This does not resolve cached-old-client compatibility, asset-load failure recovery,
+full namespace/archive export, end-to-end editor/history scale qualification, or
+shell/precache budget gates. Production migration remains disabled.

@@ -13,6 +13,7 @@ import { stalePlan } from './stale-plan.js';
 
 import { Note, normalizeAliases } from './note.js';
 import { activeIdentityKeys } from './note-identity.js';
+import { validateLegacyVault } from './vault-source.js';
 import { storage } from './storage.js';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { isDescendant, ancestorChain } from '../utils/tree.js';
@@ -107,6 +108,8 @@ export class Database {
     this._readOnly = false;
     this.upgradeRequired = false;
     this.legacySnapshot = null;
+    this.startupSource = null;
+    this.startupError = null;
   }
 
   // --- events -------------------------------------------------------------
@@ -148,9 +151,17 @@ export class Database {
     let legacySnapshot = null;
     if (typeof this.storage.readCurrentVault === 'function') {
       let snapshot = await this.storage.readCurrentVault();
+      if (snapshot) {
+        this.startupSource = { format: 'noteforge-recovery-source', version: 1, backend: 'indexeddb', vault: snapshot };
+        if (!snapshot.meta && (snapshot.records.length || snapshot.conflicts.length || snapshot.config))
+          throw new Error('The saved vault has records without a valid activation marker.');
+      }
       if (!snapshot?.meta && typeof this.storage.readLegacyVault === 'function') {
+        this.startupSource = null; // An empty current store does not prove the legacy source was readable.
         legacySnapshot = await this.storage.readLegacyVault();
         this.legacySnapshot = structuredClone(legacySnapshot);
+        this.startupSource = this.legacySnapshot;
+        validateLegacyVault(legacySnapshot);
       }
       if (snapshot && !snapshot.meta) {
         const [notes, config, schemaVersion] = legacySnapshot
@@ -177,6 +188,7 @@ export class Database {
       }
       if (snapshot?.meta) {
         this.#adoptVault(snapshot);
+        this.startupSource = null;
         this.ready = true;
         this.#emit();
         return this;
@@ -223,6 +235,18 @@ export class Database {
     this.ready = true;
     this.#emit();
     return this;
+  }
+
+  /** Only a failed first load may become a recovery reader; refresh never discards a live model. */
+  recoverStartup(error) {
+    if (this.ready) throw error;
+    this._readOnly = true;
+    this.startupError = error?.message || 'The saved vault could not be read safely.';
+    if (error?.recoverySource) this.startupSource = structuredClone(error.recoverySource);
+    this.notes.clear();
+    this.config = { showGraph: false };
+    this._vaultMeta = null;
+    this.ready = true;
   }
 
   #rawNotes() {
@@ -657,6 +681,13 @@ export class Database {
 
   /** A portable backup must contain one committed vault, never a mix of windows. */
   async readCommittedVault() {
+    if (this.startupError)
+      throw new Error('A portable backup cannot be verified from this source. Download recovery source instead.');
+    if (this._readOnly && this.legacySnapshot) {
+      validateLegacyVault(this.legacySnapshot);
+      const { data, version } = runMigrations(structuredClone(this.legacySnapshot), this.legacySnapshot.schemaVersion);
+      return { schemaVersion: version, notes: data.notes, config: data.config };
+    }
     const revision = this._mutationRevision;
     if (!(await this.flushCurrentWrites()))
       throw new Error('Some drafts are not saved. Resolve or export them before backing up the committed vault.');

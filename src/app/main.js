@@ -127,7 +127,12 @@ class App {
   }
 
   async #init() {
-    await this.db.init(); // async: load + migrate persisted state before rendering
+    try {
+      await this.db.init(); // validate loaded source before rendering or starting writers
+    } catch (error) {
+      this.db.recoverStartup(error);
+      console.warn('[app] startup opened recovery:', error);
+    }
     if (this.db.getPersistenceStatus().readOnly) {
       const { showStorageRecovery } = await import('./storage-recovery.js');
       showStorageRecovery(this.db);

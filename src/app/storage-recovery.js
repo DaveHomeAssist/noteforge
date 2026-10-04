@@ -15,7 +15,7 @@ export function showStorageRecovery(db) {
     <section class="storage-recovery__summary" aria-labelledby="storage-recovery-title">
       <h2 id="storage-recovery-title" tabindex="-1">This vault is read only</h2>
       <p data-reason></p>
-      <p>You can read and export the notes loaded when this window opened. Reload to read later changes.</p>
+      <p data-guidance>You can read and export the notes loaded when this window opened. Reload to read later changes.</p>
       <div class="storage-recovery__actions">
         <button type="button" data-backup>Download verified backup</button>
         <button type="button" data-source>Download recovery source</button>
@@ -29,9 +29,16 @@ export function showStorageRecovery(db) {
       <label for="storage-recovery-content">Markdown source</label>
       <textarea id="storage-recovery-content" readonly spellcheck="false"></textarea>
     </section>`;
-  root.querySelector('[data-reason]').textContent = db.upgradeRequired
-    ? 'Editing is paused until a safe compatibility upgrade is available. Your stored notes have not been changed.'
-    : 'Safe storage is unavailable in this browser. Editing is paused to prevent unsaved changes.';
+  root.querySelector('[data-reason]').textContent =
+    db.startupError ||
+    (db.upgradeRequired
+      ? 'Editing is paused until a safe compatibility upgrade is available. Your stored notes have not been changed.'
+      : 'Safe storage is unavailable in this browser. Editing is paused to prevent unsaved changes.');
+  const source = db.startupSource ?? db.legacySnapshot;
+  if (db.startupError)
+    root.querySelector('[data-guidance]').textContent = source
+      ? 'The loaded source is preserved for export. It could not be opened as a supported vault. Editing and portable backup conversion are disabled.'
+      : 'The saved data could not be read. No empty vault has been created. Restore storage access, then reload to try again.';
   const notes = [...db.notes.values()];
   const select = root.querySelector('select');
   const content = root.querySelector('textarea');
@@ -48,11 +55,17 @@ export function showStorageRecovery(db) {
   select.addEventListener('change', read);
   read();
   const status = root.querySelector('[data-status]');
-  status.textContent = `${notes.length} saved note${notes.length === 1 ? '' : 's'} loaded. Editing is disabled.`;
+  status.textContent = db.startupError
+    ? source
+      ? 'Original source is available for recovery export. Editing is disabled.'
+      : 'Storage is unavailable. Export is disabled until the saved source can be read.'
+    : `${notes.length} saved note${notes.length === 1 ? '' : 's'} loaded. Editing is disabled.`;
   root.querySelector('[data-reload]').addEventListener('click', () => window.location.reload());
-  root.querySelector('[data-source]').addEventListener('click', () => {
+  const sourceButton = root.querySelector('[data-source]');
+  sourceButton.disabled = !source;
+  sourceButton.addEventListener('click', () => {
     try {
-      downloadText(JSON.stringify(db.legacySnapshot, null, 2), 'noteforge-recovery-source.json', 'application/json');
+      downloadText(JSON.stringify(source, null, 2), 'noteforge-recovery-source.json', 'application/json');
       status.textContent =
         'Recovery source exported. This original storage snapshot is not a verified portable backup.';
     } catch (error) {
@@ -60,6 +73,7 @@ export function showStorageRecovery(db) {
     }
   });
   const backup = root.querySelector('[data-backup]');
+  backup.disabled = Boolean(db.startupError);
   backup.addEventListener('click', async () => {
     backup.disabled = true;
     status.textContent = 'Preparing and verifying backup…';
