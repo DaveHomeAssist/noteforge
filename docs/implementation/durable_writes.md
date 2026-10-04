@@ -769,3 +769,13 @@ failed shell/precache budgets. That result covers the previous head, not these
 new visible indicators. Migration activation, atomic creation identity, remaining
 caller and end-to-end performance acceptance, budgets and release proof remain
 required before this branch is releasable.
+
+Pinned baseline workflow 37178595054 generated 60 images from 1fe3796.
+All surfaces were reviewed in both themes at 390/768/1440/1920/2560 widths,
+with full-size desktop/phone shell and failed-save screenshots also inspected.
+Fifty changed baselines record the intended status row and resulting document/
+slash-menu shift; ten Trash baselines are unchanged. Tiny isolated raster-pixel
+differences outside the editor were inspected separately. The previous visual
+comparison correctly rejects the old baselines. A subsequent exact-head
+comparison, the ongoing full 431-case run and existing release gates still need
+terminal evidence; baseline generation alone is not comparison success.
