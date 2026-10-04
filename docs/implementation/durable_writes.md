@@ -975,3 +975,66 @@ commits and retains 26 exact sources, including the deliberate intermediate
 warmup save. These are affected reruns after the full run's 528 passes and two
 failures, not a claim of one clean full run. Node22/24 each pass 565 cases. Static,
 typecheck ratchet, build and audit pass; shell/precache budgets remain failing.
+
+## Planned mutation caller acceptance, 2026-10-04
+
+The complete maintained `planned-preview.spec.mjs` run passes 105/105 cases
+(35 per engine) in Chromium, Firefox and WebKit, without failures, skips or
+retries. Nineteen additional scenarios close the identified caller coverage gaps:
+
+- Typed Properties set/remove reject changes both before apply and during the
+  real safety capture. Refresh retains the intended typed value, displays the
+  latest saved value and requires a new apply. Unknown YAML values and exact
+  Markdown body survive; the safety revision contains the replaced source.
+- Local snapshot restore rejects stale destinations before apply and during
+  safety backup. A renewed preview requires another confirmation. The downloaded
+  safety backup independently verifies the latest destination; replacement changes
+  generation and survives reload.
+- Archive, unarchive, reparent and trash reject acknowledged changes during
+  real revision capture. Explicit refresh/retry preserves that source, captures
+  its revision and leaves unrelated notes intact.
+- Alias repair and mention conversion retain an edit acknowledged during capture,
+  then apply only after an explicit refreshed preview. Their materialized safety
+  revision contains the current source.
+- Native IndexedDB aborts in either history or current-note writes retain the
+  Properties draft, leave saved content unchanged and permit an explicit retry.
+  Each injection must actually fire; expected diagnostic errors are retained.
+- Full replacement refreshes an already open Tasks, Calendar, Archive, Trash or
+  Graph view. Old identities disappear; property search and backlinks reflect the
+  replacement. A verified portable backup matches all replacement records,
+  including unknown fields, and editor source survives reload.
+
+The separate targeted groups passed 18, 24 and 15 cases before the consolidated
+105-case run. Initial attempts exposed fixture assumptions: YAML flow spacing
+normalizes during typed edits; archived notes need direct fixture access; and
+Link tools must finish their lazy open before invoking the public action. Those
+attempts are retained in the external evidence. The corrections preserve the
+published source contract and do not change application runtime behavior.
+
+Static checks and diff checks pass. This test-only checkpoint does not establish
+safe migration, approve a budget increase, qualify device behavior or complete
+Phase 1 delivery. Actual cached-client activation and exact-head release gates
+remain required.
+
+## Back/forward lifecycle qualification boundary
+
+A direct-CDP Chromium 153 diagnostic (full browser, new headless mode, no
+Playwright browser connection) restored the actual legacy application from
+BFCache with the same runtime identity and persisted pageshow at baseline. After
+worker activation, Chromium evicted that entry with
+`ServiceWorkerVersionActivation` and loaded the new read-only application.
+A separately open old page retained its old runtime. This is one browser's
+observed sequence, not a portable migration guarantee.
+
+The normal Playwright three-engine probe did not restore BFCache at baseline.
+[Playwright does not support BFCache restoration testing](https://playwright.dev/docs/navigations#backforward-cache-bfcache).
+A directly launched bundled Firefox also failed a minimal independent BFCache
+control despite enabling the parent preference. Native Safari access failed before
+navigation because Computer Use could not start its screen capture. Those lanes
+remain unqualified; do not count reloads as cached-runtime restoration or infer
+that missing automation support means the product cannot encounter the hazard.
+
+The activation boundary still needs a verified writer-quiescence and restart
+protocol across actual supported browsers. Retain the read-only gate, legacy
+snapshot and explicit recovery. Worker takeover, client inventory, a version bump
+or elapsed bridge adoption time alone cannot close this requirement.
