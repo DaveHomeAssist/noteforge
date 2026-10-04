@@ -45,12 +45,13 @@ export function canonicalAliasesFor(note, property, previous) {
 }
 
 export class Phase5Controller {
-  constructor({ db, editor, ensureRecovery, announce = () => {}, refreshSearch = () => {} }) {
+  constructor({ db, editor, ensureRecovery, announce = () => {}, refreshSearch = () => {}, refreshPreview }) {
     this.db = db;
     this.editor = editor;
     this.ensureRecovery = ensureRecovery;
     this.announce = announce;
     this.refreshSearch = refreshSearch;
+    this.refreshPreview = refreshPreview;
     this.signatures = new Map();
     this.repairReport = [];
     this.properties = null;
@@ -72,9 +73,10 @@ export class Phase5Controller {
       .then(({ PropertiesView, createPropertiesElements }) => {
         this.properties = new PropertiesView(createPropertiesElements(), {
           read: (id) => this.read(id),
-          set: (id, key, value, type) => this.set(id, key, value, type),
-          remove: (id, key) => this.remove(id, key),
-          replaceRaw: (id, raw) => this.replaceRaw(id, raw),
+          refreshPreview: this.refreshPreview,
+          set: (id, key, value, type, review) => this.set(id, key, value, type, review),
+          remove: (id, key, review) => this.remove(id, key, review),
+          replaceRaw: (id, raw, review) => this.replaceRaw(id, raw, review),
         });
         return this.properties;
       })
@@ -93,12 +95,21 @@ export class Phase5Controller {
   async read(noteId) {
     const note = this.db.notes.get(noteId);
     if (!note) throw new FrontmatterError('missing_note', 'The note no longer exists.');
-    return parseFrontmatter(note.content);
+    const review = { note: structuredClone(note.toJSON()), token: this.db.captureMutationToken() };
+    return { ...(await parseFrontmatter(review.note.content)), review };
   }
 
-  async set(noteId, key, value, type) {
-    const note = this.db.getNote(noteId)?.toJSON();
-    const token = this.db.captureMutationToken();
+  #reviewedNote(noteId, review) {
+    if (review && (review.note?.id !== noteId || !review.token))
+      throw new TypeError('The property review belongs to another note.');
+    return {
+      note: structuredClone(review ? review.note : this.db.getNote(noteId)?.toJSON()),
+      token: review ? structuredClone(review.token) : this.db.captureMutationToken(),
+    };
+  }
+
+  async set(noteId, key, value, type, review = null) {
+    const { note, token } = this.#reviewedNote(noteId, review);
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const nextContent = await setFrontmatterProperty(note.content, key, value, { type });
     const parsed = await parseFrontmatter(nextContent);
@@ -107,17 +118,15 @@ export class Phase5Controller {
     await this.#commit(note, nextContent, aliases, 'pre_property_edit', token);
   }
 
-  async remove(noteId, key) {
-    const note = this.db.getNote(noteId)?.toJSON();
-    const token = this.db.captureMutationToken();
+  async remove(noteId, key, review = null) {
+    const { note, token } = this.#reviewedNote(noteId, review);
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const nextContent = await removeFrontmatterProperty(note.content, key);
     await this.#commit(note, nextContent, key === 'aliases' ? [] : note.aliases, 'pre_property_edit', token);
   }
 
-  async replaceRaw(noteId, rawSource) {
-    const note = this.db.getNote(noteId)?.toJSON();
-    const token = this.db.captureMutationToken();
+  async replaceRaw(noteId, rawSource, review = null) {
+    const { note, token } = this.#reviewedNote(noteId, review);
     if (!note) throw new FrontmatterError('missing_note', 'The note is not available for editing.');
     const current = splitFrontmatterSource(note.content);
     const raw = String(rawSource ?? '');
@@ -144,7 +153,6 @@ export class Phase5Controller {
   }
 
   async #commit(note, content, aliases, reason, token) {
-    if (content === note.content && same(aliases, note.aliases)) return false;
     this.editor?.flushPending?.();
     await this.db.flush();
     const fresh = this.db.getNote(note.id);
@@ -154,6 +162,7 @@ export class Phase5Controller {
         'The note changed while properties were open. Review the latest source and try again.',
       );
     }
+    if (content === note.content && same(aliases, note.aliases)) return false;
     await this.ensureRecovery();
     const before = fresh.toJSON();
     const replacement = { ...before, content, aliases };

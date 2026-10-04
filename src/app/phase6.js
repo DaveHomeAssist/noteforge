@@ -16,8 +16,10 @@ export class Phase6Controller {
     showStorageError,
     announce,
     confirm,
+    refreshPreview,
   }) {
     this.confirm = confirm;
+    this.refreshPreview = refreshPreview;
     this.db = db;
     this.windowState = windowState;
     this.primaryEditor = primaryEditor;
@@ -111,6 +113,7 @@ export class Phase6Controller {
       .then(([{ ReconciliationView, createReconciliationElements }, { ReconciliationService }, recovery]) => {
         const service = new ReconciliationService({ db: this.db, recovery });
         this.reconciliation = new ReconciliationView(createReconciliationElements(), this.db, service, {
+          refreshPreview: this.refreshPreview,
           confirmApply: ({ message }) =>
             this.confirm({ title: 'Apply the folder changes?', message, confirmLabel: 'Apply' }),
           onApplied: (report) =>

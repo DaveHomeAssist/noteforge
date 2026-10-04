@@ -271,3 +271,12 @@ and 493 precache bytes. Recovery is 26,717 / 29,696 bytes. No limit was raised
 and no exception is claimed. This is not a release pass. The per-note save path
 is unchanged; earlier synthetic persistence timings are historical measurements,
 not a new full UI/history performance qualification.
+
+### Planned mutation review checkpoint
+
+The explicit refresh/retained-draft controls and bounded bulk review list build
+successfully. Shell is 85,527 / 83,968 gzip bytes (+1,559); precache is 250,407 /
+243,712 (+6,695). Relative to the History checkpoint these add 76 shell bytes and
+3,685 precache bytes. Recovery is 27,069 / 29,696 bytes. Both existing failing
+budgets remain release blockers; no limit or approval exception changed. The
+correctness contract must survive any subsequent loading/bundle optimization.

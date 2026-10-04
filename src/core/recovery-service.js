@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 import { downloadText } from '../utils/download.js';
 import { CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { Note } from './note.js';
@@ -245,13 +246,13 @@ export class RecoveryService {
       throw new Error('The recovery source is missing or unsupported.');
     }
     if (JSON.stringify(freshPlan.restoreState) !== plan.sourceFingerprint) {
-      throw new Error('The backup changed after preview. Verify it and review the restore again.');
+      throw stalePlan('The backup changed after preview. Verify it and review the restore again.');
     }
     // A portable safety artifact is generated immediately before replacement.
     // This is independent of browser-local history and survives site-data loss.
     const safety = await this.createBackup();
     this.download(safety.text, `noteforge-pre-restore-${fileDate(this.now())}.json`, 'application/json');
-    const restored = await this.db.replaceVault(freshPlan.restoreState, plan.token);
+    const restored = await this.db.replaceVault(freshPlan.restoreState, plan.token, { rejectStale: true });
     if (!restored)
       throw new Error('The current vault was left in memory because the restore batch could not be saved.');
     return { restored: true, summary: freshPlan.summary };

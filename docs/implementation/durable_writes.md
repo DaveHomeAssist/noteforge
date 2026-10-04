@@ -420,3 +420,65 @@ History checkpoint verification on the final runtime source:
   No full application/visual CI or production migration acceptance is claimed.
 - The unclassified Vite warm-up `Unknown Error: [object Event]` remains visible;
   this checkpoint does not reclassify or suppress it.
+
+## Explicit review across planned mutation views
+
+Link tools, vault find/replace, bulk actions, portable/local backup restore,
+folder reconciliation and Properties now receive the app's guarded preview
+refresh. A rejected plan cannot simply be applied again: refresh reads saved
+state, preserves the proposed input where meaningful and builds a new preview.
+The user must apply again, including renewed destructive confirmation where the
+operation requires it. Folder decisions reset because changed source/destination
+pairs need new choices. Bulk retry displays the affected note names in a bounded
+list. Properties retains raw YAML drafts and displays refreshed saved YAML
+separately; its body comes from the newly reviewed source.
+
+Properties captures a detached note/token before parsing for display, rather
+than capturing its base when Save is clicked. Reconciliation captures its plan,
+decisions, source readers and token before the first await. A concurrent newer
+scan invalidates an older apply instead of supplying it a newer token. Starting
+a new folder selection disables the previous plan before file/picker reads.
+Whole-vault callers opt into typed stale rejection while the existing boolean
+replacement API remains compatible. Transaction conflicts remain recoverable.
+
+Dialog ownership invalidates pending confirmations and preview completions on
+close/reopen or changed intent. Refresh never auto-applies. These checks do not
+claim that closing a dialog rolls back a commit already in progress. Completion
+after dismissal, pending editor drafts during every caller's preparation, local
+snapshot retry, alias/mention identity changes and full derived-view refresh
+still require expanded application acceptance before Phase 1 release.
+
+The maintained service regressions for reviewed Properties source and an
+in-flight reconciliation using a newer scan token both failed before repair.
+Browser evidence uses synthetic vault activation; it does not establish safe
+migration or ordinary production startup. Existing phone root overflow (F07)
+is recorded separately from component accessibility and non-regression geometry.
+No shell fix, migration activation, budget exception or deployment is included.
+
+Cross-engine review found two additional issues in the affected surface. The
+scrollable replacement preview needs a keyboard focus target; it and the new
+bounded bulk review region are now labelled focusable regions. WebKit can deliver
+a delayed input `change` while an asynchronous preview refresh is pending. Find
+invalidation now compares actual values/options, so duplicate notifications do
+not cancel an unchanged review; real input or scope changes still invalidate it.
+The confirmation regression explicitly exercises both cases. Initial failures
+and their traces remain in the checkpoint evidence.
+
+Final checkpoint verification:
+
+- Full durability matrix: 225/225 across Chromium, Firefox and WebKit. Six
+  passing legacy diagnostics still demonstrate unsafe naive activation.
+- The six new review surfaces cover 72 engine/theme/viewport combinations with
+  zero axe violations and no additional root overflow. Saved geometry records
+  show the existing 375×812 shell is 860 px tall with or without those surfaces.
+  The included History checks cover another 12 zero-violation combinations.
+- In-page feature suite: 505/505. Node 22.22.1 and 24.21.0: 557/557 each,
+  sequentially. Static checks pass; typecheck retains 47 baseline diagnostics.
+  Build passes; audit reports zero vulnerabilities.
+- Synthetic ordinary-save measurements at 1,000/5,000 notes touch one note
+  record per save without cursor scans; p95 was 1–1.9 ms across engines and
+  whole-vault refresh took 22–269 ms. Coarse clocks can report zero; this is an
+  isolated persistence measurement, not editor/history end-to-end performance.
+- Shell/precache budgets still fail; exact values are in `performance_budgets.md`.
+  Full application/visual CI, safe activation, review and deployment are open.
+  This is a verified implementation checkpoint, not Phase 1 completion.

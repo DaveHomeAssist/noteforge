@@ -604,6 +604,7 @@ class App {
     ])
       .then(([{ LinkToolsView, createLinkToolsElements }]) => {
         this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           onApplied: ({ mode, result }) => {
             if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
             else if (mode === 'mention' && result.target) this.editor?.refresh();
@@ -675,6 +676,7 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.backup = new BackupView(createBackupElements(), this.recovery, {
+      refreshPreview: () => this.#refreshMutationPreview(),
       confirmRestore: ({ message }) =>
         this.confirm({ title: 'Restore this backup?', message, confirmLabel: 'Restore' }),
       onRestored: () => this.#openFirstRestoredNote(),
@@ -865,6 +867,7 @@ class App {
     this.findReplaceReady = Promise.all([import('../components/find-replace-view.js'), this.#ensureRecovery()])
       .then(([{ FindReplaceView, createFindReplaceElements }]) => {
         this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           confirmVaultApply: ({ message }) =>
             this.confirm({ title: 'Replace across the vault?', message, confirmLabel: 'Replace' }),
           onApplied: () => this.noteList.render(),
@@ -937,6 +940,7 @@ class App {
     ])
       .then(async ([{ Phase5Controller }]) => {
         this.phase5 = new Phase5Controller({
+          refreshPreview: () => this.#refreshMutationPreview(),
           db: this.db,
           editor: this.editor,
           ensureRecovery: () => this.#ensureRecovery(),
@@ -970,6 +974,7 @@ class App {
     this.phase6Ready = import('./phase6.js')
       .then(async ({ Phase6Controller }) => {
         this.phase6 = new Phase6Controller({
+          refreshPreview: () => this.#refreshMutationPreview(),
           db: this.db,
           windowState: this.windowState,
           primaryEditor,
@@ -1075,6 +1080,7 @@ class App {
     this.bulkActionsReady = Promise.all([import('../components/bulk-actions-view.js'), this.#ensureRecovery()])
       .then(([{ BulkActionsView, createBulkActionElements }]) => {
         this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           confirmAction: ({ message }) =>
             this.confirm({ title: 'Apply to the selected notes?', message, confirmLabel: 'Apply' }),
           onApplied: () => this.#syncCurrentAfterBatch(),

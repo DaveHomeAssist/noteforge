@@ -73,6 +73,7 @@ find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 - Commit only the intended phase slice and push its focused branch immediately.
 - Pull requests run the full `verify` job (install, audit, Node tests, Playwright Chromium browser tests, and build) without uploading or deploying Pages. Require that check when a PR is used; local gates and diff review still precede every push.
 - Merge only a releasable phase. After merge, fetch and verify local/fetched/remote `main` resolve to the same 40-character SHA.
+- For the durable-write migration, synthetic activation and passing legacy-hazard diagnostics are not release acceptance. Require actual cached old/new-client, blocked connection, service-worker, suspended-page and fallback evidence before enabling production writes. Qualify clean-editor adoption, retained in-flight drafts, exact save acknowledgements and every planned caller. Keep the draft branch unreleased while activation or data integrity remains unsafe; track incomplete evidence in `durable_writes.md`.
 
 ## 4. Prove exact-SHA NoteForge CI and mirror deployment
 

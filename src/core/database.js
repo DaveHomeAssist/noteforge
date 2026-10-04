@@ -576,7 +576,11 @@ export class Database {
    * Atomically replace the authoritative vault after a separately verified
    * restore preview. Memory is updated only after storage accepts the batch.
    */
-  async replaceVault({ notes, config, schemaVersion = CURRENT_SCHEMA_VERSION }, token = this.captureMutationToken()) {
+  async replaceVault(
+    { notes, config, schemaVersion = CURRENT_SCHEMA_VERSION },
+    token = this.captureMutationToken(),
+    { rejectStale = false } = {},
+  ) {
     this.#assertMutationToken(token);
     if (!Array.isArray(notes) || !config || typeof config !== 'object' || Array.isArray(config)) {
       throw new TypeError('A restore requires notes and configuration.');
@@ -602,7 +606,7 @@ export class Database {
       this.#reportPersistError(NOTES_KEY);
       return false;
     }
-    if (this._vaultMeta) return this.#replaceVersionedVault(rawNotes, rawConfig);
+    if (this._vaultMeta) return this.#replaceVersionedVault(rawNotes, rawConfig, rejectStale);
     let saved = false;
     const persistenceAt = new Date().toISOString();
     this._vaultReplacing = true;
@@ -660,7 +664,7 @@ export class Database {
     return true;
   }
 
-  async #replaceVersionedVault(notes, config) {
+  async #replaceVersionedVault(notes, config, rejectStale) {
     const before = new Map(this.#rawNotes().map((note) => [note.id, note.toJSON()]));
     const timestamp = new Date().toISOString();
     this._vaultReplacing = true;
@@ -674,6 +678,7 @@ export class Database {
       });
       if (result.status !== 'committed') {
         this.conflicts.set(result.conflict.id, result.conflict);
+        if (rejectStale) throw stalePlan();
         return false;
       }
       // A draft produced while the replacement commits still belongs to the old
@@ -705,6 +710,7 @@ export class Database {
       this.#emit();
       return true;
     } catch (error) {
+      if (error?.code === 'stale_plan') throw error;
       console.error('[database] vault replacement transaction failed:', error);
       this.#reportPersistError(NOTES_KEY);
       return false;

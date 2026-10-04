@@ -391,3 +391,28 @@ test('frontmatter and block markers survive portable backup and Markdown export 
   assert.equal(await writeVaultToDir(directory, state.notes), 1);
   assert.equal(files.get('Note.md'), content);
 });
+
+test('raw property save stays bound to the source reviewed when the dialog loaded', async () => {
+  const db = await new Database({
+    storageBackend: backend({ schemaVersion: 6, notes: [], config: {} }),
+    onNotesPersisted: async () => {},
+  }).init();
+  const note = db.createNote({ id: 'reviewed-property', title: 'Properties', content: '---\nvalue: old\n---\nBody' });
+  await db.flush();
+  const controller = new Phase5Controller({
+    db,
+    editor: { flushPending() {}, currentId: null },
+    ensureRecovery: async () => {},
+  });
+  await controller.ready;
+  const parsed = await controller.read(note.id);
+  const current = db.getNote(note.id);
+  current.update({ content: '---\nvalue: acknowledged\n---\nBody' });
+  db.saveNote(current);
+  assert.equal(await db.flushCurrentWrites(), true);
+  await assert.rejects(
+    () => controller.replaceRaw(note.id, '---\nvalue: proposed\n---', parsed.review),
+    (error) => ['stale_note', 'stale_plan'].includes(error.code),
+  );
+  assert.equal(db.getNote(note.id).content, '---\nvalue: acknowledged\n---\nBody');
+});

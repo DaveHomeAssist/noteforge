@@ -59,3 +59,21 @@ No row exits its phase with failing Node/browser/build/audit checks, unexplained
   randomized 1,000-note migration/backup fidelity, bounded incremental derived
   indexes, and zero unexpected browser console/page/request/HTTP errors. Exact-SHA
   release evidence is recorded after the phase commit.
+
+## Durable persistence remediation acceptance
+
+The historical phase releases above do not qualify the current persistence
+migration. The repair remains an unreleased draft; see `durable_writes.md` for
+checkpoint evidence and outstanding release requirements.
+
+| Surface | Implemented review contract | Required acceptance still open |
+| --- | --- | --- |
+| History, rename/link tools, vault find/replace | Detached reviewed plan; stale rejection; explicit saved-state refresh; new apply/confirmation | Alias/mention identity changes, dismissed in-flight commit and dirty-editor combinations |
+| Bulk actions | Retained action input; updated affected-note review; explicit retry | Selection changes and rejected retry across all bulk actions |
+| Backup and reconciliation | Reverified source/current destination; original commit token; renewed confirmation/decisions | Local snapshots, source failures, interrupted migration, dismissal during preparation and full derived-view refresh |
+| Properties | Reviewed source/token captured when loaded; retained raw draft and separately displayed saved YAML | Typed/remove variants, editor drafts and storage/history failures |
+| Production activation | Recovery reader; activation gate retained | Actual cached old/new builds, suspended pages, service-worker transition and divergent fallback fencing |
+
+Component axe checks and unchanged shell geometry do not close F07 phone root
+overflow. Physical-device acceptance, budgets, exact-head CI/review, deployments
+and live behavior remain separate release gates.
