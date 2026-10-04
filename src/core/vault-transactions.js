@@ -1,3 +1,5 @@
+import { introducedIdentityClaims, identityCollisionsFor } from './note-identity.js';
+
 // Current-note commits use IndexedDB's transaction isolation, not window-local
 // queues or advisory locks. No asynchronous computation runs inside a transaction.
 export const VAULT_META = 'vault:meta';
@@ -9,6 +11,25 @@ export const RESOLVED_CONFLICT_PREFIX = 'vault:resolved-conflict:';
 function sameDraft(left = [], right = []) {
   const withoutVersions = (writes) => JSON.stringify(writes.map((write) => ({ ...write, expected: 0 })));
   return withoutVersions(left) === withoutVersions(right);
+}
+
+// Only newly introduced live names need a scan. The cursor and final writes
+// share one readwrite transaction, so a competing claim cannot slip between them.
+function checkIdentity(store, notes, current, conflicts, apply) {
+  const claims = introducedIdentityClaims(notes, current);
+  if (!claims.size) return apply();
+  const changed = new Set(notes.map((write) => write.id));
+  // Include the final state of every write: a batch can release and claim a name,
+  // but two new records in that batch cannot both introduce the same live name.
+  for (const write of notes) conflicts.push(...identityCollisionsFor(claims, write.id, write.value));
+  const request = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (!cursor) return apply();
+    const id = String(cursor.key).slice(NOTE_PREFIX.length);
+    if (!changed.has(id)) conflicts.push(...identityCollisionsFor(claims, id, cursor.value.value));
+    cursor.continue();
+  };
 }
 
 /** @param {(NoteWrite | ConfigWrite)[]} writes
@@ -24,7 +45,7 @@ function validateWrites(writes, identity) {
 
 /** @typedef {{id:string, [key:string]:unknown}} RawNote */
 /** @typedef {{version:number, value:RawNote|null}} RecordValue */
-/** @typedef {{id:string, expected:number, value:RawNote|null}} NoteWrite */
+/** @typedef {{id:string, expected:number, value:RawNote|null, allowIdentityConflicts?:boolean}} NoteWrite */
 /** @typedef {{key:string, expected:number, value:unknown, remove?:boolean}} ConfigWrite */
 /** @typedef {{generation:string, sequence?:number, notes?:NoteWrite[], config?:ConfigWrite[],
  * conflictId?:string, timestamp:string, resolution?:{id:string,fingerprint:string,action:'keep-current'|'save-copy'|'use-draft'},
@@ -211,88 +232,100 @@ export function commitVault(db, storeName, mutation) {
           conflicts.push({ kind: 'config', key: write.key, current: settings.values[write.key] });
         }
       }
-      if (conflicts.length) {
-        if (resolution) {
-          result = { status: 'stale', reason: 'vault_changed', conflicts, meta };
-          return;
-        }
-        const conflict = { id: mutation.conflictId, mutation, conflicts, detectedAt: mutation.timestamp };
-        if (mutation.conflictId) store.put(conflict, CONFLICT_PREFIX + mutation.conflictId);
-        result = { status: 'conflict', conflict, meta };
-        return;
-      }
-      if (mutation.replacement) {
-        if (mutation.sequence === undefined) {
-          tx.abort();
-          return;
-        }
-        // An exclusive transaction fences every concurrent note/config mutation.
-        // Old queued work is invalidated by the newly committed generation.
-        const next = mutation.replacement;
-        const cursorRequest = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (cursor) {
-            cursor.delete();
-            cursor.continue();
+      const apply = () => {
+        if (conflicts.length) {
+          if (resolution) {
+            result = { status: 'stale', reason: 'vault_changed', conflicts, meta };
             return;
           }
-          for (const note of next.notes) store.put({ version: 1, value: note }, NOTE_PREFIX + note.id);
-          store.put(
-            { values: next.config, versions: Object.fromEntries(Object.keys(next.config).map((key) => [key, 1])) },
-            VAULT_CONFIG,
-          );
-          const nextMeta = {
-            generation: crypto.randomUUID(),
-            sequence: meta.sequence + 1,
-            schemaVersion: next.schemaVersion,
+          const conflict = { id: mutation.conflictId, mutation, conflicts, detectedAt: mutation.timestamp };
+          if (mutation.conflictId) store.put(conflict, CONFLICT_PREFIX + mutation.conflictId);
+          result = { status: 'conflict', conflict, meta };
+          return;
+        }
+        if (mutation.replacement) {
+          if (mutation.sequence === undefined) {
+            tx.abort();
+            return;
+          }
+          // An exclusive transaction fences every concurrent note/config mutation.
+          // Old queued work is invalidated by the newly committed generation.
+          const next = mutation.replacement;
+          const cursorRequest = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+              return;
+            }
+            for (const note of next.notes) store.put({ version: 1, value: note }, NOTE_PREFIX + note.id);
+            store.put(
+              { values: next.config, versions: Object.fromEntries(Object.keys(next.config).map((key) => [key, 1])) },
+              VAULT_CONFIG,
+            );
+            const nextMeta = {
+              generation: crypto.randomUUID(),
+              sequence: meta.sequence + 1,
+              schemaVersion: next.schemaVersion,
+            };
+            store.put(nextMeta, VAULT_META);
+            store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
+            result = { status: 'committed', meta: nextMeta };
           };
-          store.put(nextMeta, VAULT_META);
-          store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
-          result = { status: 'committed', meta: nextMeta };
-        };
-        return;
-      }
-      const previousConfig = config.map((write) => [
-        write.key,
-        {
-          value: settings.values[write.key],
-          present: Object.hasOwn(settings.values, write.key),
-          version: Object.hasOwn(settings.versions, write.key) ? settings.versions[write.key] : 0,
-        },
-      ]);
-      for (const write of notes) store.put({ version: write.expected + 1, value: write.value }, NOTE_PREFIX + write.id);
-      for (const write of config) {
-        if (write.remove) delete settings.values[write.key];
-        else settings.values = { ...settings.values, [write.key]: write.value };
-        settings.versions = { ...settings.versions, [write.key]: write.expected + 1 };
-      }
-      if (config.length) store.put(settings, VAULT_CONFIG);
-      const nextMeta = { ...meta, sequence: meta.sequence + 1 };
-      if (resolution) {
-        // Resolving never erases the last recoverable draft or replaced version.
-        // The archive, note/config writes and active-conflict removal commit together.
-        store.put(
+          return;
+        }
+        const previousConfig = config.map((write) => [
+          write.key,
           {
-            conflict: reviewedConflict,
-            resolution: {
-              action: resolution.action,
-              timestamp: mutation.timestamp,
-              generation: meta.generation,
-              sequence: nextMeta.sequence,
-            },
-            before: {
-              notes: notes.map((write, index) => [write.id, noteRequests[index].result ?? null]),
-              config: previousConfig,
-            },
+            value: settings.values[write.key],
+            present: Object.hasOwn(settings.values, write.key),
+            version: Object.hasOwn(settings.versions, write.key) ? settings.versions[write.key] : 0,
           },
-          `${RESOLVED_CONFLICT_PREFIX}${resolution.id}:${meta.generation}:${nextMeta.sequence}`,
+        ]);
+        for (const write of notes)
+          store.put({ version: write.expected + 1, value: write.value }, NOTE_PREFIX + write.id);
+        for (const write of config) {
+          if (write.remove) delete settings.values[write.key];
+          else settings.values = { ...settings.values, [write.key]: write.value };
+          settings.versions = { ...settings.versions, [write.key]: write.expected + 1 };
+        }
+        if (config.length) store.put(settings, VAULT_CONFIG);
+        const nextMeta = { ...meta, sequence: meta.sequence + 1 };
+        if (resolution) {
+          // Resolving never erases the last recoverable draft or replaced version.
+          // The archive, note/config writes and active-conflict removal commit together.
+          store.put(
+            {
+              conflict: reviewedConflict,
+              resolution: {
+                action: resolution.action,
+                timestamp: mutation.timestamp,
+                generation: meta.generation,
+                sequence: nextMeta.sequence,
+              },
+              before: {
+                notes: notes.map((write, index) => [write.id, noteRequests[index].result ?? null]),
+                config: previousConfig,
+              },
+            },
+            `${RESOLVED_CONFLICT_PREFIX}${resolution.id}:${meta.generation}:${nextMeta.sequence}`,
+          );
+          store.delete(CONFLICT_PREFIX + resolution.id);
+        }
+        store.put(nextMeta, VAULT_META);
+        store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
+        result = { status: 'committed', meta: nextMeta };
+      };
+      if (conflicts.length || mutation.replacement) apply();
+      else
+        checkIdentity(
+          store,
+          notes,
+          noteRequests.map((request) => request.result),
+          conflicts,
+          apply,
         );
-        store.delete(CONFLICT_PREFIX + resolution.id);
-      }
-      store.put(nextMeta, VAULT_META);
-      store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
-      result = { status: 'committed', meta: nextMeta };
     };
   }
   return done;

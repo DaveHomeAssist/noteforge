@@ -64,6 +64,7 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
 | 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
 | 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
+| 2026-10-04 | Atomic identity checkpoint, not releasable | 87,494 B (3,526 B over) | 20,288 B | 43,253 B | 253,172 B (9,460 B over) |
 
 The session-state change adds no dependencies and does not raise any limit.
 Its build remains blocked by the existing shell/precache budgets. It separates

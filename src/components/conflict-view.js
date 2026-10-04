@@ -143,7 +143,9 @@ export class ConflictView {
         preview.notes.length
           ? preview.notes
               .map((note) =>
-                note[side] ? `${note[side].title || 'Untitled'}\n\n${note[side].content}` : '(Note deleted)',
+                note[side]
+                  ? `${note[side].title || 'Untitled'}\n\n${note[side].content}`
+                  : '(No saved note with this ID)',
               )
               .join('\n\n────────\n\n')
           : JSON.stringify(
@@ -154,9 +156,11 @@ export class ConflictView {
       this.overlay.querySelector('[data-current]').value = content('current');
       this.overlay.querySelector('[data-draft]').value = content('draft');
       this.overlay.querySelector('[data-metadata]').textContent = JSON.stringify(preview, null, 2);
-      this.overlay.querySelector('[data-explanation]').textContent = preview.requiresNewPlan
-        ? 'Review a new plan to apply this operation. Note drafts can be saved as copies.'
-        : 'Resolved drafts stay archived. Export recovery before clearing browser data.';
+      this.overlay.querySelector('[data-explanation]').textContent = preview.identityCollisions?.length
+        ? `A title or alias is already in use: ${preview.identityCollisions.map((item) => `${item.name} (${item.ownerTitle})`).join(', ')}. Save a copy or keep the saved vault; no existing note will be overwritten.`
+        : preview.requiresNewPlan
+          ? 'Review a new plan to apply this operation. Note drafts can be saved as copies.'
+          : 'Resolved drafts stay archived. Export recovery before clearing browser data.';
       this.status.textContent = 'Review both versions, then choose an action.';
     } catch (error) {
       if (this.modal.isOpen && request === this.request) this.status.textContent = error.message;

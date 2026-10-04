@@ -799,3 +799,77 @@ F07 is still open. Final exact-head combined CI/review is independently required
 The final retry scenario also verifies resubmission without any newer typing
 (3/3 engines), alongside the existing newer-draft retry path. Both require the
 current saved record to match the intended content.
+
+
+## Atomic creation and identity claims (2026-10-04, unreleased)
+
+New live title/alias names are checked in the same IndexedDB readwrite transaction
+as versions, settings and final writes. The check inspects the final batch plus
+unchanged stored owners. A batch can transfer or swap names, but cannot introduce
+two owners of the same name. Archived/trashed notes release live names; restore
+and unarchive must claim them again. Normalization matches link resolution.
+Content-only writes introduce no names and perform no identity cursor scan.
+
+An existing ambiguous import remains editable. Explicit duplicate imports carry
+an exception on the exact submitted identity. Queue coalescing or an in-flight
+predecessor may preserve that exception for unchanged normalized names, but cannot
+lend it to a later competing rename. No new persistent index or schema migration
+is introduced by this check.
+
+Competing Inbox capture or stale creation returns a conflict and retains the
+submitted note. It does not append into another note selected after the user's
+submission. Recovery recomputes ownership from the current snapshot, explains the
+collision and disables direct replacement while it exists. Save-copy allocates a
+new ID and unique name; the owner remains intact. Sequence and conflict checks
+still protect the eventual choice after preview.
+
+Four original title/alias/Inbox/unarchive reproductions failed on the preceding
+implementation. The expanded maintained identity suite passes 42/42 across three
+engines, including simultaneous creation without Web Locks, transfer/collision
+batches, restore, duplicate-import coalescing and in-flight edits, fresh conflict
+review, unique-copy recovery, and abort during the identity cursor. The abort
+retains the exact prior notes, settings, sequence and persistence acknowledgement.
+Recovery rendering was inspected at desktop size. These fixtures explicitly
+activate synthetic vaults and do not prove migration compatibility.
+
+The preceding committed head d4870e8 completed CI run 37179260297: 431 browser
+cases and 557 unit cases pass in each Node 22/24 lane, with no browser retries;
+pinned visual comparison passes. Both verification lanes fail only the existing
+shell/precache budget gate. This result does not cover this pending identity
+change. Broad local and new exact-head qualification are recorded separately.
+
+
+### Actual legacy application diagnostics
+
+The full 7114047 production artifact and current production build were exercised
+in the same synthetic profile in Chromium, Firefox and WebKit. In all three,
+service-worker takeover leaves the existing old application running. After explicit
+synthetic activation, the new app acknowledges a per-note edit while the old app
+acknowledges a different edit to the legacy notes array; the new authority does
+not contain that old edit. The default current startup correctly remains read-only.
+A database version upgrade is blocked while application connections remain open.
+Chromium's CDP freeze/resume diagnostic also retains the old runtime; it does not
+establish physical suspension coverage.
+
+A second full-application diagnostic opens the actual old build after a naive
+IndexedDB v2 upgrade. All three engines acknowledge a localStorage edit while the
+IndexedDB sentinel remains unchanged. These results reject worker takeover plus a
+marker, and version bump alone, as activation mechanisms. They do not qualify a
+bridge or permit release. Evidence and exact served-artifact hashes are retained
+in the local `legacy-application-boundary` qualification record. Safe compatibility
+still requires implementation and positive acceptance on every supported path.
+
+
+Identity checkpoint local qualification: the complete browser run passes 473/473
+with zero failures, skips or retries: 399 durability cases across three engines,
+27 application checks and 47 axe scans. Node 22.22.1 and 24.21.0 each pass 557 unit
+cases. Static check, typecheck ratchet (47 existing diagnostics), build and audit
+pass; audit reports zero vulnerabilities. Shell is 87,494/83,968 gzip bytes and
+precache is 253,172/243,712 bytes, so budget acceptance still fails. Limits were not
+raised. New exact-head CI and release evidence remain separate gates.
+
+A follow-on production startup probe confirms malformed legacy notes, future
+current schema, and malformed current source reject before recovery controls mount.
+Future legacy schema opens the recovery reader; its portable-export version policy
+also needs validation before release. Those findings belong to the still-open
+malformed/future startup acceptance lane, not the completed identity cases.

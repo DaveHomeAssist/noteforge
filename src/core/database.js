@@ -12,6 +12,7 @@ import { stalePlan } from './stale-plan.js';
 // persisted (so it survives reload) but is excluded from every "live" query.
 
 import { Note, normalizeAliases } from './note.js';
+import { activeIdentityKeys } from './note-identity.js';
 import { storage } from './storage.js';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { isDescendant, ancestorChain } from '../utils/tree.js';
@@ -293,16 +294,22 @@ export class Database {
     }
   }
 
-  #persist(captures = [], purgedIds = [], changedIds = null) {
+  #persist(captures = [], purgedIds = [], changedIds = null, allowIdentityConflicts = false) {
     this._mutationRevision++;
     if (this._vaultMeta) {
       let completion;
       for (const id of changedIds ?? [...new Set([...this.notes.keys(), ...purgedIds])]) {
         const value = this.notes.get(id)?.toJSON() ?? null;
-        completion = this.#queueWrite(`note:${id}`, value, null, {
-          captures: captures.filter((capture) => capture.note.id === id),
-          purgedIds: purgedIds.includes(id) ? [id] : [],
-        });
+        completion = this.#queueWrite(
+          `note:${id}`,
+          value,
+          null,
+          {
+            captures: captures.filter((capture) => capture.note.id === id),
+            purgedIds: purgedIds.includes(id) ? [id] : [],
+          },
+          allowIdentityConflicts,
+        );
       }
       return completion;
     }
@@ -315,7 +322,7 @@ export class Database {
     );
   }
 
-  #queueWrite(key, value, afterPersist = null, noteCommit = null) {
+  #queueWrite(key, value, afterPersist = null, noteCommit = null, allowIdentityConflicts = false) {
     // Keep the callback with the exact snapshot it describes. If another write
     // arrives while this one is in flight, the newer entry remains queued and
     // receives its own post-commit callback.
@@ -339,6 +346,12 @@ export class Database {
     const expected = previous?.expected ?? (key.startsWith('note:') ? (this._noteVersions.get(key.slice(5)) ?? 0) : 0);
     const entry = {
       value: structuredClone(value),
+      allowIdentityConflicts:
+        allowIdentityConflicts ||
+        Boolean(
+          previous?.allowIdentityConflicts &&
+            JSON.stringify(activeIdentityKeys(previous.value)) === JSON.stringify(activeIdentityKeys(value)),
+        ),
       expected,
       generation: previous?.generation ?? this._vaultMeta?.generation,
       afterPersist,
@@ -462,7 +475,12 @@ export class Database {
     };
     entry.conflictId = mutation.conflictId;
     if (key.startsWith('note:'))
-      mutation.notes.push({ id: key.slice(5), expected: entry.expected, value: entry.value });
+      mutation.notes.push({
+        id: key.slice(5),
+        expected: entry.expected,
+        value: entry.value,
+        ...(entry.allowIdentityConflicts ? { allowIdentityConflicts: true } : {}),
+      });
     else if (key === CONFIG_KEY) mutation.config = entry.value;
     else return this.storage.save(key, entry.value);
     const result = await this.storage.commitCurrentVault(mutation);
@@ -935,7 +953,7 @@ export class Database {
   }
 
   /** Submit a snapshot and return its first terminal write result separately from the mutable model. */
-  saveNoteWithReceipt(note, { captureRevision = true, reason = 'autosave' } = {}) {
+  saveNoteWithReceipt(note, { captureRevision = true, reason = 'autosave', allowIdentityConflicts = false } = {}) {
     const previousIdentity = this._identitySignatures.get(note.id) ?? null;
     this.notes.set(note.id, note);
     const nextIdentity = this.#identitySignature(note);
@@ -947,7 +965,7 @@ export class Database {
     }
     const captures = captureRevision ? [{ note: note.toJSON(), reason }] : [];
     const completion =
-      this.#persist(captures, [], [note.id]) ??
+      this.#persist(captures, [], [note.id], allowIdentityConflicts) ??
       Promise.resolve({
         status: 'unavailable',
         noteId: note.id,
@@ -981,7 +999,7 @@ export class Database {
     }
     // A brand-new blank/default state is not useful history. Its first durable
     // user edit becomes the initial revision boundary instead.
-    return this.saveNoteWithReceipt(note, { captureRevision, reason });
+    return this.saveNoteWithReceipt(note, { captureRevision, reason, allowIdentityConflicts });
   }
 
   /** Live child notes of `id` (direct children only). */

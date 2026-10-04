@@ -1,5 +1,6 @@
 import { Note } from './note.js';
 import { normalizeTitle } from '../utils/helpers.js';
+import { introducedIdentityClaims, identityCollisionsFor } from './note-identity.js';
 
 // UI previews are detached from the commit contract. Mutating a rendered preview
 // cannot change the reviewed draft or substitute a different write at confirmation.
@@ -24,8 +25,17 @@ export async function previewConflict(db, id) {
     draft: write.value,
     current: records.get(write.id)?.value ?? null,
   }));
+  const writes = mutation.notes ?? [];
+  const claims = introducedIdentityClaims(
+    writes,
+    writes.map((write) => records.get(write.id)),
+  );
+  const proposed = new Map(snapshot.records.map(([id, record]) => [id, record.value]));
+  for (const write of writes) proposed.set(write.id, write.value);
+  const identityCollisions = [...proposed].flatMap(([id, value]) => identityCollisionsFor(claims, id, value));
   const preview = {
     id,
+    identityCollisions,
     notes,
     config: (mutation.config ?? []).map((write) => ({
       key: write.key,
@@ -34,8 +44,12 @@ export async function previewConflict(db, id) {
     })),
     canCopy: notes.some((note) => note.draft),
     canUseDraft:
-      mutation.generation === snapshot.meta.generation && mutation.sequence === undefined && !mutation.replacement,
-    requiresNewPlan: mutation.sequence !== undefined || Boolean(mutation.replacement),
+      mutation.generation === snapshot.meta.generation &&
+      mutation.sequence === undefined &&
+      !mutation.replacement &&
+      !identityCollisions.length,
+    requiresNewPlan:
+      mutation.sequence !== undefined || Boolean(mutation.replacement) || Boolean(identityCollisions.length),
   };
   const shown = structuredClone(preview);
   previews.set(shown, { db, revision, snapshot, conflict, preview, localNotes });
