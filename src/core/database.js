@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 // In-memory note store backed by an async, versioned persistence layer, with a
 // tiny pub/sub so UI components can react to changes instead of manually
 // calling refresh().
@@ -249,7 +250,7 @@ export class Database {
     // without changing the previewed local state. External refreshes must
     // advance localRevision; unseen external writes fail the transaction check.
     if (current.generation !== token.generation || current.localRevision !== token.localRevision) {
-      throw new Error('Notes changed after this preview. Review an updated plan before applying it.');
+      throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
     }
   }
 
@@ -1130,7 +1131,7 @@ export class Database {
     const assertSources = () => {
       this.#assertMutationToken(token);
       if (expected.some((raw) => !jsonEquivalent(this.notes.get(raw.id)?.toJSON(), raw))) {
-        throw new Error('Notes changed after this preview. Review an updated plan before applying it.');
+        throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
       }
     };
     assertSources();
@@ -1162,7 +1163,7 @@ export class Database {
         const result = await this.storage.commitCurrentVault(mutation);
         if (result.status !== 'committed') {
           this.conflicts.set(result.conflict.id, result.conflict);
-          throw new Error('Notes changed after this preview. Review an updated plan before applying it.');
+          throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
         }
         this._vaultMeta = result.meta;
         for (const write of mutation.notes) {

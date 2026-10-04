@@ -368,3 +368,55 @@ Session-state checkpoint verification:
   re-preview across planned mutation callers is still required. Production
   migration, full application/visual CI, both deployments and live acceptance
   are not established by these local tests.
+
+## Reviewed history comparison contract
+
+History now captures a detached destination note and mutation token before
+asynchronous revision materialization. Restore receives that reviewed snapshot
+from the dialog, including across its confirmation wait. It cannot capture a
+new destination base after the user has confirmed an older comparison. The
+shared conditional commit boundary still validates before and after safety
+capture and inside the storage transaction. Safety history therefore describes
+the exact accepted predecessor.
+
+Core planned-write rejection now exposes `code: 'stale_plan'` from token/source
+checks and link/bulk preflight checks. History uses that code to disable restore
+and offer Refresh comparison. Refresh performs a consistent read of current
+storage behind the app's pending-write and editor-draft checks. It displays the
+new comparison without applying anything; a second restore and confirmation are
+required. Dismissal or reopening invalidates pending confirmation and prevents
+late completion from modifying the new dialog. Programmatic restore callers
+without a preview retain the existing immediate-operation API; the History UI
+always passes its reviewed preview.
+
+Two maintained service regressions failed on the previous implementation:
+an acknowledged edit during confirmation was overwritten, and a preview read
+its current note only after materialization. Coverage also checks detached tag
+metadata. Four browser scenarios use the actual History UI and app callback on
+synthetically activated IndexedDB vaults: cross-window stale preview and renewed
+confirmation with exact safety content, same-window confirmation interleaving,
+dismiss/reopen, and an unqueued draft blocking refresh. These are added to all
+three durability projects. Final verification is recorded in the local
+`preview-checkpoint.md` artifact for this source commit.
+
+This is one affected caller, not completion of planned mutation UX. Link tools,
+vault find/replace, bulk actions, backup and reconciliation still require their
+own explicit refresh and confirmation ownership coverage. Exact save-state UI,
+activation safety, remaining failure/backup/derived-view gates, budgets, CI,
+review and deployment remain release requirements. No migration gate or budget
+limit was relaxed.
+
+History checkpoint verification on the final runtime source:
+
+- Full existing-plus-new durability matrix: 195/195, Chromium/Firefox/WebKit.
+- Three additional keyboard/layout cases: 12 zero-violation axe scans across
+  the same engines, light/dark themes and 1440/375 widths. These inspect History,
+  not the whole application or physical devices.
+- In-page feature suite: 505/505. Node 22/24: 555/555 each, with floor 555.
+- Check passes after removing an extra blank line in the new test; the failed
+  formatting log is preserved. Typecheck retains its existing 47-error baseline.
+  Build succeeds and audit reports zero vulnerabilities.
+- Shell 85,451/83,968 B and precache 246,722/243,712 B fail unchanged budgets.
+  No full application/visual CI or production migration acceptance is claimed.
+- The unclassified Vite warm-up `Unknown Error: [object Event]` remains visible;
+  this checkpoint does not reclassify or suppress it.

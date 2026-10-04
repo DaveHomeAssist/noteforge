@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 import { Note } from './note.js';
 import { normalizeTitle } from '../utils/helpers.js';
 import { isDescendant } from '../utils/tree.js';
@@ -82,7 +83,7 @@ export class BulkOperations {
       current.length !== plan.expected.length ||
       fingerprint(current) !== plan.fingerprint
     ) {
-      throw new Error('Notes changed after this preview. Review the updated replacement plan before applying it.');
+      throw stalePlan('Notes changed after this preview. Review the updated replacement plan before applying it.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, skipped: plan.skipped, failed: [] };
     try {
@@ -199,7 +200,7 @@ export class BulkOperations {
       current.length !== plan.expected.length ||
       fingerprint(current) !== plan.fingerprint
     ) {
-      throw new Error('Notes changed after this batch preview. Review the action again.');
+      throw stalePlan('Notes changed after this batch preview. Review the action again.');
     }
     if (!plan.replacements.length) return { changed: [], unchanged: plan.unchanged, failed: [] };
     try {

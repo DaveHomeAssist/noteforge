@@ -69,20 +69,26 @@ export class RecoveryService {
   async previewRevision({ noteId, revisionId }) {
     const current = this.db.notes.get(noteId);
     if (!current) throw new Error('The current note no longer exists.');
+    const token = this.db.captureMutationToken();
+    const currentNote = detached(current.toJSON());
     const revision = await this.revisions.materialize(revisionId);
     if (revision.noteId !== noteId) throw new Error('The selected revision belongs to another note.');
     return {
       revision,
       snapshot: { ...detached(revision.metadata), content: revision.content },
-      currentNote: current.toJSON(),
+      currentNote,
+      token,
     };
   }
 
-  async restore({ noteId, revisionId }) {
+  async restore({ noteId, revisionId, preview = null }) {
     const current = this.db.notes.get(noteId);
     if (!current) throw new Error('The note to restore no longer exists.');
-    const token = this.db.captureMutationToken();
-    const before = current.toJSON();
+    if (preview && (preview.revision?.id !== revisionId || preview.currentNote?.id !== noteId || !preview.token)) {
+      throw new TypeError('The restore preview does not match the selected note and revision.');
+    }
+    const token = preview ? detached(preview.token) : this.db.captureMutationToken();
+    const before = detached(preview ? preview.currentNote : current.toJSON());
     const payload = await this.revisions.buildRestorePayload(Note.fromJSON(before), revisionId, {
       restoredAt: this.now(),
     });

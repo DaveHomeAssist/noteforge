@@ -641,6 +641,17 @@ class App {
     tools.showReport();
   }
 
+  async #refreshMutationPreview() {
+    this.editor?.flushPending();
+    if (!(await this.db.flushCurrentWrites())) {
+      throw new Error('Current edits are not yet saved. Resolve pending changes before refreshing the preview.');
+    }
+    const result = await this.db.refreshCurrentVault(() => this.editor?.canRefreshFromStorage() !== false);
+    if (result.status === 'deferred') {
+      throw new Error('An active draft was preserved. Finish editing before refreshing the preview.');
+    }
+  }
+
   async #ensureHistory() {
     if (this.history) return this.history;
     const [{ HistoryView, createHistoryElements }] = await Promise.all([
@@ -648,6 +659,7 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.history = new HistoryView(createHistoryElements(), this.recovery, {
+      refreshPreview: () => this.#refreshMutationPreview(),
       confirmRestore: ({ message }) =>
         this.confirm({ title: 'Restore this revision?', message, confirmLabel: 'Restore' }),
       onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),

@@ -261,3 +261,13 @@ textarea editor) left `styles.css`. No dependency was added.
 ## Gate policy
 
 A budget breach blocks phase release unless the repository maintainer approves a written exception that includes the measured regression, user impact, mitigation, and follow-up owner. Correctness, data preservation, accessibility, and current-note durability take precedence over retaining optional history or caches.
+
+### History preview checkpoint
+
+The reviewed History restore change builds successfully but remains over the
+existing limits: shell 85,451 / 83,968 gzip bytes (+1,483), precache 246,722 /
+243,712 (+3,010). Relative to the per-window checkpoint this adds 182 shell bytes
+and 493 precache bytes. Recovery is 26,717 / 29,696 bytes. No limit was raised
+and no exception is claimed. This is not a release pass. The per-note save path
+is unchanged; earlier synthetic persistence timings are historical measurements,
+not a new full UI/history performance qualification.
