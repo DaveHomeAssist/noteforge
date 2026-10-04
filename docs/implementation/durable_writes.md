@@ -11,8 +11,11 @@ Activation in these tests is explicit and limited to disposable synthetic vaults
 it is not evidence that production upgrades are safe.
 
 Normal startup does not activate either empty or populated legacy storage. It
-loads legacy content in memory with read-only persistence until compatibility is
-proved. The application still needs a complete upgrade/recovery presentation,
+opens a dedicated read-only recovery reader until compatibility is proved. The
+reader exports the original loaded storage snapshot and a separately verified
+portable backup without starting an editor, sample creation, history, or startup
+configuration writes. Legacy recovery reads no longer copy localStorage into
+IndexedDB. The application still needs a complete upgrade/activation protocol,
 conflict resolution UI, and clean/dirty window refresh integration. Do not merge
 or deploy this intermediate state.
 
@@ -151,10 +154,10 @@ the local execution artifacts. Complete Phase 1 acceptance remains open.
    The IndexedDB specification explicitly rejects lower-version opens and waits
    for old connections to close; a version bump is therefore not a full client
    compatibility solution. [IndexedDB open algorithm](https://www.w3.org/TR/IndexedDB/#opening)
-2. Complete visible upgrade/degraded recovery, conflict comparison/resolution,
-   draft export and exact save-state UI. A read-only persistence flag alone is
-   not a usable recovery experience. Automatic sample creation and startup config
-   writes still need to respect this state.
+2. Complete the upgrade action, conflict comparison/resolution, draft export and
+   exact save-state UI. The read-only recovery reader now avoids automatic sample
+   creation and startup config writes; it does not authorize activation or replace
+   the required editing/conflict recovery experience.
 3. Refresh clean views on notifications/resume while preserving dirty editors and
    pending conflicts. Revalidate every affected caller with real editor drafts,
    history/backup failures and migration interruptions.
@@ -165,3 +168,45 @@ A service worker is not assumed to be able to evict every old runtime: the
 navigation algorithm rejects a window whose document is not fully active. Test
 the actual suspended-page boundary rather than substituting a successful active
 tab handshake. [Service Worker navigation](https://www.w3.org/TR/service-workers/#client-navigate)
+
+## Read-only recovery checkpoint, 2026-10-03
+
+The production entry point now opens a dedicated recovery reader when the
+Database is read only. It does not initialize the editor, sample notes, startup
+config writes, optional history, or background feature controllers. Users can
+read Markdown source (including Trash/Archive), export the original loaded
+notes/settings/schema snapshot, and create an independently verified portable
+backup. Theme changes do not queue vault writes. Reload reads the source again;
+there is deliberately no migration bypass button.
+
+The legacy recovery read uses one IndexedDB read transaction and does not copy
+fallback localStorage entries into IndexedDB. Source export and portable backup
+are distinct: the former preserves the loaded pre-normalization values; the
+latter validates the current note model and integrity digest. This does not yet
+cover malformed/future-schema startup failures or concurrent conflict drafts.
+
+Verification on this checkpoint:
+
+- 57/57 browser scenarios pass (19 per engine): 48 existing Database cases plus
+  nine production recovery cases covering IndexedDB legacy notes, localStorage
+  legacy notes, and unavailable IndexedDB. Downloads are read back and verified;
+  original note/config/schema records stay unchanged; localStorage recovery does
+  not create IndexedDB note records; current/history queues remain empty.
+- Recovery axe scans have zero violations. Light/dark toggles and root overflow
+  checks pass at 1440×900, 375×812 and 3840×1080; the mobile status remains fully
+  visible. The phone screenshot was inspected.
+- Node 22.22.1 and 24.21.0 each pass 549/549 in sequential runs. An earlier run
+  under heavy host load failed the existing 150 ms alias-index budget (198.8 ms;
+  isolated retry 233.5 ms). The prior commit and current code then passed the
+  targeted check, and both full sequential suites passed unchanged. Preserve the
+  initial failure logs; no timing allowance was raised.
+- Check and typecheck pass (48 existing baseline errors, no increase). The
+  production build and budgets pass: shell 81.7/82.0 KiB gzip, precache
+  232.2/238.0 KiB. The development warm-up still emits the previously recorded
+  unclassified `[Unhandled error] Unknown Error: [object Event]` diagnostic;
+  the production recovery tests report zero page errors.
+
+This closes the unusable gated-startup recovery path, not the migration or
+ordinary editing acceptance. Full application smoke/visual gates must still
+pass once safe activation is implemented. The previous integration commit's
+visual CI job failed; no merge or deployment is authorized by these local passes.

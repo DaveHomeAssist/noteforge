@@ -41,7 +41,7 @@ export default defineConfig({
   projects: [
     ...['chromium', 'firefox', 'webkit'].map((browserName) => ({
       name: `durability-${browserName}`,
-      testMatch: ['durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs'],
+      testMatch: ['durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs', 'storage-recovery.spec.mjs'],
       use: { browserName, channel: undefined },
     })),
     {

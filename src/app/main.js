@@ -90,6 +90,7 @@ class App {
 
     this.ready = this.#init()
       .then(() => {
+        if (this.db.getPersistenceStatus().readOnly) return this;
         this.#scheduleNavigationInitialization();
         this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
@@ -118,6 +119,11 @@ class App {
 
   async #init() {
     await this.db.init(); // async: load + migrate persisted state before rendering
+    if (this.db.getPersistenceStatus().readOnly) {
+      const { showStorageRecovery } = await import('./storage-recovery.js');
+      showStorageRecovery(this.db);
+      return;
+    }
     this.recentNoteIds = [...new Set(Array.isArray(this.db.config.recentNoteIds) ? this.db.config.recentNoteIds : [])]
       .filter((id) => typeof id === 'string' && this.db.getNote(id))
       .slice(0, 50);

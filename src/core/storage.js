@@ -338,6 +338,17 @@ async function quotaEstimate() {
 // --- public API -------------------------------------------------------------
 
 export const storage = {
+  /** Read the legacy authority for recovery without migrating or rewriting it. */
+  async readLegacyVault() {
+    const keys = ['notes', 'config', 'schemaVersion', 'persistenceStatus'];
+    const db = await openDB();
+    const values = db ? await idbLoadMany(db, keys) : [];
+    const defaults = [[], {}, 0, {}];
+    return Object.fromEntries(
+      keys.map((key, index) => [key, values[index] !== undefined ? values[index] : legacyLoad(key, defaults[index])]),
+    );
+  },
+
   async readCurrentVault() {
     const db = await openDB();
     if (!db) return null;

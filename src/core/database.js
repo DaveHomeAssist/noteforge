@@ -75,6 +75,7 @@ export class Database {
     this.onConflict = null;
     this._readOnly = false;
     this.upgradeRequired = false;
+    this.legacySnapshot = null;
   }
 
   // --- events -------------------------------------------------------------
@@ -96,13 +97,17 @@ export class Database {
    * await it before rendering. Safe to call again to reload.
    */
   async init({ allowLegacyMigration = false } = {}) {
+    let legacySnapshot = null;
     if (typeof this.storage.readCurrentVault === 'function') {
       let snapshot = await this.storage.readCurrentVault();
+      if (!snapshot?.meta && typeof this.storage.readLegacyVault === 'function') {
+        legacySnapshot = await this.storage.readLegacyVault();
+        this.legacySnapshot = structuredClone(legacySnapshot);
+      }
       if (snapshot && !snapshot.meta) {
-        const [notes, config, schemaVersion] = await this.storage.loadMany(
-          ['notes', 'config', 'schemaVersion'],
-          undefined,
-        );
+        const [notes, config, schemaVersion] = legacySnapshot
+          ? [legacySnapshot.notes, legacySnapshot.config, legacySnapshot.schemaVersion]
+          : await this.storage.loadMany(['notes', 'config', 'schemaVersion'], undefined);
         const legacy = { notes: notes ?? [], config: config ?? {}, schemaVersion: schemaVersion ?? 0 };
         const { data, version } = runMigrations(legacy, legacy.schemaVersion);
         const migrated = {
@@ -132,10 +137,14 @@ export class Database {
       // fallback writes. The existing failure UI retains drafts for export.
       this._readOnly = true;
     }
-    const storedVersion = await this.storage.load(SCHEMA_KEY, undefined);
-    const rawNotes = await this.storage.load(NOTES_KEY, []);
-    const rawConfig = await this.storage.load(CONFIG_KEY, {});
-    const storedPersistence = await this.storage.load(PERSISTENCE_KEY, {});
+    const storedVersion = legacySnapshot
+      ? legacySnapshot.schemaVersion
+      : await this.storage.load(SCHEMA_KEY, undefined);
+    const rawNotes = legacySnapshot ? legacySnapshot.notes : await this.storage.load(NOTES_KEY, []);
+    const rawConfig = legacySnapshot ? legacySnapshot.config : await this.storage.load(CONFIG_KEY, {});
+    const storedPersistence = legacySnapshot
+      ? legacySnapshot.persistenceStatus
+      : await this.storage.load(PERSISTENCE_KEY, {});
 
     const { data, version, migrated } = runMigrations(
       { notes: Array.isArray(rawNotes) ? rawNotes : [], config: rawConfig || {} },
