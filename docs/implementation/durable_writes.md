@@ -1038,3 +1038,120 @@ The activation boundary still needs a verified writer-quiescence and restart
 protocol across actual supported browsers. Retain the read-only gate, legacy
 snapshot and explicit recovery. Worker takeover, client inventory, a version bump
 or elapsed bridge adoption time alone cannot close this requirement.
+
+
+## Migration decision checkpoint, 2026-10-04
+
+This checkpoint supersedes the earlier unavailable-native-browser observations.
+Production activation remains disabled. The following tests use the actual
+7114047 legacy application and the 919bb11 runtime candidate on disposable
+origins. Diagnostics that remove `skipWaiting()` are worker variants, not shipped
+application behavior. Source and history preservation is not inferred from a
+worker state or a new build stamp.
+
+| Probe | Observed result | Acceptance implication |
+| --- | --- | --- |
+| Official Firefox 157, cached localStorage fallback, worker takeover plus IDB upgrade | Same cached legacy instance restores and acknowledges another fallback write | Combined barrier rejected |
+| Official Firefox 157, worker without skipWaiting | Candidate waits while the controlled cached old client exists | Necessary bounded behavior, not a universal fence |
+| Firefox process termination and reopen | New read-only runtime loads but the last acknowledged fallback edit is absent | Preservation failure; process termination is not normal quit |
+| Firefox normal in-application quit, then direct application reopen | Normal quit reports forced=false; fresh candidate runtime and exact acknowledged edit survive | Bounded restart pass; no complete migration acceptance |
+| Chromium and Firefox, initially uncontrolled cached client with pending editor draft | Tested transition evicts old instance and retains the pending source | Bounded draft-preservation passes |
+| Native Safari 27.0.1, initially uncontrolled cached client | After both claim/drain workers activate and IDB upgrades, the same old instance restores with no controller and acknowledges a fallback write | Automatic claim/drain candidate rejected; its pending draft had been stored before the deliberate later write |
+| Live initially uncontrolled window, three engines | Chromium/Firefox claim, wait, preserve content and activate after close; WebKit times out waiting for activation after close | WebKit liveness unresolved; matrix does not pass |
+| Native Safari normal quit/direct reopen follow-up | Preparation failure in one attempt; subsequent attempt loses Computer Use capture before app readiness, with no quit performed | No Safari restart acceptance evidence |
+
+The browser behavior is consistent with the platform boundary: worker navigation
+can reject a document that is not fully active, while Web Storage does not provide
+a cross-window locking guarantee. These specifications do not by themselves prove
+that no other browser mechanism is possible; the actual counterexamples reject
+the tested mechanisms.
+[Service Worker navigation](https://www.w3.org/TR/service-workers/#client-navigate)
+and [Web Storage concurrency](https://html.spec.whatwg.org/multipage/webstorage.html#the-localstorage-attribute).
+
+### Open product decision NF-DUR-MIG-01
+
+**Status: Open; no answer recorded. Recommendation: A, conditional on complete
+qualification. Confidence: medium in the proposed workflow; high that the tested
+automatic barriers are insufficient.** This decision changes the migration
+contract, so implementation approval for the original automatic safety guarantee
+must not be treated as approval of this alternative.
+
+- **A: Supervised one-time cutover.** Require a verified recovery export and
+  deliberate retirement of every legacy editing session before enabling the new
+  vault. Preserve the original stores and backup. The user accepts responsibility
+  for closing old browser/PWA sessions and not resuming the old editor. New code
+  cannot prove this condition for every uncontrolled cached legacy runtime. This
+  permits a practical migration path, but is a weaker compatibility guarantee
+  than automatically fencing all old writers. Approving investigation or the
+  contract does not approve release before qualification.
+- **B: Retain the original automatic-fencing requirement.** Keep activation and
+  release blocked until a different complete boundary is proved. This preserves
+  the strict requirement and avoids assigning session retirement to the user,
+  but there is currently no qualified implementation or reliable completion date.
+
+A separate database or origin can isolate new records but cannot stop an old
+editor from reporting success against its own obsolete store. A bridge release
+cannot assume every cached or offline client has adopted it. Neither is a hidden
+substitute for this decision. Do not clear user storage, fill localStorage to
+force errors, or deploy incompatible rollback code as a fencing mechanism.
+
+### Proposed supervised flow and smallest useful slice
+
+If A is selected, implement one guarded migration flow, not a general import or
+editor redesign. Its outcome is one writable per-note authority plus retained,
+exportable legacy evidence, with interruption-safe recovery.
+
+1. Enter recovery without starting writers. Inventory both IndexedDB and
+   namespaced localStorage, including history and unknown records. Preserve
+   divergent sources separately; do not silently prefer one backend or call a
+   cross-backend scan an atomic snapshot. Capture the source identity and
+   fingerprints, and explain incomplete/unreadable captures.
+2. Require a successfully read-back recovery archive. Offer and independently
+   verify a portable backup for supported schemas. The archive and portable
+   backup serve different purposes; verify restoration with synthetic fixtures
+   before promising either as recovery. Pending edits in other old windows must
+   be saved or separately exported before cutover.
+3. Guide normal shutdown of all legacy windows/PWA instances, then direct reopen
+   into the new recovery build. Require the user's explicit session-retirement
+   acknowledgement. Record it as an operational prerequisite, never as proof
+   obtained from a browser API. Do not force reload while unsaved drafts exist.
+4. Re-read all legacy sources after restart. If their fingerprints differ from
+   the reviewed export, stop for a new export/review. Resolve divergent sources
+   explicitly, retaining both. Validate schema, identities, unknown metadata and
+   history references before presenting a final migration preview.
+5. Commit the reviewed snapshot, per-note records and activation marker atomically
+   in IndexedDB, with final preconditions for the IDB source. A localStorage
+   recheck cannot be atomic with that transaction; the session-retirement
+   prerequisite is essential for fallback data. Retain backups and originals.
+   Restart after abort must leave either unchanged legacy recovery or the complete
+   new vault, never a partially activated editor.
+6. Verify the committed snapshot before editing, including note counts, exact
+   source, configuration, history and a new backup/reopen. If later legacy changes
+   are observed, preserve a separate recovery snapshot and require review; do not
+   silently merge them or claim every intermediate old write was captured.
+
+The accepted prerequisite must apply to both release origins independently:
+local browser stores on the mirror and canonical site are not one synchronized
+vault. All subsequent writes use the existing transactional per-note contract.
+No cloud account, CRDT, new editor or general source-format migration is included.
+
+### Required proof before enabling that flow
+
+- Normal quit/direct reopen in Chromium, Firefox and native Safari, with baseline
+  BFCache capability, uncontrolled/cached clients, multiple windows and standalone
+  PWA sessions where supported. Browser restoration must load the new recovery
+  build; old offline session restoration is a failure, not an assumed exception.
+- Exact independent source ledger for pending and acknowledged Unicode/Markdown/
+  YAML edits, config, unknown fields, history, archive and portable restore.
+- Mutation during capture and after preview, divergent IDB/fallback snapshots,
+  missing/blocked storage, quota/transaction failure, and interruption before and
+  after the atomic marker. Every failed prerequisite keeps editing disabled.
+- A deliberate violation of session retirement must document the real residual
+  failure mode. It cannot be relabelled as successful automatic fencing.
+- Approved budget policy, all affected Node 22/24 and browser/a11y/build/visual
+  gates, review, exact-head CI and both-origin deployment/live evidence.
+
+The implementation of this proposed flow is pending the product decision and
+its browser qualification. Existing conditional-write test passes do not close
+this gate. The current branch remains a draft and must not be merged as a
+read-only replacement for the working application.
