@@ -1,0 +1,67 @@
+.storage-recovery {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  overflow: hidden;
+}
+.storage-recovery header,
+.storage-recovery__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.storage-recovery header {
+  justify-content: space-between;
+}
+.storage-recovery h1,
+.storage-recovery h2 {
+  font-size: 1.1rem;
+}
+.storage-recovery__summary {
+  max-height: 50dvh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.storage-recovery__details {
+  min-height: 0;
+  overflow: auto;
+}
+.storage-recovery__summary p {
+  margin: 8px 0;
+}
+.storage-recovery button,
+.storage-recovery select {
+  min-height: 44px;
+  padding: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.storage-recovery [data-theme-toggle] {
+  min-width: 44px;
+}
+.storage-recovery__reader {
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 6px;
+}
+.storage-recovery select,
+.storage-recovery textarea {
+  width: 100%;
+  min-width: 0;
+}
+.storage-recovery textarea {
+  resize: none;
+  padding: 12px;
+  font-family: var(--mono);
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--color-border);
+}

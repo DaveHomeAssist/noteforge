@@ -38,7 +38,7 @@ export function createHistoryElements(root = document.body) {
     <div class="modal__panel recovery-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1">
       <header class="modal__header"><div><h2 class="modal__title" id="history-title">${icon('history')} Revision history</h2><p class="muted recovery-modal__subtitle">Browser-local recovery points for the current note</p></div><button class="btn btn--ghost" data-close title="Close" aria-label="Close revision history">${icon('x')}</button></header>
       <div class="history-view"><nav id="history-list" class="history-view__list" aria-label="Note revisions"></nav><div class="history-view__detail"><div id="history-preview" class="history-view__preview"></div><div id="history-diff" class="history-view__diff"></div></div></div>
-      <footer class="recovery-modal__footer"><span id="history-status" class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button id="history-restore-copy" class="btn btn--ghost" disabled>Restore as copy</button><button id="history-restore" class="btn btn--primary" disabled>Restore revision</button></div></footer>
+      <footer class="recovery-modal__footer"><span id="history-status" class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button id="history-refresh" class="btn btn--ghost" hidden>Refresh comparison</button><button id="history-restore-copy" class="btn btn--ghost" disabled>Restore as copy</button><button id="history-restore" class="btn btn--primary" disabled>Restore revision</button></div></footer>
     </div>`;
   root.appendChild(overlay);
   return {
@@ -47,6 +47,7 @@ export function createHistoryElements(root = document.body) {
     preview: overlay.querySelector('#history-preview'),
     diff: overlay.querySelector('#history-diff'),
     status: overlay.querySelector('#history-status'),
+    refresh: overlay.querySelector('#history-refresh'),
     restore: overlay.querySelector('#history-restore'),
     restoreCopy: overlay.querySelector('#history-restore-copy'),
   };
@@ -181,6 +182,7 @@ export class HistoryView {
    *   preview:HTMLElement,
    *   diff?:HTMLElement,
    *   status?:HTMLElement,
+   *   refresh?:HTMLButtonElement,
    *   restore?:HTMLButtonElement,
    *   restoreCopy?:HTMLButtonElement
    * }} els
@@ -194,6 +196,7 @@ export class HistoryView {
    *   restoreAsCopy:(request:{noteId:string, revisionId:string})=>Promise<object>|object
    * }} service
    * @param {{
+   *   refreshPreview?:()=>Promise<void>|void,
    *   confirmRestore?:(details:object)=>Promise<boolean>|boolean,
    *   onRestored?:(result:object)=>void,
    *   onRestoreCopy?:(result:object)=>void
@@ -210,6 +213,9 @@ export class HistoryView {
     this.els = els;
     this.service = service;
     this.confirmRestore = options.confirmRestore;
+    this.refreshPreview = options.refreshPreview;
+    this.stale = false;
+    this.viewEpoch = 0;
     this.onRestored = options.onRestored;
     this.onRestoreCopy = options.onRestoreCopy;
     this.noteId = null;
@@ -219,7 +225,11 @@ export class HistoryView {
     this.busy = false;
     this.loadToken = 0;
 
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus() });
+    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus(), onEscape: () => this.close() });
+    this.els.overlay.addEventListener('click', (event) => {
+      if (event.target.closest('[data-close]')) this.close();
+    });
+    this.els.refresh?.addEventListener('click', () => this.#select(this.selectedId));
     this.els.list.addEventListener('click', (event) => this.#onListClick(event));
     this.els.list.addEventListener('keydown', (event) => this.#onListKey(event));
     this.els.restore?.addEventListener('click', () => this.#restore());
@@ -237,6 +247,9 @@ export class HistoryView {
   }
 
   async show(noteId) {
+    this.viewEpoch++;
+    this.busy = false;
+    this.stale = false;
     this.noteId = noteId;
     this.selectedId = null;
     this.selectedDetails = null;
@@ -246,6 +259,8 @@ export class HistoryView {
   }
 
   close() {
+    this.viewEpoch++;
+    this.busy = false;
     this.loadToken += 1;
     this.modal.close();
   }
@@ -349,6 +364,7 @@ export class HistoryView {
     if (!revision || this.busy) return;
     const token = ++this.loadToken;
     this.selectedId = revisionId;
+    this.selectedDetails = null;
     this.#renderList();
     if (focus) {
       [...this.els.list.querySelectorAll('.history-revision[data-revision-id]')]
@@ -360,6 +376,8 @@ export class HistoryView {
     this.els.preview.setAttribute('aria-busy', 'true');
 
     try {
+      await this.refreshPreview?.();
+      if (token !== this.loadToken || !this.open) return;
       let details;
       if (typeof this.service.previewRevision === 'function') {
         details = await this.service.previewRevision({ noteId: this.noteId, revisionId });
@@ -379,6 +397,7 @@ export class HistoryView {
         snapshot: snapshotFrom(details, details?.revision || revision),
         currentNote: details?.currentNote || {},
       };
+      this.stale = false;
       this.#renderPreview();
       this.#setActionsEnabled(true);
       this.#setStatus(`Showing revision from ${formatDateTime(revision.createdAt)}.`);
@@ -466,29 +485,36 @@ export class HistoryView {
   }
 
   async #restore() {
-    if (!this.selectedDetails || this.busy) return;
+    if (!this.selectedDetails || this.busy || this.stale) return;
     if (typeof this.confirmRestore !== 'function') {
       this.#setStatus('Restore is blocked because explicit confirmation is unavailable.', true);
       return;
     }
-    const request = { noteId: this.noteId, revisionId: this.selectedId };
+    const epoch = this.viewEpoch;
+    const request = {
+      noteId: this.noteId,
+      revisionId: this.selectedId,
+      preview: structuredClone(this.selectedDetails),
+    };
     this.busy = true;
     this.#setActionsEnabled(false);
     let approved;
     try {
       approved = await this.confirmRestore({
         ...request,
-        revision: this.selectedDetails.revision,
-        snapshot: this.selectedDetails.snapshot,
-        currentNote: this.selectedDetails.currentNote,
+        revision: request.preview.revision,
+        snapshot: request.preview.snapshot,
+        currentNote: request.preview.currentNote,
         message: 'Restore this revision? A safety revision of the current note will be created first.',
       });
     } catch (error) {
+      if (epoch !== this.viewEpoch || !this.open) return;
       this.busy = false;
       this.#setActionsEnabled(true);
       this.#setStatus(error?.message || 'Restore confirmation failed.', true);
       return;
     }
+    if (epoch !== this.viewEpoch || !this.open) return;
     if (!approved) {
       this.busy = false;
       this.#setActionsEnabled(true);
@@ -498,32 +524,48 @@ export class HistoryView {
 
     await this.#runAction('Restoring revision…', async () => {
       const result = await this.service.restore(request);
+      if (epoch !== this.viewEpoch || !this.open) return;
       this.onRestored?.(result);
+      this.busy = false;
       await this.refresh();
+      if (epoch !== this.viewEpoch || !this.open) return;
       this.#setStatus('Revision restored. A safety revision preserves the previous note state.');
     });
   }
 
   async #restoreCopy() {
     if (!this.selectedDetails || this.busy) return;
+    const epoch = this.viewEpoch;
+    const request = { noteId: this.noteId, revisionId: this.selectedId };
     await this.#runAction('Creating restored copy…', async () => {
-      const result = await this.service.restoreAsCopy({ noteId: this.noteId, revisionId: this.selectedId });
+      const result = await this.service.restoreAsCopy(request);
+      if (epoch !== this.viewEpoch || !this.open) return;
       this.#setStatus('Restored copy created. The original note was not changed.');
       this.onRestoreCopy?.(result);
     });
   }
 
   async #runAction(message, action) {
+    const epoch = this.viewEpoch;
     this.busy = true;
     this.#setActionsEnabled(false);
     this.#setStatus(message);
     try {
       await action();
     } catch (error) {
-      this.#setStatus(error?.message || 'The revision action failed.', true);
+      if (epoch !== this.viewEpoch || !this.open) return;
+      if (error?.code === 'stale_plan') this.stale = true;
+      this.#setStatus(
+        this.stale
+          ? 'Notes changed. Refresh the comparison and review it before restoring.'
+          : error?.message || 'The revision action failed.',
+        true,
+      );
     } finally {
-      this.busy = false;
-      this.#setActionsEnabled(!!this.selectedDetails);
+      if (epoch === this.viewEpoch) {
+        this.busy = false;
+        this.#setActionsEnabled(!!this.selectedDetails);
+      }
     }
   }
 
@@ -536,7 +578,11 @@ export class HistoryView {
   }
 
   #setActionsEnabled(enabled) {
-    if (this.els.restore) this.els.restore.disabled = !enabled || this.busy;
+    if (this.els.refresh) {
+      this.els.refresh.hidden = !this.stale;
+      this.els.refresh.disabled = this.busy || !this.selectedId;
+    }
+    if (this.els.restore) this.els.restore.disabled = !enabled || this.busy || this.stale;
     if (this.els.restoreCopy) this.els.restoreCopy.disabled = !enabled || this.busy;
   }
 

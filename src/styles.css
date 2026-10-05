@@ -741,6 +741,7 @@ mark {
   }
   .editor .editor__bar,
   .editor .editor__tags,
+  .editor .editor__save,
   .editor .editor__breadcrumb {
     max-width: calc(var(--editor-measure) + var(--context-w) + var(--context-gap));
   }
@@ -750,6 +751,7 @@ mark {
   }
   html[data-width="full"] .editor .editor__bar,
   html[data-width="full"] .editor .editor__tags,
+  html[data-width="full"] .editor .editor__save,
   html[data-width="full"] .editor .editor__breadcrumb {
     max-width: none;
   }
@@ -867,6 +869,19 @@ mark {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.editor__save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 32px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.editor__save-status {
+  overflow-wrap: anywhere;
 }
 
 .editor__tags {
@@ -1711,6 +1726,7 @@ html[data-width="full"] {
 }
 .editor__bar,
 .editor__tags,
+.editor__save,
 .editor__blocks,
 .editor__meta {
   max-width: var(--editor-measure);
@@ -1928,4 +1944,10 @@ html[data-font="l"] .editor {
 .storage-error--history {
   background: var(--color-warning-strong);
   color: #ffffff;
+}
+.storage-error--upgrade {
+  top: 16px;
+  bottom: auto;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }

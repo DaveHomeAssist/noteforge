@@ -621,3 +621,27 @@ test('reconciliation fails closed when portable backup or atomic replacement fai
   );
   assert.equal(failedDb.getNote('existing').content, '# Old');
 });
+
+test('a newer scan cannot give an in-flight reconciliation a new mutation token', async () => {
+  let service;
+  const entries = [{ relativePath: 'Existing.md', text: '---\nnoteforge_id: existing\n---\n# Reviewed replacement' }];
+  const db = await new Database({
+    storageBackend: backend({ schemaVersion: 6, config: {}, notes: [note('existing', 'Existing', '# Old')] }),
+    onNotesPersisted: async (captures) => {
+      if (!captures.some((capture) => capture.reason === 'pre_reconcile')) return;
+      const current = db.getNote('existing');
+      current.update({ content: '# Acknowledged during safety capture' });
+      db.saveNote(current);
+      assert.equal(await db.flushCurrentWrites(), true);
+      await service.plan(entries);
+    },
+  }).init();
+  service = new ReconciliationService({ db, recovery: { async downloadBackup() {} } });
+  const plan = await service.plan(entries);
+  await assert.rejects(() => service.apply({ plan, decisions: { [plan.items[0].key]: 'apply' }, confirmed: true }), {
+    code: 'stale_plan',
+  });
+  assert.equal(db.getNote('existing').content, '# Acknowledged during safety capture');
+  const reopened = await new Database({ storageBackend: db.storage }).init();
+  assert.equal(reopened.getNote('existing').content, '# Acknowledged during safety capture');
+});

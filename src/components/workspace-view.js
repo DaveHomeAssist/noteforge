@@ -23,6 +23,7 @@ export class WorkspaceView {
     primaryElement,
     primaryEditor,
     db,
+    windowState,
     actions,
     beforeHandoff,
     onCommitOpen,
@@ -32,6 +33,7 @@ export class WorkspaceView {
     announce = () => {},
   }) {
     this.db = db;
+    this.windowState = windowState;
     this.actions = actions;
     this.beforeHandoff = beforeHandoff;
     this.onCommitOpen = onCommitOpen;
@@ -40,7 +42,7 @@ export class WorkspaceView {
     this.onStorageError = onStorageError;
     this.announce = announce;
     this.primaryEditor = primaryEditor;
-    this.state = normalizeWorkspaceState(db.config.workspace, [...db.notes.values()]);
+    this.state = normalizeWorkspaceState(windowState.get('workspace'), [...db.notes.values()]);
     if (!this.state.panes.primary.tabs.length && !this.state.panes.secondary.tabs.length && primaryEditor.currentId) {
       this.state = openWorkspaceNote(this.state, primaryEditor.currentId, 'primary');
     }
@@ -68,8 +70,8 @@ export class WorkspaceView {
       this.#restoreScroll('primary');
       return this;
     }
-    if (primaryId && primaryId !== outgoingId) this.primaryEditor.open(primaryId, { discardPending: true });
-    if (secondaryId) this.secondaryEditor.open(secondaryId, { discardPending: true });
+    if (primaryId && primaryId !== outgoingId) this.primaryEditor.open(primaryId);
+    if (secondaryId) this.secondaryEditor.open(secondaryId);
     if (activeId && activeId !== outgoingId) {
       this.state.activePane = this.#locate(activeId)?.pane || this.state.activePane;
       await this.onCommitOpen(activeId, {
@@ -244,6 +246,9 @@ export class WorkspaceView {
   flushPending() {
     for (const editor of Object.values(this.editors)) editor.flushPending();
   }
+  canRefreshFromStorage() {
+    return Object.values(this.editors).every((editor) => editor.canRefreshFromStorage());
+  }
   refresh() {
     const normalized = normalizeWorkspaceState(this.state, [...this.db.notes.values()]);
     const changed = JSON.stringify(normalized) !== JSON.stringify(this.state);
@@ -259,7 +264,7 @@ export class WorkspaceView {
     const ids = new Set(Array.isArray(noteIds) ? noteIds : []);
     for (const pane of WORKSPACE_PANES) {
       const id = this.editors[pane].currentId;
-      if (id && ids.has(id)) this.editors[pane].open(id, { discardPending: true });
+      if (id && ids.has(id)) this.editors[pane].syncAuthoritative(noteIds);
     }
   }
   reflectPin(id) {
@@ -292,6 +297,7 @@ export class WorkspaceView {
   }
 
   destroy() {
+    this.secondaryEditor.destroy();
     for (const timer of this.scrollTimers.values()) clearTimeout(timer);
     this.scrollTimers.clear();
     const parent = this.element.parentNode;
@@ -318,7 +324,7 @@ export class WorkspaceView {
   }
 
   #persist() {
-    this.db.setConfig({ workspace: structuredClone(this.state) });
+    this.windowState.set({ workspace: this.state });
   }
 
   #render() {
@@ -395,7 +401,7 @@ export class WorkspaceView {
   #syncPaneEditor(pane) {
     const expected = this.state.panes[pane].activeNoteId;
     if (this.editors[pane].currentId === expected) return;
-    this.editors[pane].open(expected, { discardPending: true });
+    this.editors[pane].open(expected);
     this.#restoreScroll(pane);
   }
 

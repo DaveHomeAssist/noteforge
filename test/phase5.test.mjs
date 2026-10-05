@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Database } from '../src/core/database.js';
+import { Note } from '../src/core/note.js';
 import { CURRENT_SCHEMA_VERSION, runMigrations } from '../src/core/migrations.js';
 import { REVISION_REASONS } from '../src/core/revision-store.js';
 import { Phase5Controller, canonicalAliasesFor } from '../src/app/phase5.js';
@@ -49,6 +50,53 @@ function backend(initial = {}) {
 
 async function rejectsCode(run, code) {
   await assert.rejects(run, (error) => error instanceof FrontmatterError && error.code === code);
+}
+
+for (const change of ['metadata', 'source']) {
+  test(`targeted property refresh leaves unrelated source and indexes alone (${change})`, async () => {
+    const notes = ['a', 'b'].map((id) => new Note({ id, title: id, content: '---\npriority: 1\n---\nBody' }).toJSON());
+    const db = await new Database({
+      storageBackend: backend({ notes, schemaVersion: CURRENT_SCHEMA_VERSION, config: {} }),
+    }).init();
+    let refreshes = 0;
+    const controller = new Phase5Controller({
+      db,
+      editor: null,
+      ensureRecovery: async () => {},
+      refreshSearch: () => refreshes++,
+    });
+    await controller.ready;
+    controller.unsubscribe();
+    clearTimeout(controller.refreshTimer);
+    refreshes = 0;
+    const a = db.getNote('a');
+    const b = db.getNote('b');
+    const originalIndex = a._propertySearchIndex;
+    const unrelatedIndex = b._propertySearchIndex;
+    const originalToJSON = b.toJSON;
+    let unrelatedReads = 0;
+    b.toJSON = function () {
+      unrelatedReads++;
+      return originalToJSON.call(this);
+    };
+    if (change === 'metadata') a.setPinned(true);
+    else a.update({ content: '---\npriority: 2\n---\nBody' });
+    await controller.reconcileAliases({ changedOnly: true, noteIds: ['a'] });
+    assert.equal(unrelatedReads, 0, 'one changed ID must not serialize the rest of the vault');
+    assert.equal(b._propertySearchIndex, unrelatedIndex);
+    if (change === 'metadata') {
+      assert.equal(a._propertySearchIndex, originalIndex);
+      assert.equal(refreshes, 0, 'unchanged source must not request another sidebar redraw');
+    } else {
+      assert.notEqual(a._propertySearchIndex, originalIndex);
+      assert.deepEqual(a._propertySearchIndex, propertySearchIndex((await parseFrontmatter(a.content)).properties));
+      // A storage refresh may replace a Note object without changing its source.
+      db.notes.set('a', Note.fromJSON(a.toJSON()));
+      await controller.reconcileAliases({ changedOnly: true, noteIds: ['a'] });
+      assert.deepEqual(db.getNote('a')._propertySearchIndex, a._propertySearchIndex);
+    }
+    await db.flush();
+  });
 }
 
 test('leading frontmatter recognition is byte-zero, closing-delimiter exact, and lossless', () => {
@@ -390,4 +438,29 @@ test('frontmatter and block markers survive portable backup and Markdown export 
   };
   assert.equal(await writeVaultToDir(directory, state.notes), 1);
   assert.equal(files.get('Note.md'), content);
+});
+
+test('raw property save stays bound to the source reviewed when the dialog loaded', async () => {
+  const db = await new Database({
+    storageBackend: backend({ schemaVersion: 6, notes: [], config: {} }),
+    onNotesPersisted: async () => {},
+  }).init();
+  const note = db.createNote({ id: 'reviewed-property', title: 'Properties', content: '---\nvalue: old\n---\nBody' });
+  await db.flush();
+  const controller = new Phase5Controller({
+    db,
+    editor: { flushPending() {}, currentId: null },
+    ensureRecovery: async () => {},
+  });
+  await controller.ready;
+  const parsed = await controller.read(note.id);
+  const current = db.getNote(note.id);
+  current.update({ content: '---\nvalue: acknowledged\n---\nBody' });
+  db.saveNote(current);
+  assert.equal(await db.flushCurrentWrites(), true);
+  await assert.rejects(
+    () => controller.replaceRaw(note.id, '---\nvalue: proposed\n---', parsed.review),
+    (error) => ['stale_note', 'stale_plan'].includes(error.code),
+  );
+  assert.equal(db.getNote(note.id).content, '---\nvalue: acknowledged\n---\nBody');
 });

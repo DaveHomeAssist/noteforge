@@ -25,7 +25,7 @@ export function createReconciliationElements(root = document.body) {
         <section class="reconciliation-picker" aria-labelledby="reconciliation-source-title"><div><h3 id="reconciliation-source-title">1. Select source</h3><p class="muted">Chromium can open a directory directly. Other browsers can select a folder or multiple Markdown files.</p></div><div class="reconciliation-picker__actions"><button type="button" class="btn btn--primary" data-directory>Choose folder</button><label class="btn btn--ghost reconciliation-file-label">Select folder files<input data-folder-files type="file" accept=".md,text/markdown,text/plain" multiple webkitdirectory></label><label class="btn btn--ghost reconciliation-file-label">Select Markdown files<input data-files type="file" accept=".md,text/markdown,text/plain" multiple></label></div></section>
         <section class="reconciliation-plan" aria-labelledby="reconciliation-plan-title"><h3 id="reconciliation-plan-title">2. Review plan</h3><div class="reconciliation-summary muted">No folder scanned.</div><div class="reconciliation-items"></div><nav class="reconciliation-pagination" aria-label="Reconciliation plan pages" hidden><button type="button" class="btn btn--ghost" data-page-previous>Previous</button><span data-page-status aria-live="polite"></span><button type="button" class="btn btn--ghost" data-page-next>Next</button></nav></section>
       </div>
-      <footer class="recovery-modal__footer"><span class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-report hidden>Download report</button><button type="button" class="btn btn--ghost" data-close>Close</button><button type="button" class="btn btn--primary" data-apply disabled>Apply selected changes</button></div></footer>
+      <footer class="recovery-modal__footer"><span class="recovery-modal__status" role="status" aria-live="polite"></span><div class="modal__actions"><button type="button" class="btn btn--ghost" data-report hidden>Download report</button><button type="button" class="btn btn--ghost" data-close>Close</button><button type="button" class="btn btn--ghost" data-refresh hidden>Refresh preview</button><button type="button" class="btn btn--primary" data-apply disabled>Apply selected changes</button></div></footer>
     </div>`;
   root.appendChild(overlay);
   return {
@@ -37,6 +37,7 @@ export function createReconciliationElements(root = document.body) {
     items: overlay.querySelector('.reconciliation-items'),
     status: overlay.querySelector('[role="status"]'),
     apply: overlay.querySelector('[data-apply]'),
+    refresh: overlay.querySelector('[data-refresh]'),
     report: overlay.querySelector('[data-report]'),
     pagination: overlay.querySelector('.reconciliation-pagination'),
     pagePrevious: overlay.querySelector('[data-page-previous]'),
@@ -46,12 +47,17 @@ export function createReconciliationElements(root = document.body) {
 }
 
 export class ReconciliationView {
-  constructor(els, db, service, { pickDirectory, confirmApply, onApplied } = {}) {
+  constructor(els, db, service, { pickDirectory, confirmApply, onApplied, refreshPreview } = {}) {
     this.els = els;
     this.db = db;
     this.service = service;
     this.pickDirectory = pickDirectory || globalThis.showDirectoryPicker?.bind(globalThis);
     this.confirmApply = confirmApply;
+    this.refreshPreview = refreshPreview;
+    this.epoch = 0;
+    this.busy = false;
+    this.scanning = false;
+    this.stale = false;
     this.onApplied = onApplied || (() => {});
     this.plan = null;
     this.lastReport = null;
@@ -59,7 +65,14 @@ export class ReconciliationView {
     this.page = 0;
     this.decisions = new Map();
     this.modal = new Modal(els.overlay, {
+      onEscape: () => this.close(),
       initialFocus: () => (this.els.directory.disabled ? this.els.file : this.els.directory),
+    });
+    this.els.overlay.addEventListener('click', (event) => {
+      if (event.target.closest('[data-close]')) this.close();
+    });
+    this.els.refresh?.addEventListener('click', () => {
+      if (!this.busy && !this.scanning) void this.#scan(() => this.service.refreshPlan());
     });
     this.els.directory.disabled = typeof this.pickDirectory !== 'function';
     this.els.directory.title = this.els.directory.disabled
@@ -73,6 +86,7 @@ export class ReconciliationView {
     this.els.items.addEventListener('change', (event) => {
       const control = event.target.closest('[data-decision]');
       if (!control) return;
+      this.epoch++;
       this.decisions.set(control.dataset.decision, control.value);
       this.#syncApplyAvailability();
     });
@@ -84,55 +98,98 @@ export class ReconciliationView {
     return this.modal.isOpen;
   }
   show() {
+    this.epoch++;
+    this.scanVersion++;
+    this.scanning = false;
+    this.plan = null;
+    this.stale = Boolean(this.service.entries?.length);
+    this.#syncApplyAvailability();
     this.els.status.textContent = this.pickDirectory
       ? 'Choose a folder to build a read-only plan.'
       : 'Direct folder access is unavailable. Use the file-selection fallback; no writes occur during scanning.';
     this.modal.open();
   }
   close() {
+    this.epoch++;
+    this.scanVersion++;
+    this.scanning = false;
     this.modal.close();
   }
 
   async #chooseDirectory() {
+    if (this.busy) return;
+    const version = ++this.scanVersion;
+    this.epoch++;
+    this.plan = null;
+    this.scanning = true;
+    this.stale = Boolean(this.service.entries?.length);
+    this.#syncApplyAvailability();
     try {
       const handle = await this.pickDirectory({ mode: 'read' });
-      await this.#scan(await readVaultDirectory(handle));
+      if (version !== this.scanVersion || !this.open) return;
+      const entries = await readVaultDirectory(handle);
+      if (version === this.scanVersion && this.open) await this.#scan(() => this.service.plan(entries), version);
     } catch (error) {
-      if (error?.name !== 'AbortError') this.els.status.textContent = error?.message || String(error);
+      if (version === this.scanVersion && this.open && error?.name !== 'AbortError')
+        this.els.status.textContent = error?.message || String(error);
+    } finally {
+      if (version === this.scanVersion) {
+        this.scanning = false;
+        this.#syncApplyAvailability();
+      }
     }
   }
 
   async #chooseFiles(input) {
+    if (this.busy) return;
+    const version = ++this.scanVersion;
+    this.epoch++;
+    this.plan = null;
+    this.scanning = true;
+    this.stale = Boolean(this.service.entries?.length);
+    this.#syncApplyAvailability();
     try {
-      await this.#scan(await readVaultFileList(input.files));
+      const entries = await readVaultFileList(input.files);
+      if (version === this.scanVersion && this.open) await this.#scan(() => this.service.plan(entries), version);
     } catch (error) {
-      this.els.status.textContent = error?.message || String(error);
+      if (version === this.scanVersion && this.open) this.els.status.textContent = error?.message || String(error);
     } finally {
-      input.value = '';
+      if (version === this.scanVersion) {
+        input.value = '';
+        this.scanning = false;
+        this.#syncApplyAvailability();
+      }
     }
   }
 
-  async #scan(entries) {
-    const version = ++this.scanVersion;
-    this.els.apply.disabled = true;
-    this.els.status.textContent = `Scanning ${entries.length} Markdown file${entries.length === 1 ? '' : 's'}…`;
-    let plan;
-    try {
-      plan = await this.service.plan(entries);
-    } catch (error) {
-      if (version === this.scanVersion) throw error;
-      return false;
-    }
-    if (version !== this.scanVersion) return false;
-    this.plan = plan;
-    this.page = 0;
-    this.decisions = new Map(this.plan.items.map((item) => [item.key, item.status === 'Conflict' ? 'skip' : '']));
-    this.lastReport = null;
-    this.els.report.hidden = true;
-    this.#renderPlan();
+  async #scan(loadPlan, version = ++this.scanVersion) {
+    this.epoch++;
+    this.plan = null;
+    this.scanning = true;
     this.#syncApplyAvailability();
-    this.els.status.textContent = 'Plan ready. Review every proposed action; the vault is unchanged.';
-    return true;
+    this.els.status.textContent = 'Refreshing saved notes and scanning the selected source…';
+    try {
+      await this.refreshPreview?.();
+      if (version !== this.scanVersion || !this.open) return;
+      const plan = await loadPlan();
+      if (version !== this.scanVersion || !this.open) return;
+      this.plan = plan;
+      this.stale = false;
+      this.page = 0;
+      // Source or destination changes require new per-item decisions.
+      this.decisions = new Map(plan.items.map((item) => [item.key, item.status === 'Conflict' ? 'skip' : '']));
+      this.lastReport = null;
+      this.els.report.hidden = true;
+      this.#renderPlan();
+      this.els.status.textContent = 'Plan ready. Review every proposed action; the vault is unchanged.';
+    } catch (error) {
+      if (version === this.scanVersion && this.open) this.els.status.textContent = error?.message || String(error);
+    } finally {
+      if (version === this.scanVersion) {
+        this.scanning = false;
+        this.#syncApplyAvailability();
+      }
+    }
   }
 
   #renderPlan() {
@@ -164,6 +221,7 @@ export class ReconciliationView {
   }
 
   #setPage(page) {
+    if (!this.plan) return;
     const pageCount = Math.max(1, Math.ceil((this.plan?.items.length || 0) / PAGE_SIZE));
     this.page = Math.max(0, Math.min(pageCount - 1, page));
     this.#renderPlan();
@@ -173,41 +231,69 @@ export class ReconciliationView {
   #syncApplyAvailability() {
     const mutable = this.plan?.items.filter((item) => item.status === 'Add' || item.status === 'Update') || [];
     this.els.apply.disabled =
-      !mutable.length || mutable.some((item) => !['apply', 'skip'].includes(this.decisions.get(item.key)));
+      this.busy ||
+      this.scanning ||
+      this.stale ||
+      !mutable.length ||
+      mutable.some((item) => !['apply', 'skip'].includes(this.decisions.get(item.key)));
+    if (this.els.refresh) {
+      this.els.refresh.hidden = !this.stale;
+      this.els.refresh.disabled = this.busy || this.scanning;
+    }
+    this.els.directory.disabled = this.busy || typeof this.pickDirectory !== 'function';
+    this.els.file.disabled = this.busy;
+    this.els.folderFile.disabled = this.busy;
+    this.els.items.querySelectorAll('select').forEach((control) => {
+      control.disabled = this.busy || this.scanning || this.stale || !this.plan;
+    });
   }
 
   async #apply() {
+    if (!this.plan || this.els.apply.disabled || this.busy) return;
+    const plan = structuredClone(this.plan);
     const decisions = Object.fromEntries([...this.decisions].filter(([, value]) => value));
-    const approved =
-      typeof this.confirmApply === 'function' &&
-      (await this.confirmApply({
-        message:
-          'Apply the selected folder changes? NoteForge will first download a verified portable backup, capture pre-change revisions, re-check every source file, and delete nothing.',
-        plan: this.plan,
-      }));
-    if (approved !== true) {
-      this.els.status.textContent = 'Folder reconciliation cancelled. No data was changed.';
-      return;
-    }
-    this.els.apply.disabled = true;
-    this.els.status.textContent = 'Creating verified backup and checking source files…';
+    const epoch = this.epoch;
+    const current = () => epoch === this.epoch && this.open;
+    this.busy = true;
+    this.#syncApplyAvailability();
     try {
-      this.lastReport = await this.service.apply({ plan: this.plan, decisions, confirmed: true });
+      const approved =
+        typeof this.confirmApply === 'function' &&
+        (await this.confirmApply({
+          message:
+            'Apply the selected folder changes? NoteForge will first download a verified portable backup, capture pre-change revisions, re-check every source file, and delete nothing.',
+          plan,
+        }));
+      if (!current()) return;
+      if (approved !== true) {
+        this.els.status.textContent = 'Folder reconciliation cancelled. No data was changed.';
+        return;
+      }
+      this.els.status.textContent = 'Creating verified backup and checking source files…';
+      const report = await this.service.apply({ plan, decisions, confirmed: true });
+      if (!current()) return;
+      this.lastReport = report;
       try {
-        await this.onApplied(this.lastReport);
+        await this.onApplied(report);
       } catch (error) {
         console.warn('[reconciliation] applied vault could not be refreshed in the open workspace:', error);
       }
-      const s = this.lastReport.summary;
-      this.els.status.textContent = `${this.lastReport.message} Added ${s.added}, updated ${s.updated}, unchanged ${s.unchanged}, skipped ${s.skipped}, deleted 0.`;
+      if (!current()) return;
+      const summary = report.summary;
+      this.els.status.textContent = `${report.message} Added ${summary.added}, updated ${summary.updated}, unchanged ${summary.unchanged}, skipped ${summary.skipped}, deleted 0.`;
       this.els.report.hidden = false;
-      this.plan = await this.service.plan(this.service.entries);
-      this.page = 0;
-      this.decisions = new Map(this.plan.items.map((item) => [item.key, item.status === 'Conflict' ? 'skip' : '']));
-      this.#renderPlan();
+      this.plan = null;
+      this.stale = true;
     } catch (error) {
-      this.els.status.textContent = error?.message || String(error);
+      if (!current()) return;
+      if (error?.code === 'stale_plan') {
+        this.stale = true;
+        this.plan = null;
+        this.els.status.textContent =
+          'The source or current vault changed. Refresh the preview and review each decision again.';
+      } else this.els.status.textContent = error?.message || String(error);
     } finally {
+      this.busy = false;
       this.#syncApplyAvailability();
     }
   }

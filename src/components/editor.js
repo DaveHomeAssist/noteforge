@@ -13,7 +13,7 @@ export class Editor {
    * @param {import('../core/database.js').Database} db
    * @param {{ openNote:(id:string,opts?:object)=>void, openOrCreateByTitle:(t:string,fragment?:string)=>void,
    *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void,
-   *   showProperties?:(id:string)=>void, announce?:(message:string)=>void }} actions
+   *   showProperties?:(id:string)=>void, reviewStorage?:()=>Promise<void>|void, announce?:(message:string)=>void }} actions
    */
   constructor(container, db, actions) {
     this.container = container;
@@ -26,6 +26,7 @@ export class Editor {
     this.outlineReady = null;
     this.phase5Enhancer = null;
     this.autosave = debounce(() => this.#save(), Number(db.config?.autosaveMs) || 400);
+    this.unsubscribePersistence = db.subscribePersistence?.(() => this.#reflectSaveState());
     this.#renderEmpty();
   }
 
@@ -59,16 +60,19 @@ export class Editor {
     this.blockEditor?.setEnhancer(enhancer);
   }
 
-  open(id, { focus = null, discardPending = false, headingAnchor = null, blockId = null } = {}) {
+  open(id, { focus = null, discardPending = false, headingAnchor = null, blockId = null, resetHistory = false } = {}) {
     // Persist the OUTGOING note's buffered (debounced) edits before we switch —
     // flush runs #save() synchronously while currentId/blockEditor still point at
     // the note being left, so a fast note-switch never drops unsaved typing.
+    // Application completion callbacks use normal opens/syncAuthoritative so
+    // they retain later typing. Explicit discard remains an opt-in operation.
     if (discardPending) this.autosave.cancel();
-    else this.autosave.flush();
+    else this.flushPending();
     const note = this.db.getNote(id);
     if (!note) return this.#renderEmpty();
+    if (!discardPending && id === this.currentId && this.blockEditor?.isComposing) return;
     this.currentId = id;
-    this.#render(note);
+    this.#render(note, resetHistory || this._sourceContent !== note.content);
     if (focus === 'title') {
       const el = this.container.querySelector('.editor__title');
       if (el) {
@@ -85,9 +89,8 @@ export class Editor {
   }
 
   /**
-   * Re-render on an external store change. Bail while the title is focused or
-   * the block editor is mid-edit, so autosave never yanks the caret; the
-   * sidebar list updates independently.
+   * Adopt changed source only when local typing has been submitted. Metadata
+   * refreshes defer while editing; committed source changes reset old history.
    */
   refresh() {
     if (!this.currentId) return;
@@ -98,24 +101,49 @@ export class Editor {
       return;
     }
     const active = document.activeElement;
-    if (active?.classList.contains('editor__title')) return;
-    if (this.blockEditor?.isEditing()) return;
-    if (this.banner?.isBusy()) return; // banner picker/reposition in progress
-    // Defense-in-depth: never rebuild the editor over block edits that haven't
-    // been persisted yet (e.g. a foreign emit lands during the autosave debounce
-    // window). The pending autosave will persist them and a later refresh will
-    // rebuild cleanly.
-    if (this.blockEditor && this.blockEditor.serialize() !== note.content) return;
-
+    const source = this.blockEditor?.serialize();
+    if (source !== undefined && source !== this._sourceContent) return;
+    const replaced = this._sourceContent !== note.content;
+    if (!replaced && active?.classList.contains('editor__title')) return;
+    if (!replaced && this.blockEditor?.isEditing()) return;
+    if (!replaced && this.banner?.isBusy()) return;
+    const title = this.container.querySelector('.editor__title');
+    const titleDraft = title?.value !== this._sourceTitle ? title?.value : null;
+    const wasTitle = active === title;
+    const titleSelection = wasTitle ? [title.selectionStart, title.selectionEnd] : null;
+    const wasBlock = this.blockEditor?.host.contains(active);
     const wasTagInput = active?.classList.contains('editor__tag-input');
     const wasPin = active?.classList.contains('editor__pin');
-    this.#render(note);
-    if (wasTagInput) {
+    this.#render(note, replaced);
+    const nextTitle = this.container.querySelector('.editor__title');
+    if (titleDraft !== null && nextTitle) nextTitle.value = titleDraft;
+    this.#reflectSaveState();
+    if (wasTitle && nextTitle) {
+      nextTitle.focus();
+      nextTitle.setSelectionRange(...titleSelection);
+    } else if (wasBlock) {
+      this.blockEditor?.focusFirst();
+    } else if (wasTagInput) {
       const ti = this.container.querySelector('.editor__tag-input');
       if (ti) ti.focus();
     } else if (wasPin) {
       this.container.querySelector('.editor__pin')?.focus();
     }
+  }
+
+  canRefreshFromStorage() {
+    const note = this.currentId ? this.db.getNote(this.currentId) : null;
+    return (
+      !this.container.contains(document.activeElement) &&
+      !this.blockEditor?.isEditing() &&
+      !this.banner?.isBusy() &&
+      (!this.blockEditor || this.blockEditor.serialize() === note?.content) &&
+      (!note || this.container.querySelector('.editor__title')?.value === note.title)
+    );
+  }
+
+  syncAuthoritative(noteIds) {
+    if (noteIds.includes(this.currentId)) this.open(this.currentId);
   }
 
   /** Update just the pin button in place — used when a full refresh() is
@@ -134,12 +162,28 @@ export class Editor {
     if (id !== this.currentId) return;
     const input = this.container.querySelector('.editor__title');
     const note = this.db.getNote(id);
-    if (input && note) input.value = note.title;
+    if (input && note) input.value = this._sourceTitle = note.title;
+    this.#reflectSaveState();
+  }
+
+  destroy() {
+    this.flushPending();
+    this.autosave.cancel();
+    this.unsubscribePersistence?.();
+    this.unsubscribePersistence = null;
+    this.currentId = null;
+    this.#teardown();
+    this.container.replaceChildren();
   }
 
   // --- rendering ----------------------------------------------------------
 
   #teardown() {
+    this._titleInput = null;
+    this.titleComposing = false;
+    this.saveStatus = null;
+    this.saveRetry = null;
+    this.saveReview = null;
     if (this.blockEditor) {
       this.blockEditor.destroy();
       this.blockEditor = null;
@@ -165,11 +209,16 @@ export class Editor {
       </div>`;
   }
 
-  #render(note) {
+  #render(note, resetHistory = false) {
     // Carry the block editor's undo/redo history across a re-render of the SAME
     // note (metadata edits trigger refresh()), so it isn't silently wiped.
-    const history = this.blockEditor && this._blockEditorNoteId === note.id ? this.blockEditor.exportHistory() : null;
+    const history =
+      !resetHistory && this.blockEditor && this._blockEditorNoteId === note.id
+        ? this.blockEditor.exportHistory()
+        : null;
     this.#teardown();
+    this._sourceContent = note.content;
+    this._sourceTitle = note.title;
     const backlinks = this.db.backlinkOccurrencesFor(note.id);
     const mentions = this.db.unlinkedMentionsFor(note.id);
     this._mentions = mentions;
@@ -187,6 +236,11 @@ export class Editor {
         </div>
       </div>
 
+      <div class="editor__save">
+        <span class="editor__save-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button type="button" class="btn btn--ghost editor__save-retry" hidden>Retry save</button>
+        <button type="button" class="btn btn--ghost editor__save-review" hidden>Review and export</button>
+      </div>
       <div class="editor__tags">
         ${note.tags
           .map(
@@ -252,6 +306,7 @@ export class Editor {
       history,
       onChange: () => {
         this.autosave();
+        this.#reflectSaveState();
         this.outline?.update(this.blockEditor.serialize());
       },
       onOpenWikilink: (title, fragment) => {
@@ -275,6 +330,12 @@ export class Editor {
     });
 
     this.#wire(note);
+    // Composition input is deliberately withheld from BlockEditor.onChange.
+    // Observe it after its own handlers without replacing focused editor DOM.
+    for (const type of ['input', 'compositionstart', 'compositionend']) {
+      host.addEventListener(type, () => this.#reflectSaveState());
+    }
+    this.#reflectSaveState();
   }
 
   #mountOutline(markdown) {
@@ -310,7 +371,34 @@ export class Editor {
     }
 
     const titleInput = this.container.querySelector('.editor__title');
+    this._titleInput = titleInput;
+    titleInput.addEventListener('input', () => this.#reflectSaveState());
+    for (const type of ['compositionstart', 'compositionend']) {
+      titleInput.addEventListener(type, () => {
+        this.titleComposing = type === 'compositionstart';
+        this.#reflectSaveState();
+      });
+    }
+    this.saveStatus = this.container.querySelector('.editor__save-status');
+    this.saveRetry = this.container.querySelector('.editor__save-retry');
+    this.saveReview = this.container.querySelector('.editor__save-review');
+    this.saveRetry.addEventListener('click', () => {
+      const current = this.currentId && this.db.getNote(this.currentId);
+      if (!current || this.db.getNoteSaveState(this.currentId).status !== 'failed') return;
+      this.flushPending();
+      if (this.db.getNoteSaveState(this.currentId).status === 'failed') this.db.saveNoteWithReceipt(current);
+    });
+    this.saveReview.addEventListener('click', async () => {
+      const owner = this.saveStatus;
+      try {
+        this.flushPending();
+        await this.actions.reviewStorage?.();
+      } catch {
+        if (this.saveStatus === owner) owner.textContent = 'Recovery unavailable. Keep this window open.';
+      }
+    });
     titleInput.addEventListener('change', () => {
+      if (this._titleInput !== titleInput) return;
       const proposed = titleInput.value.trim() || 'Untitled';
       if (proposed === note.title) return;
       this.actions.requestRename?.(note.id, proposed);
@@ -391,6 +479,7 @@ export class Editor {
   /** Commit any pending debounced autosave immediately (e.g. before unload). */
   flushPending() {
     this.autosave.flush();
+    this.#save(); // composition can own changed source before scheduling autosave
   }
 
   focusTask(occurrence) {
@@ -421,12 +510,42 @@ export class Editor {
 
   // --- persistence --------------------------------------------------------
 
+  #reflectSaveState() {
+    if (!this.currentId || !this.saveStatus) return;
+    const note = this.db.getNote(this.currentId);
+    const state = this.db.getNoteSaveState?.(this.currentId) ?? { status: 'unavailable' };
+    const titleDraft = this.titleComposing || (this._titleInput && this._titleInput.value !== note?.title);
+    const contentDraft = this.blockEditor?.isComposing || this.getSourceMarkdown() !== note?.content;
+    const messages = {
+      committed: 'Saved on this device',
+      pending: 'Saving…',
+      'in-flight': 'Saving…',
+      dirty: 'Unsaved changes',
+      failed: 'Save failed — draft kept in this window',
+      conflict: 'Conflict — review your draft',
+      unavailable: 'Storage unavailable — export your draft',
+      missing: 'Note unavailable — preserve this draft',
+    };
+    // Failures remain actionable even when there is newer buffered typing.
+    const needsRecovery = ['conflict', 'failed', 'unavailable', 'missing'].includes(state.status);
+    const status = !needsRecovery && (titleDraft || contentDraft) ? 'dirty' : state.status;
+    const message =
+      status === 'dirty' && titleDraft && !contentDraft
+        ? 'Title change not applied'
+        : messages[status] || messages.dirty;
+    if (this.saveStatus.textContent !== message) this.saveStatus.textContent = message;
+    this.saveStatus.dataset.state = status;
+    this.saveRetry.hidden = state.status !== 'failed';
+    this.saveReview.hidden = !needsRecovery || !this.actions.reviewStorage;
+  }
+
   #save() {
     if (!this.currentId) return;
     const note = this.db.getNote(this.currentId);
     if (!note) return;
     const nextContent = this.blockEditor ? this.blockEditor.serialize() : note.content;
-    if (nextContent === note.content) return; // no-op
+    if (nextContent === this._sourceContent) return; // clean, possibly obsolete view
+    this._sourceContent = nextContent;
     note.update({ content: nextContent });
     this.db.saveNote(note);
   }

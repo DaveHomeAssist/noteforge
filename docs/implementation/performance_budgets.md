@@ -37,7 +37,7 @@ over. CI runs it after every build on Node 22 and 24.
 
 | Route | Loads | Measured gzip | Budget |
 | --- | --- | ---: | ---: |
-| shell | first paint | 75,571 B | 83,968 B (82 KiB) |
+| shell | first paint | 75,571 B | 99,328 B (97 KiB, raised 2026-10-04) |
 | editor | outline, backlink index, navigation | 5,389 B | 6,144 B |
 | graph | graph view | 3,092 B | 4,096 B |
 | recovery | history, backup center, recovery, backup core | 26,160 B | 29,696 B |
@@ -48,7 +48,10 @@ over. CI runs it after every build on Node 22 and 24.
 | settings | settings, Trash | 4,193 B | 5,120 B |
 | dialogs | in-app confirm dialog and toasts, on first use | 3,001 B | 4,096 B |
 | banner | note banner picker, gradient presets, Reposition (added 2026-10-01) | 2,181 B | 3,072 B |
-| precache | everything offline | 220,873 B | 243,712 B |
+| conflicts | comparison, draft recovery and resolution (Phase 1 repair) | 6,252 B | 7,168 B |
+| storageRecovery | read-only recovery reader before activation | 2,183 B | 3,072 B |
+| vaultRefresh | clean-window reconciliation and resume watcher | 2,254 B | 3,072 B |
+| precache | everything offline | 220,873 B | 281,600 B (275 KiB, raised 2026-10-04) |
 
 ### Measurements
 
@@ -58,6 +61,51 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-09-27 | marked 18, Vite 8 (Rolldown groups for the runtime and YAML) | 74.1 KiB | 18.5 KiB | 41.1 KiB | 210.9 KiB |
 | 2026-10-01 | Before Tier 1 split (`db9971f`) | 82,352 B | 19,631 B | 42,177 B | 230,324 B |
 | 2026-10-01 | Tier 1 split: banner picker and palette command list leave the shell | 80,242 B | 19.2 KiB | 41.2 KiB | 232,013 B |
+| 2026-10-03 | Conflict recovery checkpoint, not releasable | 84,022 B (54 B over) | 19,633 B | 42,246 B | 243,817 B (105 B over) |
+| 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
+| 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
+| 2026-10-04 | Atomic identity checkpoint, not releasable | 87,494 B (3,526 B over) | 20,288 B | 43,253 B | 253,172 B (9,460 B over) |
+| 2026-10-04 | Final Phase 1 candidate f64812d with option C; limits rebaselined to the approved caps | 92,770 B | 20.3 KiB | 42.2 KiB | 258,731 B |
+
+The session-state change adds no dependencies and does not raise any limit.
+Its build remains blocked by the existing shell/precache budgets. It separates
+window navigation from the durable write queue; layout storage failure does not
+become a note-save failure. Final emitted sizes must be rechecked after the
+remaining Phase 1 integration and compatibility work.
+
+The window refresh route uses the same new-route calculation. Existing shell
+and precache limits remain unchanged and failing; there is no approved exception.
+The following local persistence diagnostics use synthetic 1,000/5,000-note
+vaults in Playwright Chromium, Firefox and WebKit on this Mac. Twenty measured
+ordinary saves follow five warm-up saves. Timings span Database mutation through
+the completed current-write flush; optional history is replaced by a no-op, and
+these are not full editor, paint, physical-device or release performance gates.
+
+| Engine | Notes | Save p95 | One clean refresh |
+| --- | ---: | ---: | ---: |
+| Chromium | 1,000 | 0.3 ms | 10.9 ms |
+| Chromium | 5,000 | 0.2 ms | 47.2 ms |
+| Firefox | 1,000 | 1 ms | 20 ms |
+| Firefox | 5,000 | 1 ms | 84 ms |
+| WebKit | 1,000 | 1 ms | 50 ms |
+| WebKit | 5,000 | 1 ms | 184 ms |
+
+Each 25-save run wrote the changed note 25 times and made 75 total IDB puts
+(note, vault metadata and persistence timestamp), with no cursor scans during
+those saves. The separate refresh reads the full vault and rebuilds derived
+state. These measurements do not establish constant-time serialization, indexing,
+refresh or user interaction. Timer resolution and host load affect short samples.
+The maintained scenario is `test/e2e/vault-refresh.spec.mjs`; the reviewed run
+completed all 177 durability cases with no failures.
+
+The conflict checkpoint adds two lazy routes using the policy v2 new-route
+calculation (measured gzip plus 10%, rounded up to KiB). Existing limits are
+unchanged. The optional revision lease now belongs to the recovery route, which
+measures 26,349 B against 29,696 B. No dependency was added. The shell remains
+54 B over its existing limit; the offline cache is 105 B over. This is
+a failed release gate, not an approved exception. Additional Phase 1 work must
+address the actual emitted output before release; these intermediate sizes are
+not promises of final headroom.
 
 Vite 8 without the Rolldown groups put the YAML parser in the Daily route (49.0 KiB against 22 KiB); the budget gate caught it (PR #14).
 
@@ -78,6 +126,8 @@ paint belongs in a lazy route, with its CSS loaded alongside it.
 | 2026-10-01 | shell | 83,968 B | 83,968 B (held) | No raise. With 1,616 B of headroom left at `db9971f`, the remaining Phase 1 shell work goes behind lazy routes first: this split moves the banner picker and the palette command list out (82,352 to 80,242 B). Slash/link/block menus are the next candidate | Dave, 2026-10-01 (approved holding the shell and splitting first) |
 | 2026-10-01 | retrieval | 26,624 B | 29,696 B | The palette command list (`src/app/palette-commands.js`, about 1.6 KB gzip) now loads with the palette instead of the shell; measured 26,849 B + 10% | Dave, 2026-10-01 (same approval) |
 | 2026-10-01 | banner (new) | none | 3,072 B | New lazy route for `src/components/banner-picker.js` and its CSS; measured 2,181 B + 10% | Dave, 2026-10-01 (same approval) |
+| 2026-10-04 | shell | 83,968 B | 99,328 B | Phase 1 durable writes: atomic conditional storage, exact per-note save state, startup validation and basic recovery, automatic activation from both legacy backends, versioned schema migration and legacy-save capture must be available before editable startup. Final candidate (f64812d) measures 92,770 B; measured + 10% gives 100 KiB, so Dave's 97 KiB cap applies (7.1% headroom). Tried first: the 2026-10-01 split (banner picker and palette command list moved out), and keeping conflict review, archive export, refresh, recovery and other optional features in lazy routes; capture runs at every startup, so moving it to a lazy chunk would not reduce what first use downloads | Dave, 2026-10-04 (NF-DUR-BUDGET-01 = A) |
+| 2026-10-04 | precache | 243,712 B | 281,600 B | Same Phase 1 work; lazy splitting cannot reduce the complete offline cache. Final candidate (f64812d) measures 258,731 B; measured + 10% gives 278 KiB, so Dave's 275 KiB cap applies (8.8% headroom) | Dave, 2026-10-04 (NF-DUR-BUDGET-01 = A) |
 
 ## Build budget history (policy v1, raw initial-shell ceiling, until 2026-09-26)
 
@@ -208,10 +258,138 @@ textarea editor) left `styles.css`. No dependency was added.
 
 - Backlink, unlinked-mention, task, calendar, property, and recent-note indexes are derived and rebuildable. They are excluded from authoritative JSON backups.
 - Derived indexes update incrementally after a durable note save. A full rebuild is allowed at migration/startup or after detected corruption, never on each keystroke.
-- Navigation history retains 100 entries per session. Persisted recents retain 50 unique live note IDs.
-- Workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state.
+- Navigation history retains 100 entries per session. Session-persisted recents retain 50 unique live note IDs.
+- Per-window session workspace persistence retains at most 20 open tab IDs. Mobile collapse does not duplicate pane/editor state. Neither field is a new shared-vault write.
 - Transclusion renders to a maximum depth of 5 and tracks visited note/fragment references to terminate cycles.
 
 ## Gate policy
 
 A budget breach blocks phase release unless the repository maintainer approves a written exception that includes the measured regression, user impact, mitigation, and follow-up owner. Correctness, data preservation, accessibility, and current-note durability take precedence over retaining optional history or caches.
+
+### History preview checkpoint
+
+The reviewed History restore change builds successfully but remains over the
+existing limits: shell 85,451 / 83,968 gzip bytes (+1,483), precache 246,722 /
+243,712 (+3,010). Relative to the per-window checkpoint this adds 182 shell bytes
+and 493 precache bytes. Recovery is 26,717 / 29,696 bytes. No limit was raised
+and no exception is claimed. This is not a release pass. The per-note save path
+is unchanged; earlier synthetic persistence timings are historical measurements,
+not a new full UI/history performance qualification.
+
+### Planned mutation review checkpoint
+
+The explicit refresh/retained-draft controls and bounded bulk review list build
+successfully. Shell is 85,527 / 83,968 gzip bytes (+1,559); precache is 250,407 /
+243,712 (+6,695). Relative to the History checkpoint these add 76 shell bytes and
+3,685 precache bytes. Recovery is 27,069 / 29,696 bytes. Both existing failing
+budgets remain release blockers; no limit or approval exception changed. The
+correctness contract must survive any subsequent loading/bundle optimization.
+
+### Editor adoption checkpoint
+
+The source-baseline and buffered-draft adoption changes measure 85,729 / 83,968
+gzip bytes for shell (+1,761) and 250,706 / 243,712 for precache (+6,994).
+These add 202 shell bytes and 299 precache bytes to the planned-review checkpoint.
+Recovery is 27,108 / 29,696 bytes. The existing shell/precache failures remain
+release blockers; no limit was raised. These are build-size measurements, not
+end-to-end editor or history latency acceptance.
+
+2026-10-04 per-pane save-state checkpoint: shell 87,153/83,968 B and precache
+252,692/243,712 B gzip fail. The visible status/retry/recovery controls add no
+runtime dependency. Existing limits remain unchanged; the phase must resolve
+these emitted-size failures before release. These measurements include the
+preceding receipt/capture work and are not the incremental cost of this UI alone.
+
+### Phase 1 recovery archive measurement (2026-10-04)
+
+Basic startup recovery now belongs to the initial shell because it must remain
+usable when a lazy recovery asset fails. Archive encoding/capture stays lazy and
+adds about 1.8 KiB gzip, within the existing 3 KiB storageRecovery limit. No limit
+was raised. Current shell is about 88.0 KiB against 82 KiB; precache is about
+249.3 KiB against 238 KiB. Both remain failing release gates.
+
+A local Rolldown module profile identifies the dominant initial JavaScript inputs:
+block editor (75,922 rendered characters), application controller (64,958),
+DOMPurify (61,541), marked (57,086), Database (49,384), editor wrapper (19,387) and
+note list (18,091). These are module rendered-code lengths before final chunk
+minification, not additive per-module gzip measurements. They locate candidates
+for further analysis; they do not establish the value of a lazy boundary or
+end-to-end startup improvement. Any boundary change must keep first-note behavior,
+error recovery, warm offline operation and the route's actual usability contract
+qualified. Full editor/history scale measurements and the budget decision remain
+open; do not remove required safety code or relabel synchronous dependencies just
+to make a route counter pass.
+
+### Production editor and history qualification (2026-10-04)
+
+`test/e2e/editor-scale.spec.mjs` runs the actual production build in Chromium,
+Firefox and WebKit with 1,000 and 5,000 synthetic activated notes. Each case types
+500 characters using real keyboard events in 25 batches, retains the normal
+400 ms autosave debounce, discards five warm-up batches and measures twenty batches.
+The real revision service and rolling snapshots remain enabled. A second case at
+each size toggles another note's pin every fifth input, overlapping typing with
+metadata writes and database notifications.
+
+The test checks each batch's final exact save receipt, visible saved state,
+caret/focus, all retained committed revision sources and unknown metadata, unchanged other notes, per-note
+writes, portable backup integrity, reload, current sidebar ordering and bounded
+rendered rows. It does not replace history callbacks with no-ops or force flushes
+to bypass autosave during measurement. Setup/reload waits include optional
+controllers and indexing; `initializedMs` is not a first-paint metric. Timing uses
+the page's real clock. `beforeinput` to the next animation-frame callback is an
+upper-bound scheduling proxy for DOM reflection, not a physical display or IME
+measurement. Device/IME acceptance and backup restore remain separate gates.
+
+The original ordinary cases passed, but overlapping metadata updates failed the
+unchanged 50 ms input limit in WebKit: p95 61 ms at 1,000 notes and 122 ms at 5,000.
+Reusing locale setup alone, then coalescing the main subscriber's sidebar redraw,
+were insufficient. Property reconciliation still copied every note and requested
+another redraw for unchanged Markdown. Two new unit regressions demonstrated
+unrelated source serialization before repair. The final targeted WebKit rerun
+measured 22 ms and 29 ms respectively after narrowing property refresh and sharing
+the redraw boundary. Those are local targeted measurements, not CI or release
+acceptance. Full-suite/exact-head evidence is recorded with the implementation
+checkpoint. No interaction or bundle threshold was raised.
+
+The edited fixture uses the canonical block-body whitespace specified in NFM §17;
+untouched fixtures retain their final newline. An initial strict newline assertion
+failed because the specified editor normalization drops a final newline on edit.
+That retained diagnostic is not a new persistence defect, and this qualification
+does not claim arbitrary whitespace survives editing. Original failed/aborted
+attempts and their traces are retained alongside the final report.
+
+A host pause during automated typing can legitimately produce an intermediate
+autosave. The fixture tracks each submission and its history callback by exact
+source, waits for the batch's final source, and checks all committed sources up
+to the real retention limit. A deliberate pause in warmup exercises this path;
+neither the save count nor history count is assumed to equal the batch count.
+The first full run retained 528 passes, one intermediate-receipt assertion failure
+and one Chromium launch failure before the banner test began. The launch process
+exited with SIGKILL; its cause is unverified. Affected reruns are reported separately.
+
+The corrected affected run passes all 12 scale cases and six banner cases without
+retries/skips. Input p95 is 11–26 ms across engines and both sizes; background
+WebKit is 24/26 ms. Each case retains 26 exact committed revisions, including the
+controlled warmup pause. The original full run remains recorded as 528/530;
+these affected reruns do not retroactively turn it into a clean full-suite pass.
+
+### Reliability budget recommendation (answered A, Dave 2026-10-04)
+
+Applied 2026-10-04 with Dave's caps; see the budget log. The recommendation is kept as written.
+
+The measured repair emits 90,164 B shell and 255,447 B precache gzip. Recommend a
+deliberate reliability rebaseline to 99,328 B (97 KiB) and 281,600 B (275 KiB),
+using the original measured-size-plus-10%, whole-KiB policy. Recalculate against
+the final candidate before approval. These are proposed limits, not approved
+exceptions: the existing 82/238 KiB gates and the earlier held-shell decision
+remain in force, and no budget configuration has changed.
+
+Atomic writes, exact save state and basic failed-startup recovery belong to the
+required editing boundary. Making them optional first-save dependencies would
+weaken reliability; moving more code to lazy chunks would not reduce the complete
+offline precache. Conflict review, archive encoding and other optional features
+already have lazy routes. A general editor/controller rewrite would expand this
+repair without a measured benefit sufficient to justify its risk. The proposed
+additional download/cache allowance must be reviewed explicitly and entered in
+the budget log with an approver before the limits change. Local interaction
+measurements do not establish slow-network startup or physical-device performance.

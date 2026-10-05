@@ -13,18 +13,27 @@
 // app is now branded "NoteForge" — renaming them would point at a fresh, empty
 // IndexedDB and orphan every existing user's notes. The display name is cosmetic;
 // the storage identity must stay stable.
+import {
+  readVault,
+  readVaultHead,
+  initializeVault,
+  migrateVault,
+  commitVault,
+  captureLegacy,
+  LEGACY_KEYS,
+} from './vault-transactions.js';
+
 const NS = 'my-notes-app:'; // legacy localStorage namespace (migration source)
 const DB_NAME = 'my-notes-app';
 const STORE = 'kv';
 const DB_VERSION = 1;
-const LOCK_PREFIX = '__internal_lock__:';
-const LEASE_MS = 60_000;
-const LOCK_WAIT_MS = 30_000;
 
 // --- IndexedDB plumbing -----------------------------------------------------
 
 let dbPromise; // memoized Promise<IDBDatabase | null>
+let legacySeen = null; // legacy source bytes as of this window's last capture
 let lastBackendError = null;
+let openFailure = null;
 
 function openDB() {
   if (dbPromise) return dbPromise;
@@ -46,14 +55,32 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    let blocked = false;
+    req.onsuccess = () => {
+      if (blocked) req.result.close();
+      else resolve(req.result);
+    };
     req.onerror = () => {
+      openFailure = req.error;
       console.warn('[storage] IndexedDB unavailable, using localStorage:', req.error);
       resolve(null);
     };
-    req.onblocked = () => resolve(null);
+    req.onblocked = () => {
+      blocked = true;
+      openFailure = Object.assign(
+        new Error('The saved database is blocked by another open window. Close other NoteForge windows and reload.'),
+        { name: 'BlockedError' },
+      );
+      resolve(null);
+    };
   });
   return dbPromise;
+}
+
+async function requireDB() {
+  const db = await openDB();
+  if (!db) throw new Error('Safe storage is unavailable. Export drafts before leaving.');
+  return db;
 }
 
 function idbRequest(db, mode, run) {
@@ -137,89 +164,6 @@ function idbKeys(db, prefix) {
   });
 }
 
-function idbTryAcquireLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    let acquired = false;
-    const request = store.get(key);
-    request.onsuccess = () => {
-      const current = request.result;
-      const now = Date.now();
-      if (!current || current.owner === owner || !Number.isFinite(current.expiresAt) || current.expiresAt <= now) {
-        store.put({ owner, expiresAt: now + LEASE_MS }, key);
-        acquired = true;
-      }
-    };
-    tx.oncomplete = () => resolve(acquired);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock transaction failed'));
-  });
-}
-
-function idbRenewLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    let renewed = false;
-    const request = store.get(key);
-    request.onsuccess = () => {
-      if (request.result?.owner === owner) {
-        store.put({ owner, expiresAt: Date.now() + LEASE_MS }, key);
-        renewed = true;
-      }
-    };
-    tx.oncomplete = () => resolve(renewed);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock renewal failed'));
-  });
-}
-
-function idbReleaseLease(db, key, owner) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    const request = store.get(key);
-    request.onsuccess = () => {
-      if (request.result?.owner === owner) store.delete(key);
-    };
-    tx.oncomplete = () => resolve();
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('IndexedDB lock release failed'));
-  });
-}
-
-const lockDelay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-async function withDurableLease(db, name, operation) {
-  const key = `${LOCK_PREFIX}${name}`;
-  const owner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  while (!(await idbTryAcquireLease(db, key, owner))) {
-    if (Date.now() >= deadline) throw new Error(`Timed out waiting for the ${name} storage lock`);
-    await lockDelay(25 + Math.floor(Math.random() * 25));
-  }
-
-  let leaseLost = false;
-  const renewal = setInterval(
-    () => {
-      void idbRenewLease(db, key, owner)
-        .then((renewed) => {
-          if (!renewed) leaseLost = true;
-        })
-        .catch(() => {
-          leaseLost = true;
-        });
-    },
-    Math.floor(LEASE_MS / 3),
-  );
-  try {
-    const result = await operation();
-    if (leaseLost) throw new Error(`Lost the ${name} storage lock before the operation completed`);
-    return result;
-  } finally {
-    clearInterval(renewal);
-    await idbReleaseLease(db, key, owner).catch(() => {});
-  }
-}
-
 // --- localStorage fallback / migration source -------------------------------
 
 function legacyLoad(key, fallback) {
@@ -300,6 +244,11 @@ function legacyKeys(prefix = '') {
   }
 }
 
+/** Exact legacy current-state bytes from the fallback namespace, keyed by logical key. */
+function legacyRawState() {
+  return Object.fromEntries(LEGACY_KEYS.map((key) => [key, localStorage.getItem(NS + key)]));
+}
+
 function hasLocalStorage() {
   try {
     return typeof localStorage !== 'undefined' && Number.isInteger(localStorage.length);
@@ -336,6 +285,125 @@ async function quotaEstimate() {
 // --- public API -------------------------------------------------------------
 
 export const storage = {
+  /** Read the legacy authority for recovery without migrating or rewriting it.
+   * The result is the view a 7114047 client with IndexedDB loads (IndexedDB per
+   * key, else the fallback); `sources` keeps each backend's own bytes. */
+  async readLegacyVault() {
+    const keys = [...LEGACY_KEYS, 'persistenceStatus'];
+    const db = await openDB();
+    const values = db ? await idbLoadMany(db, keys) : [];
+    const defaults = [[], {}, 0, {}];
+    // Collect raw fallback bytes before decoding any field. Invalid JSON must
+    // remain exportable; an unavailable read must never look like an empty vault.
+    const raw = {};
+    let localError = null;
+    for (const [index, key] of keys.entries()) {
+      try {
+        raw[NS + key] = localStorage.getItem(NS + key);
+      } catch (error) {
+        // An unreadable fallback cannot hold a legacy save. It only matters when
+        // IndexedDB does not supply the value.
+        if (values[index] === undefined) throw error;
+        localError = error;
+      }
+    }
+    const indexedDB = Object.fromEntries(
+      keys.flatMap((key, index) => (values[index] === undefined ? [] : [[key, values[index]]])),
+    );
+    const sources = { indexedDB, localStorage: localError ? null : raw };
+    try {
+      return {
+        ...Object.fromEntries(
+          keys.map((key, index) => [
+            key,
+            values[index] !== undefined
+              ? values[index]
+              : raw[NS + key] === null
+                ? defaults[index]
+                : JSON.parse(raw[NS + key]),
+          ]),
+        ),
+        sources,
+      };
+    } catch {
+      throw Object.assign(
+        new Error('The saved local data could not be decoded. Export its original source before replacing it.'),
+        { recoverySource: { format: 'noteforge-recovery-source', version: 1, ...sources } },
+      );
+    }
+  },
+
+  /** The fallback bytes activation and capture compare against. */
+  readLegacyLocal() {
+    try {
+      return legacyRawState();
+    } catch {
+      return null;
+    }
+  },
+
+  async readCurrentVault() {
+    const db = await openDB();
+    if (!db && ['VersionError', 'BlockedError'].includes(openFailure?.name))
+      throw new Error(
+        openFailure.name === 'VersionError'
+          ? 'The saved database uses a newer version. Export a storage archive before using a compatible application.'
+          : openFailure.message,
+      );
+    if (!db) return null;
+    return readVault(db, STORE);
+  },
+
+  async readCurrentVaultHead() {
+    const db = await requireDB();
+    return readVaultHead(db, STORE);
+  },
+
+  async initializeCurrentVault(plan, { allowLegacyMigration = false } = {}) {
+    const db = await requireDB();
+    if (!allowLegacyMigration) {
+      const error = new Error('Vault upgrade required.');
+      error.name = 'VaultUpgradeRequired';
+      throw error;
+    }
+    return initializeVault(db, STORE, plan, crypto.randomUUID(), legacyRawState);
+  },
+
+  async migrateCurrentVault(expected, migrated) {
+    const db = await requireDB();
+    return migrateVault(db, STORE, expected, migrated, crypto.randomUUID(), new Date().toISOString());
+  },
+
+  /** Capture legacy saves made since the last capture as review items.
+   * A read-only comparison skips the write transaction while nothing changed. */
+  async captureLegacyChanges(normalize) {
+    const db = await requireDB();
+    if (legacySeen !== null) {
+      const values = await idbLoadMany(db, LEGACY_KEYS);
+      const indexed = Object.fromEntries(
+        LEGACY_KEYS.flatMap((key, index) => (values[index] === undefined ? [] : [[key, values[index]]])),
+      );
+      if (JSON.stringify([indexed, storage.readLegacyLocal()]) === legacySeen)
+        return { status: 'unchanged', conflicts: [] };
+    }
+    const result = await captureLegacy(db, STORE, legacyRawState, normalize, new Date().toISOString());
+    legacySeen = result.seen;
+    return result;
+  },
+
+  async commitCurrentVault(mutation) {
+    const db = await requireDB();
+    const result = await commitVault(db, STORE, mutation);
+    globalThis.dispatchEvent?.(new Event('noteforge:vault-change'));
+    return result;
+  },
+
+  async readResolvedConflicts() {
+    const db = await requireDB();
+    const keys = await idbKeys(db, 'vault:resolved-conflict:');
+    return (await idbLoadMany(db, keys)).filter(Boolean);
+  },
+
   /** Warm up the backend. Resolves true if IndexedDB is in use, false otherwise. */
   async ready() {
     return (await openDB()) != null;
@@ -501,6 +569,7 @@ export const storage = {
     }
     const db = await openDB();
     if (!db) return operation(); // revision callers will fail closed as unavailable
+    const { withDurableLease } = await import('./storage-lease.js');
     return withDurableLease(db, lockName, operation);
   },
 

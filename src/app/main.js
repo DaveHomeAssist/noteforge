@@ -14,6 +14,8 @@ import { extractHeadings, resolveHeadingAnchor } from '../utils/headings.js';
 import { renderMarkdown, setKnownTitles } from '../utils/markdown.js';
 import { icon } from '../ui/icons.js';
 import { moveMenuFocus } from '../ui/menu-nav.js';
+import { WindowState } from '../core/window-state.js';
+import { showStorageRecovery } from './storage-recovery.js';
 
 class App {
   constructor() {
@@ -90,12 +92,21 @@ class App {
 
     this.ready = this.#init()
       .then(() => {
+        if (this.db.getPersistenceStatus().readOnly) return this;
         this.#scheduleNavigationInitialization();
         this.#scheduleKnowledgeInitialization();
         this.#scheduleRecoveryInitialization();
         this.#scheduleSavedSearchesInitialization();
         this.#schedulePhase5Initialization();
         this.#schedulePhase6Initialization();
+        this.vaultRefreshReady = import('./vault-refresh.js')
+          .then(({ watchVault }) => {
+            this.stopVaultRefresh = watchVault(this, (message) => this.#announce(message));
+          })
+          .catch((error) => {
+            this.#announce('Automatic refresh is unavailable. Reload after saving to see changes from other windows.');
+            console.warn('[vault] refresh unavailable:', error);
+          });
         const intakeUrl = new URL(window.location.href);
         if (['clipper', 'clipboard'].includes(intakeUrl.searchParams.get('capture'))) {
           window.history.replaceState(window.history.state, '', `${intakeUrl.pathname}${intakeUrl.hash}`);
@@ -117,12 +128,26 @@ class App {
   }
 
   async #init() {
-    await this.db.init(); // async: load + migrate persisted state before rendering
-    this.recentNoteIds = [...new Set(Array.isArray(this.db.config.recentNoteIds) ? this.db.config.recentNoteIds : [])]
+    try {
+      // Validate loaded source before rendering or starting writers. A vault an
+      // older build saved activates automatically; later saves from older windows
+      // are captured for review (NF-DUR-MIG-01 = C, Dave 2026-10-04).
+      await this.db.init({ allowLegacyMigration: true });
+    } catch (error) {
+      this.db.recoverStartup(error);
+      console.warn('[app] startup opened recovery:', error);
+    }
+    if (this.db.getPersistenceStatus().readOnly) {
+      showStorageRecovery(this.db);
+      return;
+    }
+    this.windowState = new WindowState(this.db.config, { onUnavailable: (message) => this.#announce(message) });
+    const recent = this.windowState.get('recentNoteIds');
+    this.recentNoteIds = [...new Set(Array.isArray(recent) ? recent : [])]
       .filter((id) => typeof id === 'string' && this.db.getNote(id))
       .slice(0, 50);
-    if (JSON.stringify(this.recentNoteIds) !== JSON.stringify(this.db.config.recentNoteIds || [])) {
-      this.db.setConfig({ recentNoteIds: this.recentNoteIds });
+    if (JSON.stringify(this.recentNoteIds) !== JSON.stringify(recent || [])) {
+      this.windowState.set({ recentNoteIds: this.recentNoteIds });
     }
     // Surface a persistence failure (both storage backends down) so silent
     // data loss becomes a visible, dismissible warning instead of console-only.
@@ -138,9 +163,11 @@ class App {
       previewMention: (mention) => this.#showMention(mention),
       showProperties: (id) => this.#showProperties(id),
       announce: (message) => this.#announce(message),
+      reviewStorage: () => this.#reviewStorage(),
     };
 
     this.editor = new Editor(this.el.editor, this.db, actions);
+    this.db.onFlushDrafts = () => this.editor?.flushPending();
     this.noteList = new NoteList(
       { list: this.el.list, tags: this.el.tags, count: this.el.count, search: this.el.search, sort: this.el.sort },
       this.db,
@@ -152,6 +179,7 @@ class App {
         onNewChild: (parentId) => this.newChild(parentId),
         onSelectionChange: (ids) => this.#selectionChanged(ids),
       },
+      this.windowState,
     );
     this.theme = new Theme(this.db, [this.el.themeBtn, this.el.mobileThemeBtn]);
     this.history = null; // loaded on first open to keep recovery UI out of the initial shell
@@ -161,10 +189,17 @@ class App {
     this.#applySidebarLayout();
 
     // Re-render list/graph whenever the store changes; editor refreshes itself.
-    this.db.subscribe(() => {
-      this.noteList.render();
-      this.noteList.setActive(this.currentId);
+    this.db.subscribe((_, noteIds, external) => {
+      if (external) {
+        this.editor.syncAuthoritative(noteIds);
+        this.#applySettings(normalizeSettings(this.db.config));
+      }
+      // A burst of commits shares one sidebar redraw; editor/durability state
+      // below still updates synchronously and the frame reads the latest model.
+      this.noteList.scheduleRender();
       this.editor.refresh();
+      if (external) this.currentId = this.editor.currentId;
+      this.noteList.setActive(this.currentId);
       this.el.historyBtn.disabled = !this.currentId || !this.db.getNote(this.currentId);
       this.#pruneNavigationState();
       if (this.view === 'graph') this.graph?.render(this.currentId);
@@ -182,7 +217,7 @@ class App {
       await this.#seed();
     } else {
       this.noteList.render();
-      const savedWorkspace = this.db.config.workspace;
+      const savedWorkspace = this.windowState.get('workspace');
       const savedPane = savedWorkspace?.panes?.[savedWorkspace?.activePane];
       const savedId =
         savedPane?.activeNoteId ||
@@ -191,6 +226,8 @@ class App {
       const first = this.db.getNote(savedId) || this.db.getNotesSorted()[0];
       if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
+    if (this.db.conflicts.size) this.#showStorageError();
+    if (this.db.upgradedLegacyVault) this.#showUpgradeNotice();
   }
 
   // --- note selection -----------------------------------------------------
@@ -487,15 +524,50 @@ class App {
     this.#setMenuOpen(false);
   }
 
-  /** Persistent, dismissible banner shown when a save fails on both storage
-   *  backends — the only user-visible signal that edits are no longer durable. */
+  async #reviewStorage() {
+    this.editor?.flushPending();
+    const { openConflictRecovery } = await import('../components/conflict-view.js');
+    await openConflictRecovery(this, () => this.#ensureRecovery());
+  }
+
+  /** Persistent recovery access when a write fails or needs conflict review. */
   #showStorageError() {
     if (this._storageErrorBar && document.body.contains(this._storageErrorBar)) return;
     const bar = document.createElement('div');
     bar.className = 'storage-error';
     bar.setAttribute('role', 'alert');
     const msg = document.createElement('span');
-    msg.innerHTML = `${icon('triangle-alert')} <span>Your changes couldn't be saved to storage. Export your notes (More actions, then Export JSON) to avoid losing them.</span>`;
+    msg.textContent = 'Changes need review. Compare or export drafts before leaving.';
+    const review = document.createElement('button');
+    review.type = 'button';
+    review.textContent = 'Review and export';
+    review.className = 'btn';
+    review.addEventListener('click', async () => {
+      try {
+        await this.#reviewStorage();
+      } catch (error) {
+        msg.textContent = `Recovery unavailable: ${error.message}. Keep this window open.`;
+      }
+    });
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'storage-error__close';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.innerHTML = icon('x');
+    close.addEventListener('click', () => bar.remove());
+    bar.append(msg, review, close);
+    this._storageErrorBar = bar;
+    document.body.appendChild(bar);
+  }
+
+  /** Guidance only: older tabs keep working, and their saves are captured for review. */
+  #showUpgradeNotice() {
+    const bar = document.createElement('div');
+    bar.className = 'storage-error storage-error--upgrade';
+    bar.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent =
+      'NoteForge updated how it saves notes. Close NoteForge tabs opened before this update. Anything saved there will appear here for review.';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'storage-error__close';
@@ -503,7 +575,6 @@ class App {
     close.innerHTML = icon('x');
     close.addEventListener('click', () => bar.remove());
     bar.append(msg, close);
-    this._storageErrorBar = bar;
     document.body.appendChild(bar);
   }
 
@@ -567,10 +638,11 @@ class App {
     ])
       .then(([{ LinkToolsView, createLinkToolsElements }]) => {
         this.linkTools = new LinkToolsView(createLinkToolsElements(), this.db, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           onApplied: ({ mode, result }) => {
-            if (mode === 'rename' && result.note) this.openNote(result.note.id, { discardPending: true, replay: true });
+            if (mode === 'rename' && result.note) this.openNote(result.note.id, { replay: true });
             else if (mode === 'mention' && result.target) this.editor?.refresh();
-            this.linkTools?.modal.setReturnFocus(this.editor?.container?.querySelector('.editor__title'));
+            this.linkTools?.modal.setReturnFocus(() => this.editor?.container?.querySelector('.editor__title'));
           },
         });
         return this.linkTools;
@@ -604,6 +676,17 @@ class App {
     tools.showReport();
   }
 
+  async #refreshMutationPreview() {
+    this.editor?.flushPending();
+    if (!(await this.db.flushCurrentWrites())) {
+      throw new Error('Current edits are not yet saved. Resolve pending changes before refreshing the preview.');
+    }
+    const result = await this.db.refreshCurrentVault(() => this.editor?.canRefreshFromStorage() !== false);
+    if (result.status === 'deferred') {
+      throw new Error('An active draft was preserved. Finish editing before refreshing the preview.');
+    }
+  }
+
   async #ensureHistory() {
     if (this.history) return this.history;
     const [{ HistoryView, createHistoryElements }] = await Promise.all([
@@ -611,9 +694,10 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.history = new HistoryView(createHistoryElements(), this.recovery, {
+      refreshPreview: () => this.#refreshMutationPreview(),
       confirmRestore: ({ message }) =>
         this.confirm({ title: 'Restore this revision?', message, confirmLabel: 'Restore' }),
-      onRestored: ({ note }) => this.openNote(note.id, { discardPending: true }),
+      onRestored: ({ note }) => this.openNote(note.id),
       onRestoreCopy: ({ note }) => this.openNote(note.id),
     });
     return this.history;
@@ -626,6 +710,7 @@ class App {
       this.#ensureRecovery(),
     ]);
     this.backup = new BackupView(createBackupElements(), this.recovery, {
+      refreshPreview: () => this.#refreshMutationPreview(),
       confirmRestore: ({ message }) =>
         this.confirm({ title: 'Restore this backup?', message, confirmLabel: 'Restore' }),
       onRestored: () => this.#openFirstRestoredNote(),
@@ -687,6 +772,7 @@ class App {
         this.navigationController = new NavigationController(this.db, {
           state: this.navigation,
           recentIds: this.recentNoteIds,
+          saveRecent: (recentNoteIds) => this.windowState.set({ recentNoteIds }),
         });
         this.#syncNavigationFrom(this.navigationController);
         return this.navigationController;
@@ -798,7 +884,7 @@ class App {
     this.archiveReady = import('../components/archive-view.js')
       .then(({ ArchiveView, createArchiveElements }) => {
         this.archive = new ArchiveView(createArchiveElements(), this.db, {
-          onRestored: (id) => this.openNote(id, { discardPending: true }),
+          onRestored: (id) => this.openNote(id),
         });
         return this.archive;
       })
@@ -815,6 +901,7 @@ class App {
     this.findReplaceReady = Promise.all([import('../components/find-replace-view.js'), this.#ensureRecovery()])
       .then(([{ FindReplaceView, createFindReplaceElements }]) => {
         this.findReplace = new FindReplaceView(createFindReplaceElements(), this.db, this.editor, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           confirmVaultApply: ({ message }) =>
             this.confirm({ title: 'Replace across the vault?', message, confirmLabel: 'Replace' }),
           onApplied: () => this.noteList.render(),
@@ -887,11 +974,12 @@ class App {
     ])
       .then(async ([{ Phase5Controller }]) => {
         this.phase5 = new Phase5Controller({
+          refreshPreview: () => this.#refreshMutationPreview(),
           db: this.db,
           editor: this.editor,
           ensureRecovery: () => this.#ensureRecovery(),
           announce: (message) => this.#announce(message),
-          refreshSearch: () => this.noteList.render(),
+          refreshSearch: () => this.noteList.scheduleRender(),
         });
         await this.phase5.ready;
         return this.phase5;
@@ -920,7 +1008,9 @@ class App {
     this.phase6Ready = import('./phase6.js')
       .then(async ({ Phase6Controller }) => {
         this.phase6 = new Phase6Controller({
+          refreshPreview: () => this.#refreshMutationPreview(),
           db: this.db,
+          windowState: this.windowState,
           primaryEditor,
           primaryElement: this.el.editor,
           onWorkspaceCreated: (workspace) => {
@@ -1024,6 +1114,7 @@ class App {
     this.bulkActionsReady = Promise.all([import('../components/bulk-actions-view.js'), this.#ensureRecovery()])
       .then(([{ BulkActionsView, createBulkActionElements }]) => {
         this.bulkActions = new BulkActionsView(createBulkActionElements(), this.db, this.noteList, {
+          refreshPreview: () => this.#refreshMutationPreview(),
           confirmAction: ({ message }) =>
             this.confirm({ title: 'Apply to the selected notes?', message, confirmLabel: 'Apply' }),
           onApplied: () => this.#syncCurrentAfterBatch(),
@@ -1083,7 +1174,7 @@ class App {
   #openFirstRestoredNote() {
     this.currentId = null;
     const first = this.db.getNotesSorted()[0];
-    if (first) this.openNote(first.id, { discardPending: true });
+    if (first) this.openNote(first.id);
     else this.editor?.refresh();
   }
 

@@ -20,6 +20,11 @@
   import { TrashView } from '/src/components/trash-view.js';
   import { Modal } from '/src/components/modal.js';
   import { NoteList } from '/src/components/note-list.js';
+  import { WindowState } from '/src/core/window-state.js';
+  const mkWindowState = (db) => {
+    let raw = null;
+    return new WindowState(db.config, { storage: () => ({ getItem: () => raw, setItem: (_key, value) => { raw = value; } }) });
+  };
   import { CommandPalette, createCommandPaletteElements } from '/src/components/command-palette.js';
   import { SettingsView } from '/src/components/settings-view.js';
   import { Theme } from '/src/ui/theme.js';
@@ -1013,7 +1018,7 @@
     const c = db.createNote({ title: 'Cherry', content: 'z', createdAt: '2026-01-03T00:00:00Z', updatedAt: '2026-01-03T00:00:00Z' });
     let toggled = null;
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: (id) => (toggled = id) });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: (id) => (toggled = id) }, mkWindowState(db));
     nl.render();
     check('default sort = updated (newest first)', listTitles(els)[0] === 'Cherry');
     els.sort.value = 'title'; els.sort.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1032,7 +1037,7 @@
     db.createNote({ title: 'Home stuff', content: 'b', tags: ['home'] });
     db.createNote({ title: 'Cover', content: 'c', banner: { type: 'gradient', value: 'linear-gradient(120deg,#000,#fff)', position: 50 } });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} }, mkWindowState(db));
     nl.render();
     const setQ = (q) => { els.search.value = q; els.search.dispatchEvent(new Event('input', { bubbles: true })); };
     setQ('tag:work');
@@ -1086,7 +1091,7 @@
     const db = new Database();
     db.createNote({ title: 'Zzz', content: 'R&D lab' });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {} }, mkWindowState(db));
     els.search.value = '&'; els.search.dispatchEvent(new Event('input', { bubbles: true }));
     const html = els.list.innerHTML;
     check('entity stays intact around the highlight', html.includes('<mark>&amp;</mark>'));
@@ -1243,7 +1248,7 @@
     db.setParent(c.id, p.id);
     const els = mkListEls();
     let newChildOf = null;
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: (pid) => (newChildOf = pid) });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: (pid) => (newChildOf = pid) }, mkWindowState(db));
     nl.render();
     check('both notes shown as tree rows', els.list.querySelectorAll('.note-item').length === 2);
     const parentRow = els.list.querySelector(`.note-item[data-id="${p.id}"]`);
@@ -1254,7 +1259,7 @@
     check('child is indented (depth 1)', childRow.style.getPropertyValue('--depth') === '1');
     parentRow.querySelector('[data-twist]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('collapsing the parent hides the child', !els.list.querySelector(`.note-item[data-id="${c.id}"]`));
-    check('collapse state persisted to config', (db.config.collapsed || []).includes(p.id));
+    check('collapse state persisted to window session', (nl.windowState.get('collapsed') || []).includes(p.id));
     els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('expanding shows the child again', !!els.list.querySelector(`.note-item[data-id="${c.id}"]`));
     els.list.querySelector(`.note-item[data-id="${p.id}"] [data-add]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1267,7 +1272,7 @@
     const b = db.createNote({ title: 'B', content: '' });
     const els = mkListEls();
     let reparented = null;
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     const rowA = els.list.querySelector(`.note-item[data-id="${a.id}"]`);
     const rowB = els.list.querySelector(`.note-item[data-id="${b.id}"]`);
@@ -1284,7 +1289,7 @@
     const c = db.createNote({ title: 'Alpha child', content: 'y' });
     db.setParent(c.id, p.id);
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     els.search.value = 'alpha'; els.search.dispatchEvent(new Event('input', { bubbles: true }));
     const rows = [...els.list.querySelectorAll('.note-item')];
@@ -1298,7 +1303,7 @@
     const p = db.createNote({ title: 'P', content: '' });
     const c = db.createNote({ title: 'C', content: '', parentId: p.id });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     check('child hidden after collapse', !els.list.querySelector(`.note-item[data-id="${c.id}"]`));
@@ -1311,13 +1316,13 @@
     const p = db.createNote({ title: 'P', content: '' });
     const c = db.createNote({ title: 'C', content: '', parentId: p.id });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     els.list.querySelector(`.note-item[data-id="${p.id}"] [data-twist]`).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    check('parent collapsed + persisted', (db.config.collapsed || []).includes(p.id));
+    check('parent collapsed + persisted', (nl.windowState.get('collapsed') || []).includes(p.id));
     db.purgeNote(c.id); // parent no longer has children
     nl.render();
-    check('stale collapsed id pruned from config', !(db.config.collapsed || []).includes(p.id));
+    check('stale collapsed id pruned from window session', !(nl.windowState.get('collapsed') || []).includes(p.id));
   });
 
   section('note tree: dropping on empty list space moves a note to top level', () => {
@@ -1326,7 +1331,7 @@
     const c = db.createNote({ title: 'C', content: '', parentId: p.id });
     const els = mkListEls();
     let reparented = null;
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     const rowC = els.list.querySelector(`.note-item[data-id="${c.id}"]`);
     const dt = new DataTransfer();
@@ -1375,7 +1380,7 @@
     const db = new Database();
     for (let i = 0; i < 200; i++) db.createNote({ title: 'N' + i, content: 'body ' + i });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     const rendered = els.list.querySelectorAll('.note-item').length;
     check('only a window of rows is rendered (not all 200)', rendered > 0 && rendered < 60);
@@ -1398,7 +1403,7 @@
     const db = new Database();
     for (let i = 0; i < 12; i++) db.createNote({ title: 'S' + i, content: '' });
     const els = mkListEls();
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     check('all rows rendered below the threshold', els.list.querySelectorAll('.note-item').length === 12);
     check('no windowing pads below threshold', !els.list.querySelector('.note-list__pad') && nl._window.virtualize === false);
@@ -1460,7 +1465,7 @@
     const ids = [];
     for (let i = 0; i < 200; i++) ids.push(db.createNote({ title: 'V' + i, content: '', updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }).id);
     const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     const target = ids[0]; // oldest -> bottom of the updated-desc order
     check('target not initially rendered (off-screen)', !els.list.querySelector(`.note-item[data-id="${target}"]`));
@@ -1472,7 +1477,7 @@
     const db = new Database();
     for (let i = 0; i < 200; i++) db.createNote({ title: 'C' + i, content: '' });
     const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: () => {}, onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     els.list.scrollTop = 999999; // simulate a stale over-scroll (e.g. after collapsing a big subtree)
     nl.render();
@@ -1484,7 +1489,7 @@
     for (let i = 0; i < 200; i++) db.createNote({ title: 'D' + i, content: '' });
     const els = mkListEls(); els.list.style.height = '400px'; els.list.style.overflow = 'auto';
     let reparented = null;
-    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} });
+    const nl = new NoteList(els, db, { onOpen: () => {}, onTogglePin: () => {}, onReparent: (id, pid) => (reparented = [id, pid]), onNewChild: () => {} }, mkWindowState(db));
     nl.render();
     const row = els.list.querySelector('.note-item');
     const pad = els.list.querySelector('.note-list__pad');
@@ -1583,7 +1588,7 @@
     const els = mkListEls();
     const db = new Database();
     db.createNote({ title: 'Tagged', content: '', tags: ['work'] });
-    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} });
+    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} }, mkWindowState(db));
     nl.render();
     const chip = els.tags.querySelector('.tag-chip[data-tag="work"]');
     check('chip starts aria-pressed=false', !!chip && chip.getAttribute('aria-pressed') === 'false');
@@ -1699,7 +1704,7 @@
     const db = new Database();
     const a = db.createNote({ title: 'Current A', content: '' });
     const b = db.createNote({ title: 'Current B', content: '' });
-    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} });
+    const nl = new NoteList(els, db, { onOpen() {}, onTogglePin() {}, onReparent() {}, onNewChild() {} }, mkWindowState(db));
     nl.render();
     const row = (id) => els.list.querySelector(`.note-item[data-id="${id}"]`);
     check('no row is current before a note is opened', !els.list.querySelector('[aria-current]'));
@@ -2233,7 +2238,7 @@
         search: shell.querySelector('.saved-search-input'), sort: shell.querySelector('.saved-search-sort'),
         tags: shell.querySelector('.saved-search-tags'), list: shell.querySelector('.saved-search-list'),
         count: shell.querySelector('.saved-search-count'),
-      }, db, { onOpen: () => {}, onTogglePin: () => {} });
+      }, db, { onOpen: () => {}, onTogglePin: () => {} }, mkWindowState(db));
       noteList.applySearchState({ query: 'is:archived', sortMode: 'title' });
       const savedElements = createSavedSearchElements({ sidebarAnchor: shell.querySelector('.saved-search-tags'), root: scratch });
       const savedView = new SavedSearchesView(savedElements, db, noteList);
@@ -2492,6 +2497,7 @@
         primaryElement,
         primaryEditor: primary,
         db,
+        windowState: mkWindowState(db),
         actions,
         beforeHandoff: async () => allowHandoff,
         onCommitOpen: async (id, options) => { activeId = id; workspace.open(id, options); },

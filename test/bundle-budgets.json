@@ -7,7 +7,7 @@
       "entries": [
         "index.html"
       ],
-      "gzipBudget": 83968
+      "gzipBudget": 99328
     },
     "editor": {
       "description": "Loaded with the first open note: outline, backlink and unlinked-mention index, back/forward navigation.",
@@ -33,7 +33,8 @@
         "src/components/backup-view.js",
         "src/core/revision-store.js",
         "src/core/recovery-service.js",
-        "src/core/backup.js"
+        "src/core/backup.js",
+        "src/core/storage-lease.js"
       ],
       "gzipBudget": 29696
     },
@@ -108,10 +109,31 @@
       ],
       "gzipBudget": 3072
     },
+    "conflicts": {
+      "description": "Conflict comparison, draft recovery and resolution; explicit replacement also loads the recovery route for safety history.",
+      "entries": [
+        "src/components/conflict-view.js",
+        "src/core/conflict-recovery.js"
+      ],
+      "gzipBudget": 7168
+    },
+    "storageRecovery": {
+      "description": "Storage archive export. Basic read-only recovery is in the shell; portable export also loads backup core.",
+      "entries": [
+        "src/app/storage-recovery.js",
+        "src/core/storage-archive.js"
+      ],
+      "gzipBudget": 3072
+    },
+    "vaultRefresh": {
+      "description": "Cross-window refresh hints and consistent clean-window adoption, loaded after the initial usable app.",
+      "entries": ["src/app/vault-refresh.js", "src/core/vault-refresh.js"],
+      "gzipBudget": 3072
+    },
     "precache": {
       "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
       "all": true,
-      "gzipBudget": 243712
+      "gzipBudget": 281600
     }
   }
 }

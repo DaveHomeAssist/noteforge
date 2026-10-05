@@ -22,10 +22,12 @@ export class NoteList {
    * @param {{ onOpen:(id:string)=>void, onTogglePin:(id:string)=>void,
    *           onOpenArchived?:(id:string)=>void, onReparent?:(id:string, parentId:string|null)=>void,
    *           onNewChild?:(parentId:string)=>void, onSelectionChange?:(ids:string[])=>void }} handlers
+   * @param {import('../core/window-state.js').WindowState} windowState
    */
-  constructor(els, db, handlers) {
+  constructor(els, db, handlers, windowState) {
     this.els = els;
     this.db = db;
+    this.windowState = windowState;
     this.onOpen = handlers.onOpen;
     this.onOpenArchived = handlers.onOpenArchived || handlers.onOpen;
     this.onTogglePin = handlers.onTogglePin;
@@ -37,7 +39,8 @@ export class NoteList {
     this.activeId = null;
     this.dragId = null;
     this.selection = createSelection();
-    this.collapsed = new Set(Array.isArray(db.config.collapsed) ? db.config.collapsed : []);
+    const collapsed = windowState.get('collapsed');
+    this.collapsed = new Set(Array.isArray(collapsed) ? collapsed : []);
 
     this.els.search.addEventListener('input', () => {
       this.query = this.els.search.value;
@@ -105,7 +108,19 @@ export class NoteList {
     return Boolean(control);
   }
 
+  scheduleRender() {
+    if (this._renderFrame != null) return;
+    this._renderFrame = requestAnimationFrame(() => {
+      this._renderFrame = null;
+      if (this.els.list.isConnected) this.render();
+    });
+  }
+
   render() {
+    if (this._renderFrame != null) {
+      cancelAnimationFrame(this._renderFrame);
+      this._renderFrame = null;
+    }
     if (this.els.sort) this.els.sort.value = this.#sortMode();
     this.#renderTags();
     this.#renderList();
@@ -149,14 +164,16 @@ export class NoteList {
   }
 
   #siblingComparator() {
+    // Reuse locale setup for this sort, including timestamp ties in large vaults.
+    const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+    const byTitle = (a, b) => collator.compare(a.title || '', b.title || '');
     const base = {
       updated: (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
       created: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-      title: (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }),
+      title: byTitle,
     }[this.#sortMode()];
     // Equal timestamps (or titles) fall back to title, then id, so the order is
     // the same on every render instead of following storage load order.
-    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
     const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     return (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || base(a, b) || byTitle(a, b) || byId(a, b);
   }
@@ -189,7 +206,10 @@ export class NoteList {
         })
         .filter(Boolean);
       if (q) scored.sort((a, b) => b.score - a.score || new Date(b.note.updatedAt) - new Date(a.note.updatedAt));
-      else scored.sort((a, b) => this.#siblingComparator()(a.note, b.note));
+      else {
+        const compare = this.#siblingComparator();
+        scored.sort((a, b) => compare(a.note, b.note));
+      }
       return {
         searching,
         rows: scored.map((r) => ({
@@ -203,7 +223,7 @@ export class NoteList {
     }
 
     // Outline tree. First prune collapsed ids that no longer refer to a parent
-    // note (deleted/purged), so config.collapsed can't grow without bound.
+    // note (deleted/purged), so session state can't grow without bound.
     if (this.collapsed.size) {
       const parentIds = new Set();
       for (const n of live) if (n.parentId) parentIds.add(n.parentId);
@@ -213,7 +233,7 @@ export class NoteList {
           this.collapsed.delete(id);
           pruned = true;
         }
-      if (pruned) this.db.setConfig({ collapsed: [...this.collapsed] });
+      if (pruned) this.windowState.set({ collapsed: [...this.collapsed] });
     }
     const forest = buildForest(live, { sort: this.#siblingComparator() });
     return { searching, rows: flattenForest(forest, this.collapsed).map((r) => ({ ...r, titlePositions: [] })) };
@@ -371,7 +391,7 @@ export class NoteList {
   #toggleCollapse(id) {
     if (this.collapsed.has(id)) this.collapsed.delete(id);
     else this.collapsed.add(id);
-    this.db.setConfig({ collapsed: [...this.collapsed] });
+    this.windowState.set({ collapsed: [...this.collapsed] });
     this.#renderList();
   }
 
@@ -381,7 +401,7 @@ export class NoteList {
     for (const anc of this.db.ancestorsOf(id)) {
       if (this.collapsed.delete(anc.id)) changed = true;
     }
-    if (changed) this.db.setConfig({ collapsed: [...this.collapsed] });
+    if (changed) this.windowState.set({ collapsed: [...this.collapsed] });
     return changed;
   }
 
