@@ -230,6 +230,31 @@ for (const backend of ['unavailable']) {
   });
 }
 
+test('a fresh profile activates on first open without a notice or review items', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(previewRoot());
+    await page.waitForFunction(() => Boolean(window.app?.ready));
+    await page.evaluate(() => window.app.ready);
+    const state = await page.evaluate(async () => {
+      const snapshot = await window.app.db.storage.readCurrentVault();
+      return {
+        readOnly: window.app.db.getPersistenceStatus().readOnly,
+        upgraded: window.app.db.upgradedLegacyVault,
+        notice: document.querySelectorAll('.storage-error').length,
+        marker: typeof snapshot.meta?.generation,
+        conflicts: snapshot.conflicts.length,
+      };
+    });
+    expect(state).toEqual({ readOnly: false, upgraded: false, notice: 0, marker: 'string', conflicts: 0 });
+    const kv = await readKv(page);
+    expect(['notes', 'config', 'schemaVersion', 'persistenceStatus'].filter((key) => key in kv)).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 for (const backend of ['indexeddb', 'localstorage']) {
   test(`a legacy ${backend} vault activates on first open and leaves its sources unchanged`, async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
