@@ -1239,10 +1239,11 @@ maintained test exercises a drain without a new submission.
 
 ### Acceptance evidence
 
-Actual 7114047 production build and candidate 9fa7a1c, disposable origins, synthetic
-vaults with Unicode Markdown, YAML and unknown fields. The harness and results are
-retained with the private Phase 1 evidence. 27 of 27 application scenarios pass in
-Chromium 153, Firefox 155 and WebKit 26.6:
+Actual 7114047 production build and the final candidate f64812d, disposable origins,
+synthetic vaults with Unicode Markdown, YAML and unknown fields. The harness and
+results are retained with the private Phase 1 evidence. 27 of 27 application
+scenarios pass in Chromium 153, Firefox 155 and WebKit 26.6, first at 9fa7a1c and
+again at f64812d after the review fix below:
 
 | Scenario | Result in all three engines |
 | --- | --- |
@@ -1261,8 +1262,9 @@ current-state key, no version upgrade and no database deletion. The module-level
 suites (`review-findings`, `legacy-capture`) drive the exact 7114047 storage module.
 
 - **Chromium BFCache (direct CDP).** The original 7114047 runtime returned from
-  BFCache after the candidate activated, saved, and the save was captured exactly.
-- **Native Safari 27.0.1 (v20 method, capture assertion).** Attempt 1 stalled: the
+  BFCache after the candidate activated, saved, and the save was captured exactly
+  (9fa7a1c and f64812d).
+- **Native Safari 27.0.1 (v20 method, capture assertion, candidate 9fa7a1c).** Attempt 1 stalled: the
   candidate application in the away page's frame never became ready, and that
   harness version had no timeout or diagnostics, so the cause is unknown. Attempt 2
   (added IndexedDB and lock probes) and attempt 3 (attempt 1 unchanged) passed: the
@@ -1283,7 +1285,14 @@ window saved.
 
 ### Budget
 
-The final candidate measures 92,727 B shell and 258,664 B precache gzip. The policy
-formula gives 100 KiB and 278 KiB, above Dave's caps, so the caps apply: 99,328 B
-shell (7.1% headroom) and 281,600 B precache (8.9% headroom). Both measurements are
-below the caps. See the budget log in `performance_budgets.md`.
+The final candidate (f64812d) measures 92,770 B shell and 258,731 B precache gzip.
+The policy formula gives 100 KiB and 278 KiB, above Dave's caps, so the caps apply:
+99,328 B shell (7.1% headroom) and 281,600 B precache (8.8% headroom). Both
+measurements are below the caps. See the budget log in `performance_budgets.md`.
+
+### Review
+
+The Codex connector's review of f8ded3b raised one P2: prefix scans bounded by
+`\uffff` omitted note IDs that begin with U+FFFF, so such a note could be written but
+then disappear from reads, backups and replacement deletes. Confirmed with a failing
+regression and fixed in f64812d with exact prefix ranges.
