@@ -224,6 +224,7 @@ class App {
       if (first) this.openNote(first.id, { origin: 'reload' }); // undefined when all notes are trashed -> empty editor
     }
     if (this.db.conflicts.size) this.#showStorageError();
+    if (this.db.upgradedLegacyVault) this.#showUpgradeNotice();
   }
 
   // --- note selection -----------------------------------------------------
@@ -553,6 +554,24 @@ class App {
     close.addEventListener('click', () => bar.remove());
     bar.append(msg, review, close);
     this._storageErrorBar = bar;
+    document.body.appendChild(bar);
+  }
+
+  /** Guidance only: older tabs keep working, and their saves are captured for review. */
+  #showUpgradeNotice() {
+    const bar = document.createElement('div');
+    bar.className = 'storage-error storage-error--upgrade';
+    bar.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent =
+      'NoteForge updated how it saves notes. Close NoteForge tabs opened before this update. Anything saved there will appear here for review.';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'storage-error__close';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.innerHTML = icon('x');
+    close.addEventListener('click', () => bar.remove());
+    bar.append(msg, close);
     document.body.appendChild(bar);
   }
 

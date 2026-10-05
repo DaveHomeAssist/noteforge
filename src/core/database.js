@@ -43,9 +43,42 @@ function jsonEquivalent(left, right) {
   );
 }
 
+/** A legacy note as this build stores it: migrated from its source schema,
+ * with Markdown, YAML and unknown fields intact. Unusable entries stay archived. */
+function normalizeLegacyNote(raw, schemaVersion) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id || typeof raw.content !== 'string')
+    return null;
+  const { data } = runMigrations({ notes: [structuredClone(raw)], config: {} }, schemaVersion);
+  return Note.fromJSON(data.notes[0]).toJSON();
+}
+
+/** Fallback notes that differ from the IndexedDB view a legacy client loaded.
+ * A legacy window acknowledged each one, so activation keeps it for review. */
+function divergentFallbackNotes(indexedNotes, local) {
+  let fallback;
+  let fromVersion;
+  try {
+    fallback = JSON.parse(local.notes);
+    fromVersion = JSON.parse(local.schemaVersion);
+  } catch {
+    // Undecodable fallback bytes stay in the legacy archive.
+  }
+  if (!Array.isArray(fallback)) return [];
+  const indexed = new Map(
+    (Array.isArray(indexedNotes) ? indexedNotes : []).map((note) => [note?.id, JSON.stringify(note)]),
+  );
+  return fallback.flatMap((raw) => {
+    const value = normalizeLegacyNote(raw, fromVersion);
+    if (!value || indexed.get(raw.id) === JSON.stringify(raw)) return [];
+    return [{ id: raw.id, value, raw, backend: 'localstorage', kind: indexed.has(raw.id) ? 'edit' : 'new' }];
+  });
+}
+
 // One submission has one terminal result. A failed receipt is never rewritten
 // into a later retry's success, and a coalesced draft is not a committed draft.
-function noteWriteReceipt(id, entry) {
+// A submission that opts in with `contains` may instead settle with the later
+// write that superseded it, but only when that write still contains its change.
+function noteWriteReceipt(id, entry, contains = null) {
   let resolve;
   let settled = false;
   const completion = new Promise((done) => {
@@ -53,19 +86,25 @@ function noteWriteReceipt(id, entry) {
   });
   return {
     completion,
-    finish(status) {
+    contains,
+    finish(status, source = entry) {
       if (settled) return;
       settled = true;
       resolve({
         status,
         noteId: id,
-        generation: entry.generation,
-        version: status === 'committed' ? entry.expected + 1 : null,
-        note: structuredClone(entry.value),
-        ...(status === 'conflict' ? { conflictId: entry.conflictId } : {}),
+        generation: source.generation,
+        version: status === 'committed' ? source.expected + 1 : null,
+        note: structuredClone(source.value),
+        ...(status === 'conflict' ? { conflictId: source.conflictId } : {}),
       });
     },
   };
+}
+
+function settleInherited(entry, status) {
+  for (const receipt of entry.inherited ?? [])
+    receipt.finish(status === 'committed' && !receipt.contains(entry.value) ? 'superseded' : status, entry);
 }
 
 export class Database {
@@ -107,6 +146,7 @@ export class Database {
     this.onConflict = null;
     this._readOnly = false;
     this.upgradeRequired = false;
+    this.upgradedLegacyVault = false; // this window activated a vault an older build had saved
     this.legacySnapshot = null;
     this.startupSource = null;
     this.startupError = null;
@@ -164,20 +204,26 @@ export class Database {
         validateLegacyVault(legacySnapshot);
       }
       if (snapshot && !snapshot.meta) {
-        const [notes, config, schemaVersion] = legacySnapshot
-          ? [legacySnapshot.notes, legacySnapshot.config, legacySnapshot.schemaVersion]
-          : await this.storage.loadMany(['notes', 'config', 'schemaVersion'], undefined);
-        const legacy = { notes: notes ?? [], config: config ?? {}, schemaVersion: schemaVersion ?? 0 };
-        const { data, version } = runMigrations(legacy, legacy.schemaVersion);
-        const migrated = {
-          notes: data.notes.map((note) => Note.fromJSON(note).toJSON()),
-          config: data.config,
-          schemaVersion: version,
-        };
         try {
-          const initialized = await this.storage.initializeCurrentVault(legacy, migrated, { allowLegacyMigration });
-          if (initialized.status === 'stale')
-            throw new Error('The vault changed during upgrade. Reopen and review it again.');
+          // A legacy window can save while activation is prepared. Re-read and
+          // retry a bounded number of times; never activate from stale sources.
+          for (let attempt = 0; ; attempt++) {
+            const plan = this.#activationPlan(
+              legacySnapshot ?? (await this.storage.readLegacyVault()),
+              typeof this.storage.readLegacyLocal === 'function',
+            );
+            const initialized = await this.storage.initializeCurrentVault(plan, { allowLegacyMigration });
+            this.upgradedLegacyVault =
+              initialized.status === 'committed' &&
+              (Object.keys(plan.indexedDB).length > 0 ||
+                Object.values(plan.localStorage ?? {}).some((raw) => raw !== null));
+            if (initialized.status !== 'stale') break;
+            if (attempt === 2) throw new Error('The vault changed during upgrade. Reopen and review it again.');
+            legacySnapshot = await this.storage.readLegacyVault();
+            this.legacySnapshot = structuredClone(legacySnapshot);
+            this.startupSource = this.legacySnapshot;
+            validateLegacyVault(legacySnapshot);
+          }
         } catch (error) {
           if (error.name !== 'VaultUpgradeRequired') throw error;
           // Until the old-client activation barrier is verified, expose the
@@ -186,9 +232,14 @@ export class Database {
         }
         snapshot = await this.storage.readCurrentVault();
       }
+      snapshot = await this.#migrateVaultSchema(snapshot);
       if (snapshot?.meta) {
         this.#adoptVault(snapshot);
         this.startupSource = null;
+        // Saves an older window made since this vault was last open become
+        // review items before anything renders. The legacy sources are only
+        // read, so a failed capture loses nothing and is retried later.
+        await this.captureLegacyChanges().catch((error) => console.warn('[database] legacy capture deferred:', error));
         this.ready = true;
         this.#emit();
         return this;
@@ -237,6 +288,70 @@ export class Database {
     return this;
   }
 
+  /** Everything activation writes, prepared before its transaction. */
+  #activationPlan(source, checkLocal) {
+    const legacy = { notes: source.notes ?? [], config: source.config ?? {}, schemaVersion: source.schemaVersion ?? 0 };
+    const { data, version } = runMigrations(structuredClone(legacy), legacy.schemaVersion);
+    const indexed = source.sources?.indexedDB ?? {};
+    const rawLocal = source.sources?.localStorage ?? null;
+    const local =
+      checkLocal && rawLocal
+        ? Object.fromEntries(
+            ['notes', 'config', 'schemaVersion'].map((key) => [key, rawLocal[`my-notes-app:${key}`] ?? null]),
+          )
+        : null;
+    return {
+      timestamp: new Date().toISOString(),
+      indexedDB: Object.fromEntries(
+        ['notes', 'config', 'schemaVersion']
+          .filter((key) => Object.hasOwn(indexed, key))
+          .map((key) => [key, indexed[key]]),
+      ),
+      localStorage: local,
+      backup: {
+        format: 'noteforge-legacy-backup',
+        version: 2,
+        indexedDB: indexed,
+        localStorage: rawLocal,
+        effective: legacy,
+      },
+      migrated: {
+        notes: data.notes.map((note) => Note.fromJSON(note).toJSON()),
+        config: data.config,
+        schemaVersion: version,
+      },
+      reviews: Object.hasOwn(indexed, 'notes') && local ? divergentFallbackNotes(indexed.notes, local) : [],
+    };
+  }
+
+  /** Bring an activated vault from an older schema forward before adopting it. */
+  async #migrateVaultSchema(snapshot) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const meta = snapshot?.meta;
+      if (
+        !meta ||
+        typeof this.storage.migrateCurrentVault !== 'function' ||
+        !Number.isInteger(meta.schemaVersion) ||
+        meta.schemaVersion < 0 ||
+        meta.schemaVersion >= CURRENT_SCHEMA_VERSION ||
+        !snapshot.config?.values
+      )
+        return snapshot;
+      const notes = snapshot.records.filter(([, record]) => record.value).map(([, record]) => record.value);
+      const { data, version } = runMigrations(
+        { notes: structuredClone(notes), config: structuredClone(snapshot.config.values) },
+        meta.schemaVersion,
+      );
+      await this.storage.migrateCurrentVault(meta, {
+        notes: data.notes.map((note) => Note.fromJSON(note).toJSON()),
+        config: data.config,
+        schemaVersion: version,
+      });
+      snapshot = await this.storage.readCurrentVault();
+    }
+    throw new Error('The saved vault changed while its format was upgraded. Reopen to try again.');
+  }
+
   /** Only a failed first load may become a recovery reader; refresh never discards a live model. */
   recoverStartup(error) {
     if (this.ready) throw error;
@@ -254,6 +369,8 @@ export class Database {
   }
 
   #adoptVault(snapshot) {
+    if (Number.isInteger(snapshot.meta?.schemaVersion) && snapshot.meta.schemaVersion > CURRENT_SCHEMA_VERSION)
+      throw new Error('The saved vault uses a newer, unsupported format. Use the newer NoteForge or export it first.');
     if (
       snapshot.meta?.schemaVersion !== CURRENT_SCHEMA_VERSION ||
       typeof snapshot.meta.generation !== 'string' ||
@@ -294,7 +411,7 @@ export class Database {
     this._savedNotes = savedNotes;
     this._savedConfig = savedConfig;
     this._configVersions = snapshot.config.versions;
-    this.lastPersistedAt = snapshot.persistence?.lastPersistedAt ?? null;
+    this.lastPersistedAt = snapshot.persistence?.lastPersistedAt ?? snapshot.meta.lastPersistedAt ?? null;
     this.conflicts = conflicts;
     this.#rebuildLinkState();
   }
@@ -318,7 +435,7 @@ export class Database {
     }
   }
 
-  #persist(captures = [], purgedIds = [], changedIds = null, allowIdentityConflicts = false) {
+  #persist(captures = [], purgedIds = [], changedIds = null, allowIdentityConflicts = false, contains = null) {
     this._mutationRevision++;
     if (this._vaultMeta) {
       let completion;
@@ -333,6 +450,7 @@ export class Database {
             purgedIds: purgedIds.includes(id) ? [id] : [],
           },
           allowIdentityConflicts,
+          contains,
         );
       }
       return completion;
@@ -346,7 +464,7 @@ export class Database {
     );
   }
 
-  #queueWrite(key, value, afterPersist = null, noteCommit = null, allowIdentityConflicts = false) {
+  #queueWrite(key, value, afterPersist = null, noteCommit = null, allowIdentityConflicts = false, contains = null) {
     // Keep the callback with the exact snapshot it describes. If another write
     // arrives while this one is in flight, the newer entry remains queued and
     // receives its own post-commit callback.
@@ -384,9 +502,15 @@ export class Database {
       conflictId: previous?.conflictId,
       outcome: null,
       receipt: null,
+      inherited: [],
     };
-    if (key.startsWith('note:')) entry.receipt = noteWriteReceipt(key.slice(5), entry);
-    if (previous && !previous.inFlight) previous.receipt?.finish('superseded');
+    if (key.startsWith('note:')) entry.receipt = noteWriteReceipt(key.slice(5), entry, contains);
+    if (previous && !previous.inFlight) {
+      for (const receipt of [...previous.inherited, previous.receipt].filter(Boolean)) {
+        if (receipt.contains) entry.inherited.push(receipt);
+        else receipt.finish('superseded');
+      }
+    }
     this._writeQueue.set(key, entry); // latest queued snapshot wins
     this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
     if (!this._vaultReplacing) void this.#flushWrites();
@@ -399,7 +523,7 @@ export class Database {
     // commit instead of returning early while a write is still in flight.
     if (this._draining) return this._draining;
     if (this._vaultReplacing) return null;
-    if (this._writeQueue.size === 0) return null;
+    if (![...this._writeQueue.values()].some((entry) => entry.outcome !== 'conflict')) return null;
     const failedEntries = new Map();
     let draining;
     // Start on the next microtask so `this._draining` is assigned before even
@@ -407,7 +531,11 @@ export class Database {
     draining = Promise.resolve()
       .then(async () => {
         while (this._writeQueue.size) {
-          const next = [...this._writeQueue.entries()].find(([key, entry]) => failedEntries.get(key) !== entry);
+          // A conflicted draft waits for review or a new submission. Retrying it
+          // here would rewrite the durable conflict under an open comparison.
+          const next = [...this._writeQueue.entries()].find(
+            ([key, entry]) => failedEntries.get(key) !== entry && entry.outcome !== 'conflict',
+          );
           if (!next) break;
           const [key, entry] = next;
           entry.inFlight = true;
@@ -432,6 +560,7 @@ export class Database {
             // we awaited — otherwise loop again and persist the newer value.
             if (this._writeQueue.get(key) === entry) this._writeQueue.delete(key);
             entry.receipt?.finish('committed');
+            settleInherited(entry, 'committed');
             this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
             entry.afterPersist?.();
             if (entry.noteCommit) {
@@ -447,6 +576,7 @@ export class Database {
             entry.inFlight = false;
             entry.outcome ||= this._readOnly ? 'unavailable' : 'failed';
             entry.receipt?.finish(entry.outcome);
+            settleInherited(entry, entry.outcome);
             this.#emitPersistence(key.startsWith('note:') ? [key.slice(5)] : []);
             this.#reportPersistError(key);
             failedEntries.set(key, entry);
@@ -458,7 +588,10 @@ export class Database {
         // A write can be queued after the loop observes an empty Map but before
         // this promise settles. Hand it to a successor drain so it cannot remain
         // stranded until an unrelated future edit. Do not hot-retry a failure.
-        if ([...this._writeQueue].some(([key, entry]) => failedEntries.get(key) !== entry)) void this.#flushWrites();
+        if (
+          [...this._writeQueue].some(([key, entry]) => failedEntries.get(key) !== entry && entry.outcome !== 'conflict')
+        )
+          void this.#flushWrites();
       });
     this._draining = draining;
     return draining;
@@ -641,6 +774,24 @@ export class Database {
     };
   }
 
+  /** Keep saves acknowledged by an older NoteForge window for explicit review.
+   * Never writes current notes, settings or the legacy sources. */
+  async captureLegacyChanges() {
+    if (this._readOnly || !this._vaultMeta || typeof this.storage.captureLegacyChanges !== 'function')
+      return { status: 'inactive', captured: 0 };
+    const result = await this.storage.captureLegacyChanges(normalizeLegacyNote);
+    for (const conflict of result.conflicts) {
+      this.conflicts.set(conflict.id, conflict);
+      try {
+        this.onConflict?.(conflict);
+      } catch {
+        /* UI hooks cannot change a capture. */
+      }
+    }
+    if (result.conflicts.length) this.#emitPersistence();
+    return { status: result.status, captured: result.conflicts.length };
+  }
+
   async previewConflict(id) {
     const { previewConflict } = await import('./conflict-recovery.js');
     return previewConflict(this, id);
@@ -811,11 +962,10 @@ export class Database {
         generation: this._vaultMeta.generation,
         sequence: this._vaultMeta.sequence,
         timestamp,
-        conflictId: crypto.randomUUID(),
         replacement: { notes, config, schemaVersion: CURRENT_SCHEMA_VERSION },
       });
       if (result.status !== 'committed') {
-        this.conflicts.set(result.conflict.id, result.conflict);
+        // The restore source stays with the caller; a stale replacement is not a draft.
         if (rejectStale) throw stalePlan();
         return false;
       }
@@ -984,7 +1134,10 @@ export class Database {
   }
 
   /** Submit a snapshot and return its first terminal write result separately from the mutable model. */
-  saveNoteWithReceipt(note, { captureRevision = true, reason = 'autosave', allowIdentityConflicts = false } = {}) {
+  saveNoteWithReceipt(
+    note,
+    { captureRevision = true, reason = 'autosave', allowIdentityConflicts = false, contains = null } = {},
+  ) {
     const previousIdentity = this._identitySignatures.get(note.id) ?? null;
     this.notes.set(note.id, note);
     const nextIdentity = this.#identitySignature(note);
@@ -996,7 +1149,7 @@ export class Database {
     }
     const captures = captureRevision ? [{ note: note.toJSON(), reason }] : [];
     const completion =
-      this.#persist(captures, [], [note.id], allowIdentityConflicts) ??
+      this.#persist(captures, [], [note.id], allowIdentityConflicts, contains) ??
       Promise.resolve({
         status: 'unavailable',
         noteId: note.id,
@@ -1014,7 +1167,7 @@ export class Database {
 
   createNoteWithReceipt(
     fields = {},
-    { allowIdentityConflicts = false, captureRevision = false, reason = 'autosave' } = {},
+    { allowIdentityConflicts = false, captureRevision = false, reason = 'autosave', contains = null } = {},
   ) {
     const note = new Note(fields);
     if (!allowIdentityConflicts) {
@@ -1030,7 +1183,7 @@ export class Database {
     }
     // A brand-new blank/default state is not useful history. Its first durable
     // user edit becomes the initial revision boundary instead.
-    return this.saveNoteWithReceipt(note, { captureRevision, reason, allowIdentityConflicts });
+    return this.saveNoteWithReceipt(note, { captureRevision, reason, allowIdentityConflicts, contains });
   }
 
   /** Live child notes of `id` (direct children only). */
@@ -1320,7 +1473,7 @@ export class Database {
           generation: this._vaultMeta.generation,
           sequence: this._vaultMeta.sequence,
           timestamp: persistenceAt,
-          conflictId: crypto.randomUUID(),
+          // A rejected plan is replanned by its caller, never stored as a draft.
           notes: [...replacementById].map(([id, note]) => ({
             id,
             expected: this._noteVersions.get(id) ?? 0,
@@ -1328,10 +1481,8 @@ export class Database {
           })),
         };
         const result = await this.storage.commitCurrentVault(mutation);
-        if (result.status !== 'committed') {
-          this.conflicts.set(result.conflict.id, result.conflict);
+        if (result.status !== 'committed')
           throw stalePlan('Notes changed after this preview. Review an updated plan before applying it.');
-        }
         // Flush against the original versions before acknowledging this batch.
         // Buffered UI typing is a draft even when its debounce has not fired.
         this.onFlushDrafts?.();

@@ -33,8 +33,12 @@ export async function previewConflict(db, id) {
   const proposed = new Map(snapshot.records.map(([id, record]) => [id, record.value]));
   for (const write of writes) proposed.set(write.id, write.value);
   const identityCollisions = [...proposed].flatMap(([id, value]) => identityCollisionsFor(claims, id, value));
+  // A save from an older window is reviewed like any draft; its deletion can
+  // only be kept or rejected here, never applied as a replacement.
+  const legacy = conflict.legacy ? { backend: conflict.legacy.backend, kind: conflict.legacy.kind } : null;
   const preview = {
     id,
+    legacy,
     identityCollisions,
     notes,
     config: (mutation.config ?? []).map((write) => ({
@@ -44,6 +48,7 @@ export async function previewConflict(db, id) {
     })),
     canCopy: notes.some((note) => note.draft),
     canUseDraft:
+      legacy?.kind !== 'deletion' &&
       mutation.generation === snapshot.meta.generation &&
       mutation.sequence === undefined &&
       !mutation.replacement &&

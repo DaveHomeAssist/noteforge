@@ -32,7 +32,18 @@ async function fixture(browser) {
       });
     window.read = () => window.vault.readVault(window.connection, 'kv');
     window.initialize = () =>
-      window.vault.initializeVault(window.connection, 'kv', window.initial, window.seed, 'initial');
+      window.vault.initializeVault(
+        window.connection,
+        'kv',
+        {
+          timestamp: window.timestamp,
+          indexedDB: {},
+          localStorage: null,
+          backup: window.initial,
+          migrated: window.seed,
+        },
+        'initial',
+      );
     await window.initialize();
   });
   return { context, page };

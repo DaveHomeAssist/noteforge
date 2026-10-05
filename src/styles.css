@@ -1945,3 +1945,9 @@ html[data-font="l"] .editor {
   background: var(--color-warning-strong);
   color: #ffffff;
 }
+.storage-error--upgrade {
+  top: 16px;
+  bottom: auto;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}

@@ -177,6 +177,8 @@ test('a delayed read cannot reverse a newer refresh and a failed read leaves sta
     await b.evaluate(() => window.releaseRead());
     expect(await b.evaluate(() => window.oldRefresh)).toEqual({ status: 'deferred' });
     expect(await b.evaluate(() => window.db.getNote('a').content)).toBe('Second authority');
+    // An unchanged head needs no full read, so make the full read necessary.
+    await a.evaluate(() => window.save('a', 'Third authority'));
     const result = await b.evaluate(async () => {
       const before = window.db.captureMutationToken();
       window.db.storage.readCurrentVault = async () => {
@@ -187,6 +189,7 @@ test('a delayed read cannot reverse a newer refresh and a failed read leaves sta
     });
     expect(result.error).toBe('Injected refresh read failure');
     expect(result.after).toEqual(result.before);
+    expect(await b.evaluate(() => window.db.getNote('a').content)).toBe('Second authority');
   } finally {
     await context.close();
   }
@@ -518,7 +521,8 @@ for (const count of [1000, 5000]) {
         };
       }, count);
       expect(result.noteWrites).toEqual(Array(25).fill('note:scale-0'));
-      expect(result.totalWrites).toBe(75);
+      // The note record and the marker; the save time lives in the marker (R7).
+      expect(result.totalWrites).toBe(50);
       expect(result.cursors).toBe(0);
       expect(result.refresh).toBe('refreshed');
       expect(result.observed).toBe('Edit 24');

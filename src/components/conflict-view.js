@@ -106,7 +106,11 @@ export class ConflictView {
       for (const conflict of snapshot?.conflicts ?? []) {
         const option = document.createElement('option');
         option.value = conflict.id;
-        option.textContent = conflict.mutation.notes?.[0]?.value?.title || 'Settings or planned change';
+        const write = conflict.mutation.notes?.[0];
+        const title = write?.value?.title || conflict.conflicts?.[0]?.current?.value?.title;
+        option.textContent = conflict.legacy
+          ? `${title || 'Untitled'} — saved in an older NoteForge window after the update`
+          : title || 'Settings or planned change';
         this.choice.append(option);
       }
       if ([...this.choice.options].some((option) => option.value === selected)) this.choice.value = selected;
@@ -145,7 +149,9 @@ export class ConflictView {
               .map((note) =>
                 note[side]
                   ? `${note[side].title || 'Untitled'}\n\n${note[side].content}`
-                  : '(No saved note with this ID)',
+                  : side === 'draft' && preview.legacy?.kind === 'deletion'
+                    ? '(Deleted in an older NoteForge window)'
+                    : '(No saved note with this ID)',
               )
               .join('\n\n────────\n\n')
           : JSON.stringify(
@@ -156,11 +162,15 @@ export class ConflictView {
       this.overlay.querySelector('[data-current]').value = content('current');
       this.overlay.querySelector('[data-draft]').value = content('draft');
       this.overlay.querySelector('[data-metadata]').textContent = JSON.stringify(preview, null, 2);
-      this.overlay.querySelector('[data-explanation]').textContent = preview.identityCollisions?.length
-        ? `A title or alias is already in use: ${preview.identityCollisions.map((item) => `${item.name} (${item.ownerTitle})`).join(', ')}. Save a copy or keep the saved vault; no existing note will be overwritten.`
-        : preview.requiresNewPlan
-          ? 'Review a new plan to apply this operation. Note drafts can be saved as copies.'
-          : 'Resolved drafts stay archived. Export recovery before clearing browser data.';
+      this.overlay.querySelector('[data-explanation]').textContent = preview.legacy
+        ? preview.legacy.kind === 'deletion'
+          ? 'An older NoteForge window deleted this note after the update. The saved note is unchanged. Keep it, or delete it yourself.'
+          : 'Saved from an older NoteForge window after the update. Nothing was overwritten. Compare, keep the saved version, save the draft as a copy, or replace explicitly.'
+        : preview.identityCollisions?.length
+          ? `A title or alias is already in use: ${preview.identityCollisions.map((item) => `${item.name} (${item.ownerTitle})`).join(', ')}. Save a copy or keep the saved vault; no existing note will be overwritten.`
+          : preview.requiresNewPlan
+            ? 'Review a new plan to apply this operation. Note drafts can be saved as copies.'
+            : 'Resolved drafts stay archived. Export recovery before clearing browser data.';
       this.status.textContent = 'Review both versions, then choose an action.';
     } catch (error) {
       if (this.modal.isOpen && request === this.request) this.status.textContent = error.message;

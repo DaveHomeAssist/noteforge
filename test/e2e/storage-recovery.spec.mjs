@@ -77,7 +77,23 @@ for (const backend of ['indexeddb', 'localstorage', 'unavailable']) {
       await page.getByRole('button', { name: 'Download recovery source', exact: true }).click();
       const sourcePath = testInfo.outputPath('recovery-source.json');
       await (await sourceDownload).saveAs(sourcePath);
-      expect(JSON.parse(await readFile(sourcePath, 'utf8'))).toEqual(original);
+      // The legacy view plus each backend's own bytes: a fallback copy that the
+      // IndexedDB view hides is still exported.
+      const { sources, ...exported } = JSON.parse(await readFile(sourcePath, 'utf8'));
+      expect(exported).toEqual(original);
+      expect(sources).toEqual(
+        backend === 'indexeddb'
+          ? {
+              indexedDB: original,
+              localStorage: Object.fromEntries(Object.keys(original).map((key) => [`my-notes-app:${key}`, null])),
+            }
+          : {
+              indexedDB: {},
+              localStorage: Object.fromEntries(
+                Object.entries(original).map(([key, value]) => [`my-notes-app:${key}`, JSON.stringify(value)]),
+              ),
+            },
+      );
       const backupDownload = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Download verified backup', exact: true }).click();
       const backupPath = testInfo.outputPath('recovery-backup.json');
@@ -249,8 +265,11 @@ for (const fixture of [
       const path = testInfo.outputPath('original-source.json');
       await (await download).saveAs(path);
       const exported = JSON.parse(await readFile(path, 'utf8'));
-      if (fixture.legacy) expect(exported).toEqual(fixture.entries);
-      else {
+      if (fixture.legacy) {
+        const { sources, ...legacy } = exported;
+        expect(legacy).toEqual(fixture.entries);
+        expect(sources.indexedDB).toEqual(fixture.entries);
+      } else {
         expect(exported.vault.meta).toEqual(fixture.entries['vault:meta'] ?? null);
         expect(exported.vault.config).toEqual(fixture.entries['vault:config'] ?? null);
         expect(exported.vault.records).toEqual(

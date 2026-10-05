@@ -7,6 +7,13 @@ export const VAULT_CONFIG = 'vault:config';
 export const NOTE_PREFIX = 'note:';
 export const CONFLICT_PREFIX = 'vault:conflict:';
 export const RESOLVED_CONFLICT_PREFIX = 'vault:resolved-conflict:';
+export const LEGACY_BACKUP = 'vault:legacy-backup';
+export const LEGACY_CAPTURE = 'vault:legacy-capture';
+export const SCHEMA_BACKUP_PREFIX = 'vault:schema-backup:';
+export const LEGACY_ARCHIVE_PREFIX = 'vault:legacy-archive:';
+// The legacy current-state sources. After activation this build reads them and
+// never writes them; shared revision history and lease keys are not current state.
+export const LEGACY_KEYS = ['notes', 'config', 'schemaVersion'];
 
 function sameDraft(left = [], right = []) {
   const withoutVersions = (writes) => JSON.stringify(writes.map((write) => ({ ...write, expected: 0 })));
@@ -71,15 +78,13 @@ export function readVault(db, storeName) {
   const done = transactionResult(tx, () => snapshot);
   const meta = store.get(VAULT_META);
   const config = store.get(VAULT_CONFIG);
-  const persistence = store.get('persistenceStatus');
   meta.onsuccess = () => {
     snapshot.meta = meta.result ?? null;
+    // The save time lives in the activation marker, never in a legacy key.
+    if (snapshot.meta?.lastPersistedAt) snapshot.persistence = { lastPersistedAt: snapshot.meta.lastPersistedAt };
   };
   config.onsuccess = () => {
     snapshot.config = config.result ?? null;
-  };
-  persistence.onsuccess = () => {
-    snapshot.persistence = persistence.result ?? null;
   };
   const records = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
   records.onsuccess = () => {
@@ -98,46 +103,374 @@ export function readVault(db, storeName) {
   return done;
 }
 
-/** Initialize records atomically from a caller-verified legacy snapshot.
- * This is a mechanism, not authorization to activate migration for old clients.
+/** Read only what tells a window whether a full refresh is needed. */
+export function readVaultHead(db, storeName) {
+  const tx = db.transaction(storeName, 'readonly');
+  const store = tx.objectStore(storeName);
+  const head = { meta: null, conflictIds: [] };
+  const done = transactionResult(tx, () => head);
+  const meta = store.get(VAULT_META);
+  meta.onsuccess = () => {
+    head.meta = meta.result ?? null;
+  };
+  const conflicts = store.openKeyCursor(IDBKeyRange.bound(CONFLICT_PREFIX, `${CONFLICT_PREFIX}\uffff`));
+  conflicts.onsuccess = () => {
+    const cursor = conflicts.result;
+    if (!cursor) return;
+    head.conflictIds.push(String(cursor.key).slice(CONFLICT_PREFIX.length));
+    cursor.continue();
+  };
+  return done;
+}
+
+/** A legacy note version kept for explicit review. It is never applied automatically. */
+export function legacyConflict({
+  generation,
+  timestamp,
+  id,
+  value,
+  current,
+  backend,
+  kind,
+  raw,
+  conflictId = `legacy-${crypto.randomUUID()}`,
+}) {
+  return {
+    id: conflictId,
+    mutation: {
+      generation,
+      timestamp,
+      conflictId,
+      notes: [{ id, expected: current?.version ?? 0, value }],
+      config: [],
+    },
+    conflicts: [{ kind: 'note', id, current: current ?? { version: 0, value: null } }],
+    detectedAt: timestamp,
+    legacy: { backend, kind, raw },
+  };
+}
+
+function sameSource(read, supplied, key) {
+  const present = Object.hasOwn(supplied, key);
+  return read === undefined ? !present : present && JSON.stringify(read) === JSON.stringify(supplied[key]);
+}
+
+/** Activate the per-note vault from caller-verified legacy sources.
+ * Each source is compared with the bytes it supplied: IndexedDB inside this
+ * transaction, localStorage synchronously within it. Legacy current-state keys
+ * are read and never written. Records, archive, capture baseline, review items
+ * and the marker commit together or not at all.
  * @param {IDBDatabase} db
  * @param {string} storeName
- * @param {{notes:RawNote[],config:object,schemaVersion:number}} legacy
- * @param {{notes:RawNote[],config:object,schemaVersion:number}} migrated
+ * @param {{timestamp:string, indexedDB:object, localStorage:object|null, backup:object,
+ *   migrated:{notes:RawNote[],config:object,schemaVersion:number},
+ *   reviews:{id:string,value:RawNote,raw:unknown,backend:string,kind:string}[]}} plan
  * @param {string} generation
+ * @param {() => object|null} [readLocal]
  */
-export function initializeVault(db, storeName, legacy, migrated, generation) {
+export function initializeVault(db, storeName, plan, generation, readLocal = () => null) {
   const tx = db.transaction(storeName, 'readwrite');
   const store = tx.objectStore(storeName);
   let result = { status: 'stale' };
   const done = transactionResult(tx, () => result);
-  const requests = ['notes', 'config', 'schemaVersion', VAULT_META].map((key) => store.get(key));
+  const supplied = plan.indexedDB ?? {};
+  const requests = [...LEGACY_KEYS, VAULT_META].map((key) => store.get(key));
   let pending = requests.length;
   for (const request of requests) {
     request.onsuccess = () => {
       if (--pending) return;
-      if (requests[3].result) {
+      if (requests[LEGACY_KEYS.length].result) {
         result = { status: 'existing' };
         return;
       }
-      const current = {
-        notes: requests[0].result ?? [],
-        config: requests[1].result ?? {},
-        schemaVersion: requests[2].result ?? 0,
-      };
-      if (JSON.stringify(current) !== JSON.stringify(legacy)) return;
-      // Retain exact legacy bytes/metadata. All records and the activation marker
-      // either commit together or remain absent after an abort/restart.
-      store.put(legacy, 'vault:legacy-backup');
-      for (const note of migrated.notes) store.put({ version: 1, value: note }, NOTE_PREFIX + note.id);
+      if (!LEGACY_KEYS.every((key, index) => sameSource(requests[index].result, supplied, key))) return;
+      if (plan.localStorage) {
+        let local;
+        try {
+          local = readLocal();
+        } catch {
+          return;
+        }
+        if (JSON.stringify(local) !== JSON.stringify(plan.localStorage)) return;
+      }
+      store.put(plan.backup, LEGACY_BACKUP);
+      const current = new Map();
+      for (const note of plan.migrated.notes) {
+        current.set(note.id, { version: 1, value: note });
+        store.put({ version: 1, value: note }, NOTE_PREFIX + note.id);
+      }
       store.put(
-        { values: migrated.config, versions: Object.fromEntries(Object.keys(migrated.config).map((key) => [key, 1])) },
+        {
+          values: plan.migrated.config,
+          versions: Object.fromEntries(Object.keys(plan.migrated.config).map((key) => [key, 1])),
+        },
         VAULT_CONFIG,
       );
-      store.put({ generation, sequence: 0, schemaVersion: migrated.schemaVersion }, VAULT_META);
-      result = { status: 'committed' };
+      store.put(
+        { generation, sequence: 0, schemaVersion: plan.migrated.schemaVersion, activatedAt: plan.timestamp },
+        VAULT_META,
+      );
+      // Later legacy saves are captured against exactly these source values.
+      store.put(
+        {
+          version: 1,
+          capturedAt: plan.timestamp,
+          captures: 0,
+          indexedDB: supplied,
+          localStorage: plan.localStorage,
+        },
+        LEGACY_CAPTURE,
+      );
+      for (const review of plan.reviews ?? []) {
+        const conflict = legacyConflict({
+          ...review,
+          generation,
+          timestamp: plan.timestamp,
+          current: current.get(review.id),
+        });
+        store.put(conflict, CONFLICT_PREFIX + conflict.id);
+      }
+      result = { status: 'committed', reviews: plan.reviews?.length ?? 0 };
     };
   }
+  return done;
+}
+
+/** Migrate an activated vault from an older schema in one conditional transaction.
+ * The previous records are archived; changed notes and settings get new versions,
+ * and the new generation makes work queued against the old shape conflict.
+ * @param {IDBDatabase} db
+ * @param {string} storeName
+ * @param {{generation:string,sequence:number,schemaVersion:number}} expected
+ * @param {{notes:RawNote[],config:object,schemaVersion:number}} migrated
+ * @param {string} generation
+ * @param {string} timestamp
+ */
+export function migrateVault(db, storeName, expected, migrated, generation, timestamp) {
+  const tx = db.transaction(storeName, 'readwrite');
+  const store = tx.objectStore(storeName);
+  let result = { status: 'stale' };
+  const done = transactionResult(tx, () => result);
+  const metaRequest = store.get(VAULT_META);
+  const configRequest = store.get(VAULT_CONFIG);
+  const records = [];
+  const cursorRequest = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (cursor) {
+      records.push([String(cursor.key).slice(NOTE_PREFIX.length), cursor.value]);
+      cursor.continue();
+      return;
+    }
+    const meta = metaRequest.result;
+    const settings = configRequest.result;
+    const next = new Map(migrated.notes.map((note) => [note.id, note]));
+    const live = records.filter(([, record]) => record.value);
+    if (
+      !meta ||
+      !settings ||
+      meta.generation !== expected.generation ||
+      meta.sequence !== expected.sequence ||
+      meta.schemaVersion !== expected.schemaVersion ||
+      live.length !== next.size ||
+      live.some(([id]) => !next.has(id))
+    )
+      return;
+    store.put(
+      { meta, config: settings, records, migratedAt: timestamp, toSchemaVersion: migrated.schemaVersion },
+      `${SCHEMA_BACKUP_PREFIX}${meta.schemaVersion}:${meta.generation}`,
+    );
+    for (const [id, record] of live) {
+      const value = next.get(id);
+      if (JSON.stringify(value) !== JSON.stringify(record.value))
+        store.put({ version: record.version + 1, value }, NOTE_PREFIX + id);
+    }
+    let versions = settings.versions;
+    for (const key of new Set([...Object.keys(settings.values), ...Object.keys(migrated.config)])) {
+      const before = Object.hasOwn(settings.values, key) ? JSON.stringify(settings.values[key]) : undefined;
+      const after = Object.hasOwn(migrated.config, key) ? JSON.stringify(migrated.config[key]) : undefined;
+      if (before !== after) versions = { ...versions, [key]: (Object.hasOwn(versions, key) ? versions[key] : 0) + 1 };
+    }
+    store.put({ values: migrated.config, versions }, VAULT_CONFIG);
+    const nextMeta = {
+      ...meta,
+      generation,
+      sequence: meta.sequence + 1,
+      schemaVersion: migrated.schemaVersion,
+      lastPersistedAt: timestamp,
+    };
+    store.put(nextMeta, VAULT_META);
+    result = { status: 'committed', meta: nextMeta };
+  };
+  return done;
+}
+
+const presentLegacy = (requests) =>
+  Object.fromEntries(
+    LEGACY_KEYS.flatMap((key, index) => (requests[index].result === undefined ? [] : [[key, requests[index].result]])),
+  );
+
+function parseRaw(raw) {
+  try {
+    return raw == null ? undefined : JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Per-note differences between two legacy note arrays. Deletions are reported, never applied. */
+function legacyChanges(backend, base, now, schemaVersion, normalize) {
+  if (!Array.isArray(now)) return [];
+  const before = new Map((Array.isArray(base) ? base : []).map((note) => [note?.id, JSON.stringify(note)]));
+  const after = new Set();
+  const changes = [];
+  for (const raw of now) {
+    if (typeof raw?.id !== 'string' || !raw.id) continue;
+    after.add(raw.id);
+    if (before.get(raw.id) === JSON.stringify(raw)) continue;
+    const value = normalize(raw, schemaVersion);
+    if (value) changes.push({ backend, id: raw.id, raw, value, kind: before.has(raw.id) ? 'edit' : 'new' });
+  }
+  for (const id of before.keys())
+    if (typeof id === 'string' && id && !after.has(id))
+      changes.push({ backend, id, raw: null, value: null, kind: 'deletion' });
+  return changes;
+}
+
+/** Capture legacy saves made after activation as durable review items.
+ * One readwrite transaction re-reads the legacy IndexedDB values, records each
+ * changed, new or deleted legacy note beside the current note, archives legacy
+ * settings unapplied, and advances the baseline to exactly what it read. The
+ * fallback is read synchronously inside it; a later fallback save differs from
+ * the recorded bytes and is caught by the next capture. Current notes, settings
+ * and the legacy sources are never written.
+ * @param {IDBDatabase} db
+ * @param {string} storeName
+ * @param {() => object|null} readLocal
+ * @param {(raw: object, schemaVersion: unknown) => RawNote|null} normalize
+ * @param {string} timestamp
+ */
+export function captureLegacy(db, storeName, readLocal, normalize, timestamp) {
+  const tx = db.transaction(storeName, 'readwrite');
+  const store = tx.objectStore(storeName);
+  const result = { status: 'inactive', conflicts: [], seen: null };
+  const done = transactionResult(tx, () => result);
+  const requests = [...LEGACY_KEYS, LEGACY_CAPTURE, VAULT_META].map((key) => store.get(key));
+  const active = [];
+  const cursorRequest = store.openCursor(IDBKeyRange.bound(CONFLICT_PREFIX, `${CONFLICT_PREFIX}\uffff`));
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (cursor) {
+      if (cursor.value?.legacy) active.push(cursor.value);
+      cursor.continue();
+      return;
+    }
+    const baseline = requests[LEGACY_KEYS.length].result;
+    const meta = requests[LEGACY_KEYS.length + 1].result;
+    if (!baseline || !meta) return;
+    let local = null;
+    try {
+      local = readLocal();
+    } catch {
+      // An unreadable fallback cannot be compared; its baseline stays unchanged.
+    }
+    const indexed = presentLegacy(requests);
+    result.status = 'unchanged';
+    result.seen = JSON.stringify([indexed, local]);
+    const base = baseline.indexedDB ?? {};
+    const indexedChanged = JSON.stringify(indexed) !== JSON.stringify(base);
+    const localChanged = local !== null && JSON.stringify(local) !== JSON.stringify(baseline.localStorage);
+    if (!indexedChanged && !localChanged) return;
+    const baseLocalNotes = parseRaw(baseline.localStorage?.notes);
+    const changes = [];
+    const archive = {};
+    if (indexedChanged) {
+      // A legacy client copies fallback notes into an absent IndexedDB key on load.
+      changes.push(
+        ...legacyChanges(
+          'indexeddb',
+          Object.hasOwn(base, 'notes') ? base.notes : baseLocalNotes,
+          indexed.notes,
+          indexed.schemaVersion,
+          normalize,
+        ),
+      );
+      for (const key of ['config', 'schemaVersion'])
+        if (JSON.stringify(indexed[key]) !== JSON.stringify(base[key]))
+          archive.indexedDB = { ...archive.indexedDB, [key]: indexed[key] };
+    }
+    if (localChanged) {
+      const notes = parseRaw(local.notes);
+      if (local.notes !== null && notes === undefined) archive.localStorage = { notes: local.notes };
+      changes.push(...legacyChanges('localstorage', baseLocalNotes, notes, parseRaw(local.schemaVersion), normalize));
+      for (const key of ['config', 'schemaVersion'])
+        if (local[key] !== (baseline.localStorage?.[key] ?? null))
+          archive.localStorage = { ...archive.localStorage, [key]: local[key] };
+    }
+    const currentRequests = changes.map((change) => store.get(NOTE_PREFIX + change.id));
+    let pending = currentRequests.length;
+    const record = () => {
+      const byNote = new Map(
+        active.map((conflict) => [`${conflict.legacy.backend}:${conflict.mutation.notes[0]?.id}`, conflict]),
+      );
+      const drafts = new Set(
+        active.map(
+          (conflict) => `${conflict.mutation.notes[0]?.id}:${JSON.stringify(conflict.mutation.notes[0]?.value)}`,
+        ),
+      );
+      changes.forEach((change, index) => {
+        const current = currentRequests[index].result;
+        const draft = `${change.id}:${JSON.stringify(change.value)}`;
+        // Nothing to review: the vault already holds this exact note, or the
+        // deleted note is already gone, or another review item holds this draft.
+        if (
+          change.kind === 'deletion'
+            ? !current?.value
+            : JSON.stringify(current?.value ?? null) === JSON.stringify(change.value)
+        )
+          return;
+        if (drafts.has(draft)) return;
+        drafts.add(draft);
+        const key = `${change.backend}:${change.id}`;
+        const previous = byNote.get(key);
+        // Repeated saves of one note from one older window update its review item;
+        // every earlier captured version stays in that item's history.
+        const conflict = legacyConflict({
+          ...change,
+          generation: meta.generation,
+          timestamp,
+          current,
+          ...(previous ? { conflictId: previous.id } : {}),
+        });
+        if (previous)
+          conflict.legacy.history = [
+            ...(previous.legacy.history ?? []),
+            { capturedAt: previous.detectedAt, kind: previous.legacy.kind, raw: previous.legacy.raw },
+          ];
+        store.put(conflict, CONFLICT_PREFIX + conflict.id);
+        byNote.set(key, conflict);
+        result.conflicts.push(conflict);
+      });
+      if (Object.keys(archive).length)
+        store.put({ capturedAt: timestamp, ...archive }, `${LEGACY_ARCHIVE_PREFIX}${timestamp}:${crypto.randomUUID()}`);
+      store.put(
+        {
+          ...baseline,
+          capturedAt: timestamp,
+          captures: (baseline.captures ?? 0) + 1,
+          indexedDB: indexed,
+          localStorage: local ?? baseline.localStorage,
+        },
+        LEGACY_CAPTURE,
+      );
+      result.status = 'captured';
+    };
+    if (!pending) record();
+    for (const request of currentRequests)
+      request.onsuccess = () => {
+        if (!--pending) record();
+      };
+  };
   return done;
 }
 
@@ -174,6 +507,7 @@ export function commitVault(db, storeName, mutation) {
     if (write.value !== null && write.value.id !== write.id) throw new TypeError('Invalid note.');
   }
   if (mutation.replacement) {
+    if (!Number.isSafeInteger(mutation.sequence)) throw new TypeError('A replacement requires a vault sequence.');
     const ids = mutation.replacement.notes.map((note) => note.id);
     if (ids.some((id) => !id) || new Set(ids).size !== ids.length) throw new TypeError('Invalid replacement IDs.');
   }
@@ -244,10 +578,6 @@ export function commitVault(db, storeName, mutation) {
           return;
         }
         if (mutation.replacement) {
-          if (mutation.sequence === undefined) {
-            tx.abort();
-            return;
-          }
           // An exclusive transaction fences every concurrent note/config mutation.
           // Old queued work is invalidated by the newly committed generation.
           const next = mutation.replacement;
@@ -268,9 +598,9 @@ export function commitVault(db, storeName, mutation) {
               generation: crypto.randomUUID(),
               sequence: meta.sequence + 1,
               schemaVersion: next.schemaVersion,
+              lastPersistedAt: mutation.timestamp,
             };
             store.put(nextMeta, VAULT_META);
-            store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
             result = { status: 'committed', meta: nextMeta };
           };
           return;
@@ -291,7 +621,7 @@ export function commitVault(db, storeName, mutation) {
           settings.versions = { ...settings.versions, [write.key]: write.expected + 1 };
         }
         if (config.length) store.put(settings, VAULT_CONFIG);
-        const nextMeta = { ...meta, sequence: meta.sequence + 1 };
+        const nextMeta = { ...meta, sequence: meta.sequence + 1, lastPersistedAt: mutation.timestamp };
         if (resolution) {
           // Resolving never erases the last recoverable draft or replaced version.
           // The archive, note/config writes and active-conflict removal commit together.
@@ -314,7 +644,6 @@ export function commitVault(db, storeName, mutation) {
           store.delete(CONFLICT_PREFIX + resolution.id);
         }
         store.put(nextMeta, VAULT_META);
-        store.put({ lastPersistedAt: mutation.timestamp }, 'persistenceStatus');
         result = { status: 'committed', meta: nextMeta };
       };
       if (conflicts.length || mutation.replacement) apply();

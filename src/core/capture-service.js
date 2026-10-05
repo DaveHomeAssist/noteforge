@@ -2,6 +2,19 @@ import { Note } from './note.js';
 import { appendCapturedMarkdown } from '../utils/capture.js';
 import { normalizeTitle } from '../utils/helpers.js';
 
+function occurrences(text, block) {
+  let count = 0;
+  for (let index = text.indexOf(block); index !== -1; index = text.indexOf(block, index + block.length)) count++;
+  return count;
+}
+
+// A later save of the same note may supersede the capture before it commits.
+// It acknowledges the capture only if it still contains every captured copy.
+function containing(block, submitted) {
+  const expected = occurrences(submitted, block);
+  return (value) => typeof value?.content === 'string' && occurrences(value.content, block) >= expected;
+}
+
 export class CaptureService {
   constructor(db) {
     this.db = db;
@@ -34,12 +47,20 @@ export class CaptureService {
     }
     const options = { captureRevision: true, reason: 'quick_capture' };
     if (title !== null) {
-      const submission = this.db.createNoteWithReceipt({ title, content: String(markdown) }, options);
+      const content = String(markdown);
+      const submission = this.db.createNoteWithReceipt(
+        { title, content },
+        { ...options, contains: containing(content.trim(), content) },
+      );
       return { ...submission, created: true };
     }
     const next = Note.fromJSON(structuredClone(note.toJSON()));
     next.update({ content: appendCapturedMarkdown(next.content, markdown) });
-    return { ...this.db.saveNoteWithReceipt(next, options), created: false };
+    const added = next.content.startsWith(note.content) ? next.content.slice(note.content.length) : String(markdown);
+    return {
+      ...this.db.saveNoteWithReceipt(next, { ...options, contains: containing(added.trim(), next.content) }),
+      created: false,
+    };
   }
 
   async save(input = {}) {

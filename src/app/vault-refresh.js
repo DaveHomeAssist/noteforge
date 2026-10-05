@@ -10,6 +10,9 @@ export function watchVault(app, announce) {
   let timer;
   let running = false;
   let requested = false;
+  // Legacy capture runs on resume, fallback storage events and a bounded
+  // visible interval, not after every local save.
+  let captureDue = true;
   const canAdopt = () => !stopped && !isAnyModalOpen() && app.editor?.canRefreshFromStorage() === true;
   const refresh = async () => {
     timer = undefined;
@@ -20,6 +23,17 @@ export function watchVault(app, announce) {
     }
     running = true;
     try {
+      if (captureDue) {
+        captureDue = false;
+        const captured = await app.db.captureLegacyChanges().catch((error) => {
+          console.warn('[vault] legacy capture failed:', error);
+          return { captured: 0 };
+        });
+        if (captured.captured) {
+          app.db.onPersistError?.('conflicts');
+          announce('Edits saved in an older NoteForge window were kept for review. Nothing was overwritten.');
+        }
+      }
       const result = await app.db.refreshCurrentVault(canAdopt);
       if (result.status === 'refreshed' && app.db.conflicts.size) app.db.onPersistError?.('conflicts');
     } catch (error) {
@@ -37,6 +51,17 @@ export function watchVault(app, announce) {
     if (stopped || timer !== undefined) return;
     timer = setTimeout(() => void refresh(), 100);
   };
+  const capture = () => {
+    captureDue = true;
+    schedule();
+  };
+  const legacyStorage = (event) => {
+    if (
+      ['my-notes-app:notes', 'my-notes-app:config', 'my-notes-app:schemaVersion'].includes(event.key) ||
+      event.key === null
+    )
+      capture();
+  };
   const local = () => {
     try {
       channel?.postMessage(null);
@@ -47,11 +72,12 @@ export function watchVault(app, announce) {
   };
   channel?.addEventListener('message', schedule);
   window.addEventListener('noteforge:vault-change', local);
-  window.addEventListener('pageshow', schedule);
-  window.addEventListener('focus', schedule);
-  document.addEventListener('visibilitychange', schedule);
+  window.addEventListener('pageshow', capture);
+  window.addEventListener('focus', capture);
+  window.addEventListener('storage', legacyStorage);
+  document.addEventListener('visibilitychange', capture);
   document.addEventListener('focusout', schedule);
-  const polling = setInterval(schedule, 15_000);
+  const polling = setInterval(capture, 15_000);
   schedule();
   return () => {
     stopped = true;
@@ -59,9 +85,10 @@ export function watchVault(app, announce) {
     clearInterval(polling);
     channel?.close();
     window.removeEventListener('noteforge:vault-change', local);
-    window.removeEventListener('pageshow', schedule);
-    window.removeEventListener('focus', schedule);
-    document.removeEventListener('visibilitychange', schedule);
+    window.removeEventListener('pageshow', capture);
+    window.removeEventListener('focus', capture);
+    window.removeEventListener('storage', legacyStorage);
+    document.removeEventListener('visibilitychange', capture);
     document.removeEventListener('focusout', schedule);
   };
 }
