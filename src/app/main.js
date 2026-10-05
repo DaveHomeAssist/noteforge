@@ -129,7 +129,10 @@ class App {
 
   async #init() {
     try {
-      await this.db.init(); // validate loaded source before rendering or starting writers
+      // Validate loaded source before rendering or starting writers. A vault an
+      // older build saved activates automatically; later saves from older windows
+      // are captured for review (NF-DUR-MIG-01 = C, Dave 2026-10-04).
+      await this.db.init({ allowLegacyMigration: true });
     } catch (error) {
       this.db.recoverStartup(error);
       console.warn('[app] startup opened recovery:', error);

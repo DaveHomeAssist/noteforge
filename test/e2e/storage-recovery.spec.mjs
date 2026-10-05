@@ -6,7 +6,60 @@ import { CURRENT_SCHEMA_VERSION } from '../../src/core/migrations.js';
 import { verifyBackup } from '../../src/core/backup.js';
 import { previewRoot } from './support/runtime.mjs';
 
-for (const backend of ['indexeddb', 'localstorage', 'unavailable']) {
+/** Write storage on the application origin before the application first opens. */
+async function seedBeforeOpen(page, { indexed = {}, local = {} }) {
+  await page.route('**/seed-before-open.html', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Seed before open</title>' }),
+  );
+  await page.goto(new URL('seed-before-open.html', previewRoot()).href);
+  await page.evaluate(
+    async ({ indexed, local }) => {
+      for (const [key, raw] of Object.entries(local)) localStorage.setItem(key, raw);
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('my-notes-app', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('kv');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('kv', 'readwrite');
+        for (const [key, value] of Object.entries(indexed)) tx.objectStore('kv').put(value, key);
+        tx.oncomplete = resolve;
+        tx.onabort = () => reject(tx.error);
+      });
+      db.close();
+    },
+    { indexed, local },
+  );
+}
+
+async function readKv(page) {
+  return page.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('my-notes-app', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const values = await new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const result = {};
+      const cursor = tx.objectStore('kv').openCursor();
+      cursor.onsuccess = () => {
+        if (!cursor.result) return;
+        result[cursor.result.key] = cursor.result.value;
+        cursor.result.continue();
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(tx.error);
+    });
+    db.close();
+    return values;
+  });
+}
+
+// With IndexedDB available a valid legacy vault activates (NF-DUR-MIG-01 = C); the
+// recovery reader remains for a profile that cannot open IndexedDB at all.
+for (const backend of ['unavailable']) {
   test(`production recovery exports without initializing writers (${backend})`, async ({ browser }, testInfo) => {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
     const original = {
@@ -177,6 +230,80 @@ for (const backend of ['indexeddb', 'localstorage', 'unavailable']) {
   });
 }
 
+for (const backend of ['indexeddb', 'localstorage']) {
+  test(`a legacy ${backend} vault activates on first open and leaves its sources unchanged`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      page.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
+      const note = {
+        ...new Note({
+          id: 'legacy-note',
+          title: 'Legacy note',
+          content: '---\nunknown: preserved\n---\n# Ünïcode ✓\n',
+        }).toJSON(),
+        future: { preserved: true },
+      };
+      const legacy = { notes: [note], config: { themeMode: 'light', futureSetting: 'preserved' }, schemaVersion: 6 };
+      const local = Object.fromEntries(
+        Object.entries(legacy).map(([key, value]) => [`my-notes-app:${key}`, JSON.stringify(value)]),
+      );
+      await seedBeforeOpen(page, backend === 'indexeddb' ? { indexed: legacy } : { local });
+      await page.goto(previewRoot());
+      await page.waitForFunction(() => Boolean(window.app?.ready));
+      await page.evaluate(() => window.app.ready);
+      const opened = await page.evaluate(() => ({
+        readOnly: window.app.db.getPersistenceStatus().readOnly,
+        editor: Boolean(window.app.editor),
+        note: window.app.db.getNote('legacy-note')?.toJSON(),
+        futureSetting: window.app.db.config.futureSetting,
+      }));
+      expect(opened).toEqual({ readOnly: false, editor: true, note, futureSetting: 'preserved' });
+      const notice = page.locator('.storage-error--upgrade');
+      await expect(notice).toHaveAttribute('role', 'status');
+      await expect(notice).toContainText('Close NoteForge tabs opened before this update');
+      expect((await new AxeBuilder({ page }).include('.storage-error--upgrade').analyze()).violations).toEqual([]);
+      expect(
+        await page.evaluate(() => {
+          const root = document.documentElement;
+          return root.scrollHeight <= root.clientHeight && root.scrollWidth <= root.clientWidth;
+        }),
+      ).toBe(true);
+      await notice.getByRole('button', { name: 'Dismiss' }).click();
+      await expect(notice).toHaveCount(0);
+      const saved = await page.evaluate(async () => {
+        const current = window.app.db.getNote('legacy-note');
+        current.update({ content: `${current.content}\nEdited after activation` });
+        return (await window.app.db.saveNoteWithReceipt(current).completion).status;
+      });
+      expect(saved).toBe('committed');
+      await page.reload();
+      await page.waitForFunction(() => Boolean(window.app?.ready));
+      await page.evaluate(() => window.app.ready);
+      expect(await page.evaluate(() => window.app.db.getNote('legacy-note').content)).toContain(
+        'Edited after activation',
+      );
+      // The notice belongs to the activating window only.
+      await expect(page.locator('.storage-error--upgrade')).toHaveCount(0);
+      const kv = await readKv(page);
+      for (const key of ['notes', 'config', 'schemaVersion'])
+        expect(kv[key]).toEqual(backend === 'indexeddb' ? legacy[key] : undefined);
+      expect(
+        await page.evaluate(
+          (keys) => Object.fromEntries(keys.map((key) => [key, localStorage.getItem(key)])),
+          Object.keys(local),
+        ),
+      ).toEqual(backend === 'localstorage' ? local : Object.fromEntries(Object.keys(local).map((key) => [key, null])));
+      expect(kv['vault:legacy-backup'].effective.notes).toEqual([note]);
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 const startupNote = new Note({ id: 'startup-note', title: 'Original', content: 'Exact original source' }).toJSON();
 const startupLegacy = {
   notes: [startupNote],
@@ -223,24 +350,9 @@ for (const fixture of [
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
+      // An unsupported source must stop activation before any marker is written.
+      await seedBeforeOpen(page, { indexed: fixture.entries });
       await page.goto(previewRoot());
-      await page.waitForFunction(() => Boolean(window.app?.ready));
-      await page.evaluate(() => window.app.ready);
-      await page.evaluate(async (entries) => {
-        const db = await new Promise((resolve, reject) => {
-          const r = indexedDB.open('my-notes-app', 1);
-          r.onsuccess = () => resolve(r.result);
-          r.onerror = () => reject(r.error);
-        });
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction('kv', 'readwrite');
-          for (const [k, v] of Object.entries(entries)) tx.objectStore('kv').put(v, k);
-          tx.oncomplete = resolve;
-          tx.onabort = () => reject(tx.error);
-        });
-        db.close();
-      }, fixture.entries);
-      await page.reload();
       await page.waitForFunction(() => Boolean(window.app?.ready));
       const outcome = await page.evaluate(() =>
         window.app.ready.then(
@@ -372,15 +484,12 @@ test('unreadable legacy storage disables exports until reload can read the sourc
       }
     });
     const page = await context.newPage();
+    const local = Object.fromEntries(
+      Object.entries(startupLegacy).map(([key, value]) => [`my-notes-app:${key}`, JSON.stringify(value)]),
+    );
+    await seedBeforeOpen(page, { local });
+    await page.evaluate(() => sessionStorage.setItem('deny-source', 'yes'));
     await page.goto(previewRoot());
-    await page.waitForFunction(() => Boolean(window.app?.ready));
-    await page.evaluate(() => window.app.ready);
-    await page.evaluate((source) => {
-      for (const [key, value] of Object.entries(source))
-        localStorage.setItem(`my-notes-app:${key}`, JSON.stringify(value));
-      sessionStorage.setItem('deny-source', 'yes');
-    }, startupLegacy);
-    await page.reload();
     await expect(page.getByRole('heading', { name: 'This vault is read only' })).toBeVisible();
     await page.evaluate(() => window.app.ready);
     await expect(page.getByRole('button', { name: 'Download recovery source', exact: true })).toBeDisabled();
@@ -390,13 +499,25 @@ test('unreadable legacy storage disables exports until reload can read the sourc
       readOnly: true,
       pendingWrites: 0,
     });
+    // No activation marker was written while the source was unreadable.
+    expect((await readKv(page))['vault:meta']).toBeUndefined();
     await page.evaluate(() => sessionStorage.removeItem('deny-source'));
     await page.getByRole('button', { name: 'Reload vault', exact: true }).click();
-    await expect(page.getByLabel('Markdown source')).toHaveValue(startupNote.content);
-    await expect(page.getByRole('button', { name: 'Download verified backup', exact: true })).toBeEnabled();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('my-notes-app:notes')))).toEqual(
-      startupLegacy.notes,
-    );
+    await page.waitForFunction(() => Boolean(window.app?.ready));
+    await page.evaluate(() => window.app.ready);
+    expect(
+      await page.evaluate(() => ({
+        readOnly: window.app.db.getPersistenceStatus().readOnly,
+        content: window.app.db.getNote('startup-note')?.content,
+      })),
+    ).toEqual({ readOnly: false, content: startupNote.content });
+    // Activation reads the fallback and leaves its bytes exactly as they were.
+    expect(
+      await page.evaluate(
+        (keys) => Object.fromEntries(keys.map((key) => [key, localStorage.getItem(key)])),
+        Object.keys(local),
+      ),
+    ).toEqual(local);
   } finally {
     await context.close();
   }
@@ -407,6 +528,7 @@ for (const extension of ['js', 'css']) {
     const context = await browser.newContext();
     try {
       await context.route(new RegExp(`/assets/storage-recovery-[^/]+\\.${extension}$`), (route) => route.abort());
+      await context.addInitScript(() => Object.defineProperty(window, 'indexedDB', { value: undefined }));
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
@@ -509,6 +631,8 @@ for (const failure of ['asset', 'transaction', 'local-read']) {
         errors = [];
       page.on('download', (event) => downloads.push(event));
       page.on('pageerror', (error) => errors.push(error.message));
+      // A valid legacy vault activates; an unsupported one keeps the recovery reader.
+      await seedBeforeOpen(page, { indexed: { schemaVersion: 99 } });
       await page.goto(previewRoot());
       await page.waitForFunction(() => Boolean(window.app?.ready));
       await page.evaluate(() => window.app.ready);
@@ -587,6 +711,7 @@ test('queued archive open times out and closes a late connection without blockin
       };
     });
     const page = await context.newPage();
+    await seedBeforeOpen(page, { indexed: { schemaVersion: 99 } });
     await page.goto(previewRoot());
     await page.waitForFunction(() => Boolean(window.app?.ready));
     await page.evaluate(() => window.app.ready);

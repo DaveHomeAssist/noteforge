@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { captureRuntimeErrors, newAppContext, TIMEOUT } from './runtime.mjs';
 
 /**
- * Explicit disposable fixture for application behavior after activation.
- * Fresh-profile startup must remain read only until the old-client gate passes.
- * This helper neither changes that product gate nor proves safe migration.
+ * Disposable fixture for application behavior after activation. A fresh profile
+ * activates a per-note vault on its first open (NF-DUR-MIG-01 = C) and receives the
+ * ordinary first-run notes; with no legacy data there is nothing to capture and no
+ * upgrade notice.
  */
 export async function activatedAppContext(browser, url, options = {}, runtimeErrors = []) {
   const context = await newAppContext(browser, options);
@@ -13,29 +14,23 @@ export async function activatedAppContext(browser, url, options = {}, runtimeErr
     captureRuntimeErrors(seed, runtimeErrors);
     await seed.goto(url, { waitUntil: 'load', timeout: TIMEOUT });
     await seed.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
-    const before = await seed.evaluate(async () => {
+    const activated = await seed.evaluate(async () => {
       await window.app.ready;
       const db = window.app.db;
-      return { readOnly: db.getPersistenceStatus().readOnly, notes: db.notes.size, editor: Boolean(window.app.editor) };
-    });
-    assert.deepEqual(
-      before,
-      { readOnly: true, notes: 0, editor: false },
-      'fixture must start in an empty recovery reader',
-    );
-    const activated = await seed.evaluate(async () => {
-      const db = window.app.db;
-      await db.init({ allowLegacyMigration: true });
       const snapshot = await db.storage.readCurrentVault();
       return {
-        generation: snapshot.meta?.generation,
-        notes: snapshot.records.length,
+        readOnly: db.getPersistenceStatus().readOnly,
+        upgraded: db.upgradedLegacyVault,
+        notice: Boolean(document.querySelector('.storage-error--upgrade')),
+        generation: typeof snapshot.meta?.generation,
         conflicts: snapshot.conflicts.length,
       };
     });
-    assert.equal(typeof activated.generation, 'string', 'synthetic activation must commit');
-    assert.equal(activated.notes, 0, 'fixture activation must not import user data');
-    assert.equal(activated.conflicts, 0);
+    assert.deepEqual(
+      activated,
+      { readOnly: false, upgraded: false, notice: false, generation: 'string', conflicts: 0 },
+      'a fresh profile must activate without legacy data, a notice or review items',
+    );
     if (options.serviceWorkers === 'allow') {
       // Keep the installing worker's first client alive until it claims that
       // client. Otherwise closing the seed can race the caller's navigation.
