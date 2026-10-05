@@ -7,7 +7,7 @@
       "entries": [
         "index.html"
       ],
-      "gzipBudget": 83968
+      "gzipBudget": 99328
     },
     "editor": {
       "description": "Loaded with the first open note: outline, backlink and unlinked-mention index, back/forward navigation.",
@@ -133,7 +133,7 @@
     "precache": {
       "description": "Everything the service worker precaches for offline use (all of dist/ except sw.js itself).",
       "all": true,
-      "gzipBudget": 243712
+      "gzipBudget": 281600
     }
   }
 }

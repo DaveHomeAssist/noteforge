@@ -4,22 +4,20 @@ Phase 1 reliability repair, based on main 7114047aca10ad9b25839774a22d06370a6456
 
 ## Status
 
-In progress, not releasable. The production Database now uses the conditional
-transaction module when a vault has been explicitly activated. Both original
-P1 reproductions pass through that Database across Chromium, Firefox and WebKit.
-Activation in these tests is explicit and limited to disposable synthetic vaults;
-it is not evidence that production upgrades are safe.
+Updated 2026-10-04. Option C is implemented and qualified on this branch; release
+still requires exact-head CI, review, merge and both-origin live verification.
+Dave answered both open decisions on 2026-10-04: NF-DUR-MIG-01 = C (automatic
+activation with legacy-save capture) and NF-DUR-BUDGET-01 = A (capped rebaseline).
+See [Option C](#option-c-automatic-activation-with-legacy-save-capture) below.
 
-Normal startup does not activate either empty or populated legacy storage. It
-opens a dedicated read-only recovery reader until compatibility is proved. The
-reader exports the loaded storage source and, for supported legacy schemas, a separately verified
-portable backup without starting an editor, sample creation, history, or startup
-configuration writes. Legacy recovery reads no longer copy localStorage into
-IndexedDB. Conflict comparison, resolution and export now have a lazy recovery
-UI for explicitly activated vaults. The application still needs a complete
-upgrade/activation protocol and complete release qualification. Clean-window
-refresh is implemented with conservative dirty-window deferral below. Do not merge
-or deploy this intermediate state.
+The application now activates per-note storage automatically on first open. A
+vault an older build saved activates from its exact sources, which this build reads
+and never writes. Saves an older NoteForge window acknowledges after activation are
+captured as review items in the existing conflict recovery UI; nothing from a legacy
+source is applied, merged or deleted automatically. A profile without IndexedDB, an
+unreadable source or an unsupported format opens the read-only recovery reader
+without writing an activation marker. The checkpoint history below is retained as
+written; its "activation disabled" statements describe the state at those dates.
 
 ## Persistence writer inventory
 
@@ -1068,9 +1066,13 @@ the tested mechanisms.
 [Service Worker navigation](https://www.w3.org/TR/service-workers/#client-navigate)
 and [Web Storage concurrency](https://html.spec.whatwg.org/multipage/webstorage.html#the-localstorage-attribute).
 
-### Open product decision NF-DUR-MIG-01
+### Product decision NF-DUR-MIG-01 (answered C, Dave 2026-10-04)
 
-**Status: Open; no answer recorded. Recommendation: A, conditional on complete
+**Answered 2026-10-04: C, automatic activation with legacy-save capture (Dave,
+2026-10-04).** A and B below were declined. The text that follows is the decision
+as it was prepared and is kept as history.
+
+**Status at preparation: Open; no answer recorded. Recommendation: A, conditional on complete
 qualification. Confidence: medium in the proposed workflow; high that the tested
 automatic barriers are insufficient.** This decision changes the migration
 contract, so implementation approval for the original automatic safety guarantee
@@ -1096,6 +1098,8 @@ substitute for this decision. Do not clear user storage, fill localStorage to
 force errors, or deploy incompatible rollback code as a fencing mechanism.
 
 ### Proposed supervised flow and smallest useful slice
+
+**Superseded 2026-10-04 by option C; not implemented.** Kept as the prepared proposal.
 
 If A is selected, implement one guarded migration flow, not a general import or
 editor redesign. Its outcome is one writable per-note authority plus retained,
@@ -1155,3 +1159,131 @@ The implementation of this proposed flow is pending the product decision and
 its browser qualification. Existing conditional-write test passes do not close
 this gate. The current branch remains a draft and must not be merged as a
 read-only replacement for the working application.
+
+
+## Option C: automatic activation with legacy-save capture
+
+Decisions, 2026-10-04: **NF-DUR-MIG-01 = C (Dave, 2026-10-04)** and
+**NF-DUR-BUDGET-01 = A (Dave, 2026-10-04)**. Both are Answered. Supervised cutover
+(A) and hold (B) were declined; the supervised flow above is superseded.
+
+### Guarantee and accepted residual
+
+Every edit a 7114047 client acknowledges after activation is kept in the new vault
+for explicit review. Legacy code never overwrites the new authority, and this build
+never writes legacy current state after activation. Old clients can still
+acknowledge writes outside the new authority; those writes are captured, not
+prevented. Two legacy windows can still overwrite each other before a capture, as
+they can in 7114047 today, and a legacy edit made against stale content arrives as
+a review copy, never as a merge.
+
+### Implemented contract
+
+- **Storage boundary.** `my-notes-app` stays at IndexedDB version 1 with its `kv`
+  store; this build never requests an upgrade, deletes the database or clears the
+  store. Legacy current state is `notes`, `config` and `schemaVersion` in `kv` and
+  under `my-notes-app:` in localStorage. Shared `revision:` history and lease keys
+  are not legacy current state. The save time moved from `persistenceStatus` into
+  `vault:meta` (R7).
+- **Activation** (`initializeVault`, first open, automatic). Each backend is read
+  separately. Inside one readwrite transaction the IndexedDB values are compared
+  with exactly the bytes they supplied, and the fallback bytes are re-read
+  synchronously and compared. The transaction stores `vault:legacy-backup` (both
+  backends and the effective view), the per-note records, settings, marker and the
+  capture baseline `vault:legacy-capture`, plus a review item for each fallback note
+  that differs from the IndexedDB view (R1). A fallback-only vault activates (R2).
+  A changed source is retried up to three times, then startup opens recovery. An
+  abort leaves unchanged legacy storage and no marker.
+- **Capture** (`captureLegacy`). Runs at startup before the window is ready, and on
+  pageshow, focus, visibility return, fallback `storage` events and a 15 s visible
+  interval. A read-only comparison skips the write transaction when nothing changed.
+  Otherwise one readwrite transaction re-reads the legacy IndexedDB values, compares
+  each note with the baseline independently of key order, records each changed or
+  new legacy note as a durable review item beside the current note, records each
+  legacy deletion as a review item that can only be kept, archives legacy settings
+  under `vault:legacy-archive:` unapplied, and advances the baseline to exactly what
+  it read. Repeated saves of one note from one backend update one review item and
+  keep every earlier captured version in its history. Capture uses no Web Locks.
+- **Review.** Captured items appear in the existing conflict recovery UI, labelled
+  "saved in an older NoteForge window after the update", with compare, keep saved
+  version, save draft as a copy and explicit replacement. The activating window shows
+  a dismissible notice asking the user to close tabs opened before the update. It is
+  guidance only.
+- **Schema.** An activated vault from an older schema migrates forward in one
+  conditional transaction with an archived copy and a new generation; a newer one
+  opens read only (R3).
+- **Origins.** The mirror and canonical origins activate and capture independently.
+
+### Pre-resume review findings R1-R10
+
+Each finding has a regression in `test/e2e/review-findings.spec.mjs`. Nine failed at
+0c64c69 in Chromium and WebKit for the stated reason and pass after the fix in
+Chromium, Firefox and WebKit.
+
+| ID | Outcome | Change |
+| --- | --- | --- |
+| R1 | Confirmed, fixed | Activation archives both backends and keeps divergent fallback notes for review |
+| R2 | Confirmed, fixed | Each source is checked against the bytes it supplied; a fallback-only vault activates |
+| R3 | Confirmed, fixed | Versioned per-note schema migration in one transaction; newer schemas stay closed |
+| R4 | Confirmed, fixed | Stale planned and replacement mutations no longer store drafts |
+| R5 | Disproved | The lagging sequence is the signal that this window has not seen another window's commit. Advancing it, or re-reading the marker before a plan, would let a plan skip that commit and make refresh report no change. The test shows rejection, adoption and a successful replan through the existing refresh path |
+| R6 | Confirmed, fixed | A superseded quick capture settles with its successor only when the successor still contains every captured copy |
+| R7 | Confirmed, fixed | No commit writes `persistenceStatus`; the save time lives in `vault:meta` |
+| R8 | Confirmed, fixed | Drains no longer retry conflicted drafts; a new edit resubmits explicitly |
+| R9 | Confirmed, fixed | An unchanged refresh reads only the marker and conflict keys |
+| R10 | Confirmed, fixed | A replacement without a sequence is rejected synchronously |
+
+R8's original test also showed that any local edit invalidates an open comparison.
+That is the comparison's intended staleness rule, not part of the finding; the
+maintained test exercises a drain without a new submission.
+
+### Acceptance evidence
+
+Actual 7114047 production build and candidate 9fa7a1c, disposable origins, synthetic
+vaults with Unicode Markdown, YAML and unknown fields. The harness and results are
+retained with the private Phase 1 evidence. 27 of 27 application scenarios pass in
+Chromium 153, Firefox 155 and WebKit 26.6:
+
+| Scenario | Result in all three engines |
+| --- | --- |
+| Legacy tab open across activation saves through IndexedDB | Captured exactly as a review item; current note unchanged; reviewed and saved as a copy through the UI |
+| Legacy tab with IndexedDB open failure saves to the fallback | Captured from the fallback via the cross-tab storage event |
+| Legacy client loaded fresh after activation, 30 saves with history pruning | No current-note record changed; only the edited note became a review item |
+| Activation aborted before the marker | Read-only recovery with no record or marker; next open activates completely |
+| Quota failure during activation; close right after the marker; pending legacy draft | No vault written on failure; reopened vault complete; the draft saved later was captured at startup |
+| Two legacy windows | The 7114047 whole-vault overwrite between them reproduced; the last legacy state captured |
+| Backup, reopen and verified restore | Unresolved review item survives reopen; restore into a fresh profile equals the vault, including the recovered copy and unknown metadata |
+| No focus, visibility or storage event | Captured by the visible interval in 14.1 to 14.4 s |
+| Real service-worker update while the old app runs | Old runtime survives the worker change; its save is captured |
+
+Instrumented writes in every candidate page recorded no write to a legacy
+current-state key, no version upgrade and no database deletion. The module-level
+suites (`review-findings`, `legacy-capture`) drive the exact 7114047 storage module.
+
+- **Chromium BFCache (direct CDP).** The original 7114047 runtime returned from
+  BFCache after the candidate activated, saved, and the save was captured exactly.
+- **Native Safari 27.0.1 (v20 method, capture assertion).** Attempt 1 stalled: the
+  candidate application in the away page's frame never became ready, and that
+  harness version had no timeout or diagnostics, so the cause is unknown. Attempt 2
+  (added IndexedDB and lock probes) and attempt 3 (attempt 1 unchanged) passed: the
+  legacy page was restored from BFCache after activation, saved, and the save was
+  captured exactly. The stall did not reproduce; it is recorded, not explained.
+- **Shared history.** A legacy client's revision pruning removes only `revision:`
+  keys, under the same retention rules as this build. It can prune revisions this
+  build created, as either build could before. It cannot remove `note:` or `vault:`
+  records.
+- **Fallback tabs.** A legacy tab without IndexedDB starts from the fallback, which is
+  usually empty, and creates its first-run sample notes there. Those are acknowledged
+  saves, so they are captured as review items too.
+
+Capture cost, `legacy-capture.spec.mjs`: an unchanged check measured p95 2.8 ms /
+13.7 ms (Chromium), 12 / 12 ms (WebKit) and 10 / 43 ms (Firefox) at 1,000 / 5,000
+notes; capturing one changed note took 22 to 295 ms and runs only after an old
+window saved.
+
+### Budget
+
+The final candidate measures 92,727 B shell and 258,664 B precache gzip. The policy
+formula gives 100 KiB and 278 KiB, above Dave's caps, so the caps apply: 99,328 B
+shell (7.1% headroom) and 281,600 B precache (8.9% headroom). Both measurements are
+below the caps. See the budget log in `performance_budgets.md`.

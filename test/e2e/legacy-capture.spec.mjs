@@ -361,3 +361,52 @@ test('startup captures legacy saves made while the vault was closed, before the 
     });
   });
 });
+
+for (const count of [1000, 5000]) {
+  test(`legacy capture cost at ${count} notes stays within the interaction budget`, async ({ browser }, testInfo) => {
+    await withHarness(browser, async (page) => {
+      const result = await page.evaluate(async (count) => {
+        const { h } = window;
+        const notes = Array.from({ length: count }, (_, index) =>
+          h.note(`scale-${index}`, `# Note ${index}\n\nRepresentative Markdown with [[scale-0]] and #tag.`),
+        );
+        await h.rawPut([
+          ['notes', notes],
+          ['config', {}],
+          ['schemaVersion', h.CURRENT_SCHEMA_VERSION],
+        ]);
+        const legacy = await h.legacyClient();
+        const db = await h.openVault();
+        const time = async (run) => {
+          const start = performance.now();
+          const value = await run();
+          return [performance.now() - start, value];
+        };
+        const unchanged = [];
+        for (let index = 0; index < 25; index++) unchanged.push((await time(() => db.captureLegacyChanges()))[0]);
+        const loaded = await legacy.loadNotes();
+        loaded[7] = { ...loaded[7], content: 'One legacy edit' };
+        await legacy.saveNotes(loaded);
+        const [captureMs, captured] = await time(() => db.captureLegacyChanges());
+        const steady = unchanged.slice(5).sort((a, b) => a - b);
+        return {
+          count,
+          unchangedMedianMs: steady[10],
+          unchangedP95Ms: steady[18],
+          unchangedMaxMs: steady.at(-1),
+          captureMs,
+          captured,
+        };
+      }, count);
+      expect(result.captured).toEqual({ status: 'captured', captured: 1 });
+      // The check runs at most every 15 s on a visible page; one run must fit the
+      // 50 ms editor input budget's p95 and the 150 ms derived-view budget.
+      expect(result.unchangedP95Ms).toBeLessThan(count === 1000 ? 50 : 150);
+      await testInfo.attach(`capture-${count}`, {
+        body: JSON.stringify(result, null, 2),
+        contentType: 'application/json',
+      });
+      console.log(`CAPTURE_MEASUREMENT ${testInfo.project.name} ${JSON.stringify(result)}`);
+    });
+  });
+}

@@ -37,7 +37,7 @@ over. CI runs it after every build on Node 22 and 24.
 
 | Route | Loads | Measured gzip | Budget |
 | --- | --- | ---: | ---: |
-| shell | first paint | 75,571 B | 83,968 B (82 KiB) |
+| shell | first paint | 75,571 B | 99,328 B (97 KiB, raised 2026-10-04) |
 | editor | outline, backlink index, navigation | 5,389 B | 6,144 B |
 | graph | graph view | 3,092 B | 4,096 B |
 | recovery | history, backup center, recovery, backup core | 26,160 B | 29,696 B |
@@ -51,7 +51,7 @@ over. CI runs it after every build on Node 22 and 24.
 | conflicts | comparison, draft recovery and resolution (Phase 1 repair) | 6,252 B | 7,168 B |
 | storageRecovery | read-only recovery reader before activation | 2,183 B | 3,072 B |
 | vaultRefresh | clean-window reconciliation and resume watcher | 2,254 B | 3,072 B |
-| precache | everything offline | 220,873 B | 243,712 B |
+| precache | everything offline | 220,873 B | 281,600 B (275 KiB, raised 2026-10-04) |
 
 ### Measurements
 
@@ -65,6 +65,7 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-10-03 | Window refresh checkpoint, not releasable | 84,735 B (767 B over) | 19.2 KiB | 41.3 KiB | 245,709 B (1,997 B over) |
 | 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
 | 2026-10-04 | Atomic identity checkpoint, not releasable | 87,494 B (3,526 B over) | 20,288 B | 43,253 B | 253,172 B (9,460 B over) |
+| 2026-10-04 | Final Phase 1 candidate with option C; limits rebaselined to the approved caps | 92,727 B | 20.3 KiB | 42.2 KiB | 258,664 B |
 
 The session-state change adds no dependencies and does not raise any limit.
 Its build remains blocked by the existing shell/precache budgets. It separates
@@ -125,6 +126,8 @@ paint belongs in a lazy route, with its CSS loaded alongside it.
 | 2026-10-01 | shell | 83,968 B | 83,968 B (held) | No raise. With 1,616 B of headroom left at `db9971f`, the remaining Phase 1 shell work goes behind lazy routes first: this split moves the banner picker and the palette command list out (82,352 to 80,242 B). Slash/link/block menus are the next candidate | Dave, 2026-10-01 (approved holding the shell and splitting first) |
 | 2026-10-01 | retrieval | 26,624 B | 29,696 B | The palette command list (`src/app/palette-commands.js`, about 1.6 KB gzip) now loads with the palette instead of the shell; measured 26,849 B + 10% | Dave, 2026-10-01 (same approval) |
 | 2026-10-01 | banner (new) | none | 3,072 B | New lazy route for `src/components/banner-picker.js` and its CSS; measured 2,181 B + 10% | Dave, 2026-10-01 (same approval) |
+| 2026-10-04 | shell | 83,968 B | 99,328 B | Phase 1 durable writes: atomic conditional storage, exact per-note save state, startup validation and basic recovery, automatic activation from both legacy backends, versioned schema migration and legacy-save capture must be available before editable startup. Final candidate measures 92,727 B; measured + 10% gives 100 KiB, so Dave's 97 KiB cap applies (7.1% headroom). Tried first: the 2026-10-01 split (banner picker and palette command list moved out), and keeping conflict review, archive export, refresh, recovery and other optional features in lazy routes; capture runs at every startup, so moving it to a lazy chunk would not reduce what first use downloads | Dave, 2026-10-04 (NF-DUR-BUDGET-01 = A) |
+| 2026-10-04 | precache | 243,712 B | 281,600 B | Same Phase 1 work; lazy splitting cannot reduce the complete offline cache. Final candidate measures 258,664 B; measured + 10% gives 278 KiB, so Dave's 275 KiB cap applies (8.9% headroom) | Dave, 2026-10-04 (NF-DUR-BUDGET-01 = A) |
 
 ## Build budget history (policy v1, raw initial-shell ceiling, until 2026-09-26)
 
@@ -370,7 +373,9 @@ WebKit is 24/26 ms. Each case retains 26 exact committed revisions, including th
 controlled warmup pause. The original full run remains recorded as 528/530;
 these affected reruns do not retroactively turn it into a clean full-suite pass.
 
-### Reliability budget recommendation, pending review
+### Reliability budget recommendation (answered A, Dave 2026-10-04)
+
+Applied 2026-10-04 with Dave's caps; see the budget log. The recommendation is kept as written.
 
 The measured repair emits 90,164 B shell and 255,447 B precache gzip. Recommend a
 deliberate reliability rebaseline to 99,328 B (97 KiB) and 281,600 B (275 KiB),

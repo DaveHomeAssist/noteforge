@@ -3,6 +3,10 @@
 Status: implemented on the Phase 1 branch, not a migration activation or portable
 restore mechanism. The release gate in `durable_writes.md` still applies.
 
+After activation the archive also carries `vault:legacy-backup` (both legacy
+backends as activation read them), `vault:legacy-capture` (the capture baseline)
+and any `vault:legacy-archive:` records (legacy settings captured but not applied).
+
 ## Recovery surface
 
 The basic read-only screen and its CSS are part of the initial shell. A separate

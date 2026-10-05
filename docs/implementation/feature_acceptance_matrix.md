@@ -73,7 +73,7 @@ checkpoint evidence and outstanding release requirements.
 | Backup and reconciliation | Reverified source/current destination; original commit token; renewed confirmation/decisions | Local snapshots, source failures, interrupted migration, dismissal during preparation and full derived-view refresh |
 | Properties | Reviewed source/token captured when loaded; retained raw draft and separately displayed saved YAML | Typed/remove variants, editor drafts and storage/history failures |
 | Editor adoption | Source baseline; clean-pane replacement; buffered drafts flushed on original versions before adoption; same-note composition retained | Exact per-version save status, remaining caller/failure combinations, physical IME and end-to-end performance |
-| Production activation | Recovery reader; activation gate retained | Actual cached old/new builds, suspended pages, service-worker transition and divergent fallback fencing |
+| Production activation (option C, Dave 2026-10-04) | Automatic activation from exact, untouched legacy sources; legacy saves after activation captured as review items; recovery reader for unreadable or unsupported sources | Qualified on the branch against the actual 7114047 build in Chromium, Firefox and WebKit, Chromium BFCache and native Safari; release still needs exact-head CI, merge and both-origin live checks |
 
 Component axe checks and unchanged shell geometry do not close F07 phone root
 overflow. Physical-device acceptance, budgets, exact-head CI/review, deployments
