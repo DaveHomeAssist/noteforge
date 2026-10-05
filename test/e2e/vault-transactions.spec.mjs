@@ -233,3 +233,50 @@ test('transaction abort never acknowledges a partial mutation', async ({ browser
     await context.close();
   }
 });
+
+test('note and conflict keys at the top of the string range stay inside every prefix scan', async ({ browser }) => {
+  const { context, page } = await fixture(browser);
+  try {
+    const result = await page.evaluate(async () => {
+      const edge = '￿edge';
+      const replaced = await window.write([], {
+        sequence: 0,
+        replacement: { notes: [{ id: edge, content: 'Top of range' }], config: {}, schemaVersion: 6 },
+      });
+      const afterReplace = (await window.read()).records.map(([id]) => id);
+      const generation = (await window.read()).meta.generation;
+      const conflict = await window.vault.commitVault(window.connection, 'kv', {
+        generation,
+        timestamp: window.timestamp,
+        conflictId: '￿conflict',
+        notes: [{ id: edge, expected: 0, value: { id: edge, content: 'Stale' } }],
+      });
+      const snapshot = await window.read();
+      const head = await window.vault.readVaultHead(window.connection, 'kv');
+      // A later replacement must delete the edge record too.
+      await window.write([], {
+        generation,
+        sequence: snapshot.meta.sequence,
+        replacement: { notes: [{ id: 'plain', content: 'Plain' }], config: {}, schemaVersion: 6 },
+      });
+      return {
+        replaced: replaced.status,
+        afterReplace,
+        conflict: conflict.status,
+        conflictIds: snapshot.conflicts.map((item) => item.id),
+        headIds: head.conflictIds,
+        afterSecond: (await window.read()).records.map(([id]) => id),
+      };
+    });
+    expect(result).toEqual({
+      replaced: 'committed',
+      afterReplace: ['￿edge'],
+      conflict: 'conflict',
+      conflictIds: ['￿conflict'],
+      headIds: ['￿conflict'],
+      afterSecond: ['plain'],
+    });
+  } finally {
+    await context.close();
+  }
+});

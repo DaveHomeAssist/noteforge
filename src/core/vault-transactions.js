@@ -15,6 +15,14 @@ export const LEGACY_ARCHIVE_PREFIX = 'vault:legacy-archive:';
 // never writes them; shared revision history and lease keys are not current state.
 export const LEGACY_KEYS = ['notes', 'config', 'schemaVersion'];
 
+// Every key that starts with the prefix, whatever its suffix: keys compare by code
+// unit, so the bound is the prefix with its last unit incremented, exclusive.
+// A `\uffff` upper bound would miss IDs that begin with U+FFFF.
+function prefixRange(prefix) {
+  const next = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+  return IDBKeyRange.bound(prefix, next, false, true);
+}
+
 function sameDraft(left = [], right = []) {
   const withoutVersions = (writes) => JSON.stringify(writes.map((write) => ({ ...write, expected: 0 })));
   return withoutVersions(left) === withoutVersions(right);
@@ -29,7 +37,7 @@ function checkIdentity(store, notes, current, conflicts, apply) {
   // Include the final state of every write: a batch can release and claim a name,
   // but two new records in that batch cannot both introduce the same live name.
   for (const write of notes) conflicts.push(...identityCollisionsFor(claims, write.id, write.value));
-  const request = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+  const request = store.openCursor(prefixRange(NOTE_PREFIX));
   request.onsuccess = () => {
     const cursor = request.result;
     if (!cursor) return apply();
@@ -86,14 +94,14 @@ export function readVault(db, storeName) {
   config.onsuccess = () => {
     snapshot.config = config.result ?? null;
   };
-  const records = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+  const records = store.openCursor(prefixRange(NOTE_PREFIX));
   records.onsuccess = () => {
     const cursor = records.result;
     if (!cursor) return;
     snapshot.records.push([String(cursor.key).slice(NOTE_PREFIX.length), cursor.value]);
     cursor.continue();
   };
-  const conflicts = store.openCursor(IDBKeyRange.bound(CONFLICT_PREFIX, `${CONFLICT_PREFIX}\uffff`));
+  const conflicts = store.openCursor(prefixRange(CONFLICT_PREFIX));
   conflicts.onsuccess = () => {
     const cursor = conflicts.result;
     if (!cursor) return;
@@ -113,7 +121,7 @@ export function readVaultHead(db, storeName) {
   meta.onsuccess = () => {
     head.meta = meta.result ?? null;
   };
-  const conflicts = store.openKeyCursor(IDBKeyRange.bound(CONFLICT_PREFIX, `${CONFLICT_PREFIX}\uffff`));
+  const conflicts = store.openKeyCursor(prefixRange(CONFLICT_PREFIX));
   conflicts.onsuccess = () => {
     const cursor = conflicts.result;
     if (!cursor) return;
@@ -254,7 +262,7 @@ export function migrateVault(db, storeName, expected, migrated, generation, time
   const metaRequest = store.get(VAULT_META);
   const configRequest = store.get(VAULT_CONFIG);
   const records = [];
-  const cursorRequest = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+  const cursorRequest = store.openCursor(prefixRange(NOTE_PREFIX));
   cursorRequest.onsuccess = () => {
     const cursor = cursorRequest.result;
     if (cursor) {
@@ -369,7 +377,7 @@ export function captureLegacy(db, storeName, readLocal, normalize, timestamp) {
   const done = transactionResult(tx, () => result);
   const requests = [...LEGACY_KEYS, LEGACY_CAPTURE, VAULT_META].map((key) => store.get(key));
   const active = [];
-  const cursorRequest = store.openCursor(IDBKeyRange.bound(CONFLICT_PREFIX, `${CONFLICT_PREFIX}\uffff`));
+  const cursorRequest = store.openCursor(prefixRange(CONFLICT_PREFIX));
   cursorRequest.onsuccess = () => {
     const cursor = cursorRequest.result;
     if (cursor) {
@@ -593,7 +601,7 @@ export function commitVault(db, storeName, mutation) {
           // An exclusive transaction fences every concurrent note/config mutation.
           // Old queued work is invalidated by the newly committed generation.
           const next = mutation.replacement;
-          const cursorRequest = store.openCursor(IDBKeyRange.bound(NOTE_PREFIX, `${NOTE_PREFIX}\uffff`));
+          const cursorRequest = store.openCursor(prefixRange(NOTE_PREFIX));
           cursorRequest.onsuccess = () => {
             const cursor = cursorRequest.result;
             if (cursor) {
