@@ -126,6 +126,28 @@ test('a legacy fallback client is captured after its IndexedDB open fails', asyn
   });
 });
 
+test('a legacy save that only re-serializes notes in another key order creates no review item', async ({ browser }) => {
+  await withHarness(browser, async (page) => {
+    const result = await page.evaluate(async () => {
+      const { h } = window;
+      const reorder = (note) => Object.fromEntries(Object.entries(note).reverse());
+      await h.rawPut([
+        ['notes', [h.note('a', 'Same a'), h.note('b', 'Same b')]],
+        ['config', {}],
+        ['schemaVersion', h.CURRENT_SCHEMA_VERSION],
+      ]);
+      const legacy = await h.legacyClient();
+      const db = await h.openVault();
+      const loaded = await legacy.loadNotes();
+      await legacy.saveNotes([reorder(loaded[0]), reorder({ ...loaded[1], content: 'Edited b' })]);
+      const captured = await db.captureLegacyChanges();
+      const conflicts = await h.activeConflicts(db);
+      return { captured, drafts: conflicts.map((conflict) => conflict.mutation.notes[0].value.content) };
+    });
+    expect(result).toEqual({ captured: { status: 'captured', captured: 1 }, drafts: ['Edited b'] });
+  });
+});
+
 test('repeated saves from one older window update one review item and keep every captured version', async ({
   browser,
 }) => {

@@ -15,6 +15,7 @@ import { Note, normalizeAliases } from './note.js';
 import { activeIdentityKeys } from './note-identity.js';
 import { validateLegacyVault } from './vault-source.js';
 import { storage } from './storage.js';
+import { canonicalJSON } from './vault-transactions.js';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { isDescendant, ancestorChain } from '../utils/tree.js';
 import { normalizeTitle } from '../utils/helpers.js';
@@ -65,11 +66,11 @@ function divergentFallbackNotes(indexedNotes, local) {
   }
   if (!Array.isArray(fallback)) return [];
   const indexed = new Map(
-    (Array.isArray(indexedNotes) ? indexedNotes : []).map((note) => [note?.id, JSON.stringify(note)]),
+    (Array.isArray(indexedNotes) ? indexedNotes : []).map((note) => [note?.id, canonicalJSON(note)]),
   );
   return fallback.flatMap((raw) => {
     const value = normalizeLegacyNote(raw, fromVersion);
-    if (!value || indexed.get(raw.id) === JSON.stringify(raw)) return [];
+    if (!value || indexed.get(raw.id) === canonicalJSON(raw)) return [];
     return [{ id: raw.id, value, raw, backend: 'localstorage', kind: indexed.has(raw.id) ? 'edit' : 'new' }];
   });
 }

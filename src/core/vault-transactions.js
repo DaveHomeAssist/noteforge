@@ -310,6 +310,18 @@ const presentLegacy = (requests) =>
     LEGACY_KEYS.flatMap((key, index) => (requests[index].result === undefined ? [] : [[key, requests[index].result]])),
   );
 
+/** Order-independent JSON: a legacy save re-serializes every note in its own key order. */
+export function canonicalJSON(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJSON).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value)
+      .sort()
+      .filter((key) => value[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${canonicalJSON(value[key])}`)
+      .join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+
 function parseRaw(raw) {
   try {
     return raw == null ? undefined : JSON.parse(raw);
@@ -321,13 +333,13 @@ function parseRaw(raw) {
 /** Per-note differences between two legacy note arrays. Deletions are reported, never applied. */
 function legacyChanges(backend, base, now, schemaVersion, normalize) {
   if (!Array.isArray(now)) return [];
-  const before = new Map((Array.isArray(base) ? base : []).map((note) => [note?.id, JSON.stringify(note)]));
+  const before = new Map((Array.isArray(base) ? base : []).map((note) => [note?.id, canonicalJSON(note)]));
   const after = new Set();
   const changes = [];
   for (const raw of now) {
     if (typeof raw?.id !== 'string' || !raw.id) continue;
     after.add(raw.id);
-    if (before.get(raw.id) === JSON.stringify(raw)) continue;
+    if (before.get(raw.id) === canonicalJSON(raw)) continue;
     const value = normalize(raw, schemaVersion);
     if (value) changes.push({ backend, id: raw.id, raw, value, kind: before.has(raw.id) ? 'edit' : 'new' });
   }
@@ -415,18 +427,18 @@ export function captureLegacy(db, storeName, readLocal, normalize, timestamp) {
       );
       const drafts = new Set(
         active.map(
-          (conflict) => `${conflict.mutation.notes[0]?.id}:${JSON.stringify(conflict.mutation.notes[0]?.value)}`,
+          (conflict) => `${conflict.mutation.notes[0]?.id}:${canonicalJSON(conflict.mutation.notes[0]?.value)}`,
         ),
       );
       changes.forEach((change, index) => {
         const current = currentRequests[index].result;
-        const draft = `${change.id}:${JSON.stringify(change.value)}`;
+        const draft = `${change.id}:${canonicalJSON(change.value)}`;
         // Nothing to review: the vault already holds this exact note, or the
         // deleted note is already gone, or another review item holds this draft.
         if (
           change.kind === 'deletion'
             ? !current?.value
-            : JSON.stringify(current?.value ?? null) === JSON.stringify(change.value)
+            : canonicalJSON(current?.value ?? null) === canonicalJSON(change.value)
         )
           return;
         if (drafts.has(draft)) return;
