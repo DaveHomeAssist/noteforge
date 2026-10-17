@@ -4,6 +4,14 @@
 
 Read `~/Code/ops-hub/90-governance/WORKSPACE_OPERATING_RULES.md` before project rules, including COMMS (one entry on the shared Agent Communications Page per session).
 
+## Equipment compatibility
+
+For equipment records, catalog/database interchange or cross-product mappings,
+read the pinned [ECP-1.0 contract](docs/EQUIPMENT_PLATFORM_CONTRACT.md) and
+[NoteForge data adapter guidance](docs/EQUIPMENT_PLATFORM_ADAPTER.md).
+Preserve native identities, unknowns, field ownership, portable content and
+recovery. Instruction adoption does not authorize synchronization or migration.
+
 ## Status naming
 
 Name work with one string everywhere (chat status title, session title, Notion
