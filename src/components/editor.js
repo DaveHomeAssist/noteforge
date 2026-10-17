@@ -13,7 +13,7 @@ export class Editor {
    * @param {import('../core/database.js').Database} db
    * @param {{ openNote:(id:string,opts?:object)=>void, openOrCreateByTitle:(t:string,fragment?:string)=>void,
    *   requestRename?:(id:string,title:string)=>void, previewMention?:(mention:object)=>void,
-   *   showProperties?:(id:string)=>void, reviewStorage?:()=>Promise<void>|void, announce?:(message:string)=>void }} actions
+   *   showProperties?:(id:string)=>void, toggleContext?:()=>void, reviewStorage?:()=>Promise<void>|void, announce?:(message:string)=>void }} actions
    */
   constructor(container, db, actions) {
     this.container = container;
@@ -176,6 +176,24 @@ export class Editor {
     this.container.replaceChildren();
   }
 
+  /** Update context visibility without rebuilding the editor or losing pending edits. */
+  reflectContext() {
+    const collapsed = this.db.config.contextCollapsed === true;
+    const toggle = this.container.querySelector('.editor__context-toggle');
+    if (
+      collapsed &&
+      document.activeElement?.closest('.editor__outline, .backlinks, .mentions') &&
+      this.container.contains(document.activeElement)
+    ) {
+      toggle?.focus();
+    }
+    this.container.classList.toggle('editor--context-collapsed', collapsed);
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Show note context' : 'Hide note context');
+    toggle.title = collapsed ? 'Show outline, backlinks, and mentions' : 'Hide outline, backlinks, and mentions';
+  }
+
   // --- rendering ----------------------------------------------------------
 
   #teardown() {
@@ -222,6 +240,7 @@ export class Editor {
     const backlinks = this.db.backlinkOccurrencesFor(note.id);
     const mentions = this.db.unlinkedMentionsFor(note.id);
     this._mentions = mentions;
+    const contextId = `${this.container.id}-context`;
     this.container.innerHTML = `
       <div class="editor__banner"></div>
       ${this.#breadcrumbHtml(note)}
@@ -229,6 +248,9 @@ export class Editor {
         <input type="text" class="editor__title" value="${escapeHtml(note.title)}"
                placeholder="Untitled" aria-label="Note title" />
         <div class="editor__tools">
+          <button type="button" class="btn btn--ghost editor__context-toggle" aria-expanded="true"
+                  aria-label="Hide note context" aria-controls="${contextId}-outline ${contextId}-backlinks ${contextId}-mentions"
+                  title="Hide outline, backlinks, and mentions">${icon('panel-right')}</button>
           <button class="btn btn--ghost editor__properties" title="Edit note properties" aria-label="Edit note properties">Properties</button>
           <button class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
                   title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">${icon('pin')}</button>
@@ -256,8 +278,8 @@ export class Editor {
         <div class="editor__document">
           <div class="editor__blocks"></div>
 
-          <section class="backlinks" aria-labelledby="backlinks-title">
-            <h3 class="backlinks__title" id="backlinks-title">${icon('link')} Backlinks <span class="muted">(${backlinks.length})</span></h3>
+          <section class="backlinks" id="${contextId}-backlinks" aria-labelledby="${contextId}-backlinks-title">
+            <h3 class="backlinks__title" id="${contextId}-backlinks-title">${icon('link')} Backlinks <span class="muted">(${backlinks.length})</span></h3>
             ${
               backlinks.length === 0
                 ? `<p class="muted backlinks__empty">No other notes link here yet.</p>`
@@ -275,8 +297,8 @@ export class Editor {
             }
           </section>
 
-          <section class="mentions" aria-labelledby="mentions-title">
-            <h3 class="backlinks__title" id="mentions-title">${icon('message-square')} Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
+          <section class="mentions" id="${contextId}-mentions" aria-labelledby="${contextId}-mentions-title">
+            <h3 class="backlinks__title" id="${contextId}-mentions-title">${icon('message-square')} Unlinked mentions <span class="muted">(${mentions.length})</span></h3>
             ${
               mentions.length === 0
                 ? `<p class="muted backlinks__empty">No unlinked mentions found.</p>`
@@ -296,7 +318,7 @@ export class Editor {
             Created ${formatDate(note.createdAt)} · Updated ${formatDate(note.updatedAt)}
           </div>
         </div>
-        <aside class="editor__outline" aria-label="Note outline"></aside>
+        <aside class="editor__outline" id="${contextId}-outline" aria-label="Note outline"></aside>
       </div>
     `;
 
@@ -336,6 +358,7 @@ export class Editor {
       host.addEventListener(type, () => this.#reflectSaveState());
     }
     this.#reflectSaveState();
+    this.reflectContext();
   }
 
   #mountOutline(markdown) {
@@ -363,6 +386,9 @@ export class Editor {
   // --- events -------------------------------------------------------------
 
   #wire(note) {
+    this.container
+      .querySelector('.editor__context-toggle')
+      .addEventListener('click', () => this.actions.toggleContext?.());
     for (const a of this.container.querySelectorAll('.editor__breadcrumb .crumb[data-id]')) {
       a.addEventListener('click', (e) => {
         e.preventDefault();

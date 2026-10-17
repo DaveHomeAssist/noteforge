@@ -25,6 +25,7 @@ body {
 }
 
 body {
+  display: flow-root; /* Keep the mobile app margin inside the viewport-height body. */
   font-family: var(--sans);
   background: var(--bg);
   color: var(--text);
@@ -62,7 +63,7 @@ code {
   --rail-w: 52px;
   display: grid;
   grid-template-columns: var(--rail-w) var(--sidebar-w) 1fr;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 .app.sidebar-collapsed {
@@ -754,6 +755,44 @@ mark {
   html[data-width="full"] .editor .editor__save,
   html[data-width="full"] .editor .editor__breadcrumb {
     max-width: none;
+  }
+}
+
+.editor--context-collapsed .editor__outline,
+.editor--context-collapsed .backlinks,
+.editor--context-collapsed .mentions {
+  display: none !important;
+}
+.editor.editor--context-collapsed .editor__workspace {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  max-width: var(--editor-measure);
+}
+.editor--context-collapsed .editor__document {
+  display: block;
+}
+.editor.editor--context-collapsed .editor__bar,
+.editor.editor--context-collapsed .editor__tags,
+.editor.editor--context-collapsed .editor__save,
+.editor.editor--context-collapsed .editor__breadcrumb {
+  max-width: var(--editor-measure);
+}
+.editor__context-toggle[aria-expanded="false"] {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+/* Keep the note title readable when the toolbar cannot fit beside it. */
+@container editor (max-width: 420px) {
+  .editor__bar {
+    flex-wrap: wrap;
+  }
+  .editor__title {
+    flex-basis: 100%;
+  }
+  .editor__tools {
+    margin-left: auto;
   }
 }
 
@@ -1842,7 +1881,7 @@ html[data-font="l"] .editor {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto;
     margin-top: 48px;
-    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
   }
   .main {
     grid-row: 1;

@@ -162,6 +162,10 @@ class App {
       requestRename: (id, title) => this.#showRename(id, title),
       previewMention: (mention) => this.#showMention(mention),
       showProperties: (id) => this.#showProperties(id),
+      toggleContext: () => {
+        this.db.setConfig({ contextCollapsed: this.db.config.contextCollapsed !== true });
+        this.editor.reflectContext();
+      },
       announce: (message) => this.#announce(message),
       reviewStorage: () => this.#reviewStorage(),
     };

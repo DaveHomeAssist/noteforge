@@ -375,3 +375,98 @@ test('the palette finds tags and filters the note list by one, keeping the sort'
     await context.close();
   }
 });
+
+for (const theme of ['light', 'dark']) {
+  for (const width of [375, 1440, 3840]) {
+    test(`note context collapses, reclaims space, and persists · ${theme} · ${width}`, async ({
+      browser,
+      runtimeErrors,
+    }) => {
+      const { context, page } = await openSurface(browser, { viewport: 1440, theme, runtimeErrors });
+      try {
+        await page.setViewportSize({ width, height: width === 375 ? 812 : width === 3840 ? 1080 : 900 });
+        const toggle = page.locator('.editor__context-toggle').first();
+        const blocks = page.locator('.editor__blocks').first();
+        const before = await blocks.boundingBox();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await toggle.focus();
+        await page.keyboard.press('Enter');
+        await expect(toggle).toBeFocused();
+        await expect(toggle).toHaveAccessibleName('Show note context');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        for (const selector of ['.editor__outline', '.backlinks', '.mentions']) {
+          await expect(page.locator(selector).first()).toBeHidden();
+        }
+        if (width === 1440) expect((await blocks.boundingBox()).width).toBeGreaterThan(before.width + 100);
+        if (width === 3840) {
+          await page.evaluate(() => {
+            document.documentElement.dataset.width = 'full';
+          });
+          const full = await blocks.boundingBox();
+          await toggle.click();
+          expect((await blocks.boundingBox()).width).toBeLessThan(full.width - 300);
+          await toggle.click();
+        }
+        const controlled = await toggle.evaluate((el) =>
+          el
+            .getAttribute('aria-controls')
+            .split(' ')
+            .every((id) => document.getElementById(id)),
+        );
+        expect(controlled, 'the toggle names its real context regions').toBe(true);
+        await reload(page);
+        await expect(toggle).toHaveAccessibleName('Show note context');
+        await expect(page.locator('.backlinks').first()).toBeHidden();
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('.backlinks').first()).toBeVisible();
+        await expect(page.locator('.mentions').first()).toBeVisible();
+        await reload(page);
+        await expect(toggle).toHaveAccessibleName('Hide note context');
+        expect(
+          await page.evaluate(() => {
+            const el = document.documentElement;
+            return el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth;
+          }),
+          'the document stays inside the viewport',
+        ).toBe(true);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+test('context toggling preserves pending edits and follows notes and both panes', async ({
+  browser,
+  runtimeErrors,
+}) => {
+  const { context, page } = await openSurface(browser, { viewport: 1440, surface: 'new-note', runtimeErrors });
+  try {
+    await page.locator('.blk').first().click();
+    await page.keyboard.type('A draft survives context toggling');
+    const toggle = page.locator('.editor__context-toggle').first();
+    await toggle.click();
+    await expect(page.locator('.blk').first()).toContainText('A draft survives context toggling');
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          [...window.app.db.notes.values()].some((note) => note.content.includes('A draft survives context toggling')),
+        ),
+      )
+      .toBe(true);
+    await reload(page);
+    await expect(page.locator('.editor__blocks').first()).toContainText('A draft survives context toggling');
+    await page.getByRole('button', { name: 'Split view', exact: true }).click();
+    await page.getByRole('button', { name: 'Move the active tab to the other pane', exact: true }).click();
+    await page.locator('.note-item__main').filter({ hasText: 'Welcome' }).first().click();
+    const toggles = page.locator('.editor__context-toggle:visible');
+    await expect(toggles).toHaveCount(2);
+    for (const button of await toggles.all()) await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await toggles.first().click();
+    for (const button of await toggles.all()) await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.backlinks:visible')).toHaveCount(2);
+  } finally {
+    await context.close();
+  }
+});
