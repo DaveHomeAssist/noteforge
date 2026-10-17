@@ -788,7 +788,7 @@ mark {
   .editor__bar {
     flex-wrap: wrap;
   }
-  .editor__title {
+  .editor__bar .editor__title {
     flex-basis: 100%;
   }
   .editor__tools {
