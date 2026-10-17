@@ -388,6 +388,12 @@ for (const theme of ['light', 'dark']) {
         const toggle = page.locator('.editor__context-toggle').first();
         const blocks = page.locator('.editor__blocks').first();
         const before = await blocks.boundingBox();
+        if (width === 375) {
+          const title = await page.locator('.editor__title').first().boundingBox();
+          const tools = await page.locator('.editor__tools').first().boundingBox();
+          expect(title.width).toBeGreaterThan(250);
+          expect(tools.y).toBeGreaterThanOrEqual(title.y + title.height);
+        }
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
         await toggle.focus();
         await page.keyboard.press('Enter');
