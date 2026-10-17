@@ -5,6 +5,15 @@ Owner: Dave Robertson. Supersedes the "Round" and "Daily-driver program" section
 
 Scope: turn the shipped 20-feature local-first daily driver into a visually distinctive, organizationally superior alternative to Notion, ClickUp, and Confluence without giving up local-first ownership, Markdown portability, or the recovery guarantees that already exist.
 
+## Equipment compatibility guidance
+
+Equipment/catalog work follows the pinned [ECP-1.0 contract](../EQUIPMENT_PLATFORM_CONTRACT.md)
+and [data adapter guidance](../EQUIPMENT_PLATFORM_ADAPTER.md). This scoped
+instruction adoption does not change phase status or establish database parity.
+Next proof is a disposable equipment-record round trip with explicit identities,
+field ownership, unknowns and qualified backup/restore before important-data
+migration. Existing roadmap scope and acceptance remain authoritative.
+
 ## 1. Vision and positioning
 
 NoteForge 2 is **Notion's block model + Obsidian's ownership + Linear's polish** in one local-first workspace. It competes on three things the incumbents do not do well together:
