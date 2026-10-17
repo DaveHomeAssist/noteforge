@@ -64,6 +64,9 @@ and dark mode — all stored in your browser, no backend required.
   autocomplete. Display text, heading fragments, and embeds parse from one
   source-aware grammar; rename previews every affected note/link, captures safety
   revisions, rewrites atomically, and keeps the old title as an alias.
+- **Collapsible note context** — the panel button beside Properties hides or shows
+  the outline, backlinks, and mentions together, returning space to the editor.
+  Your choice is remembered across notes, split panes, and reloads.
 - **Outline, contextual backlinks, and mentions** — an H1–H6 outline jumps to
   deterministic duplicate-safe anchors; backlinks show source heading/snippet;
   plain-text mentions can be previewed and converted to exact wikilinks.

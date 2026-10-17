@@ -267,6 +267,9 @@ export class WorkspaceView {
       if (id && ids.has(id)) this.editors[pane].syncAuthoritative(noteIds);
     }
   }
+  reflectContext() {
+    for (const editor of Object.values(this.editors)) editor.reflectContext();
+  }
   reflectPin(id) {
     for (const editor of Object.values(this.editors)) editor.reflectPin(id);
   }
