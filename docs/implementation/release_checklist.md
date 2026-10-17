@@ -73,6 +73,7 @@ find dist -maxdepth 2 -type f -print0 | sort -z | xargs -0 wc -c
 - Commit only the intended phase slice and push its focused branch immediately.
 - Pull requests run the full `verify` job (install, audit, Node tests, Playwright Chromium browser tests, and build) without uploading or deploying Pages. Require that check when a PR is used; local gates and diff review still precede every push.
 - Merge only a releasable phase. After merge, fetch and verify local/fetched/remote `main` resolve to the same 40-character SHA.
+- For the durable-write migration (option C, NF-DUR-MIG-01, Dave 2026-10-04), synthetic activation and module tests are not release acceptance. Require the actual 7114047 build against the candidate on disposable origins: a legacy tab open across activation and saving through IndexedDB, the localStorage fallback, a BFCache-restored legacy page, a legacy client loaded after activation, interruption before and after the marker, quota failure, a pending legacy draft, the two-legacy-window residual, backup/reopen/restore, and instrumented proof that the candidate never writes legacy current state. If any acknowledged legacy save goes uncaptured, keep activation disabled, preserve the evidence and bring the counterexample to Dave. Track evidence in `durable_writes.md`.
 
 ## 4. Prove exact-SHA NoteForge CI and mirror deployment
 

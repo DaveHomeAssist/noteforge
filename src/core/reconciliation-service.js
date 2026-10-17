@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 import { CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { Note } from './note.js';
 import { downloadText } from '../utils/download.js';
@@ -59,12 +60,13 @@ export class ReconciliationService {
 
   async plan(entries) {
     const version = ++this.planVersion;
+    const token = this.db.captureMutationToken();
     const nextEntries = Array.isArray(entries) ? [...entries] : [];
     const result = await this.planner(
       nextEntries,
       [...this.db.notes.values()].map((note) => note.toJSON()),
       {
-        mappings: this.db.config.folderMappings,
+        mappings: detached(this.db.config.folderMappings),
       },
     );
     if (version !== this.planVersion) {
@@ -74,16 +76,24 @@ export class ReconciliationService {
     }
     this.entries = nextEntries;
     this.planResult = result;
+    this.planMutationToken = token;
     return detached(result);
   }
 
-  async #reread() {
+  async #reread(sourceEntries = this.entries) {
     const entries = [];
-    for (const entry of this.entries) {
+    for (const entry of sourceEntries) {
       const text = typeof entry.read === 'function' ? await entry.read() : entry.text;
       entries.push({ ...entry, text });
     }
     return entries;
+  }
+
+  async refreshPlan() {
+    const version = this.planVersion;
+    const entries = await this.#reread();
+    if (version !== this.planVersion) throw stalePlan('A newer folder scan replaced this preview. Review it again.');
+    return this.plan(entries);
   }
 
   #validateDecisions(plan, decisions) {
@@ -103,14 +113,23 @@ export class ReconciliationService {
     if (confirmed !== true || !plan?.items)
       throw new Error('Review the reconciliation plan and confirm it before applying changes.');
     if (!this.planResult || planSignature(plan) !== planSignature(this.planResult)) {
-      throw new Error('This reconciliation plan is not the latest completed scan. Scan the folder again.');
+      throw stalePlan('This reconciliation plan is not the latest completed scan. Scan the folder again.');
     }
+    plan = detached(plan);
+    decisions = detached(decisions);
+    const token = detached(this.planMutationToken);
+    const entries = this.entries.map((entry) => ({ ...entry }));
+    const version = this.planVersion;
+    const assertScan = () => {
+      if (version !== this.planVersion) throw stalePlan('A newer folder scan replaced this preview. Review it again.');
+    };
     const selected = this.#validateDecisions(plan, decisions);
     if (!selected.length) return this.#completionReport(plan, decisions, [], 'No folder changes were selected.');
 
-    await this.recovery.downloadBackup();
+    await this.recovery.downloadBackup({ recordTimestamp: false });
 
-    const freshEntries = await this.#reread();
+    assertScan();
+    const freshEntries = await this.#reread(entries);
     const freshPlan = await planVaultImport(
       freshEntries,
       [...this.db.notes.values()].map((note) => note.toJSON()),
@@ -122,7 +141,7 @@ export class ReconciliationService {
     for (const item of selected) {
       const fresh = freshByKey.get(item.key);
       if (!fresh || itemSignature(fresh) !== itemSignature(item)) {
-        throw new Error(`${item.relativePath} or its destination changed after preview. Scan the folder again.`);
+        throw stalePlan(`${item.relativePath} or its destination changed after preview. Scan the folder again.`);
       }
     }
 
@@ -191,11 +210,16 @@ export class ReconciliationService {
       );
     }
     const nextConfig = { ...detached(this.db.config), folderMappings: nextMappings };
-    const saved = await this.db.replaceVault({
-      notes: nextNotes,
-      config: nextConfig,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-    });
+    assertScan();
+    const saved = await this.db.replaceVault(
+      {
+        notes: nextNotes,
+        config: nextConfig,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      },
+      token,
+      { rejectStale: true },
+    );
     if (!saved) throw new Error('The folder batch was not saved; the current vault remains unchanged.');
     return this.#completionReport(
       freshPlan,

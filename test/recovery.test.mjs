@@ -283,3 +283,100 @@ test('startup reconciliation finishes interrupted permanent-purge cleanup', asyn
   assert.equal((await reloadedRevisions.list(note.id)).length, 0);
   assert.equal((await reloadedRevisions.listSnapshots()).length, 0);
 });
+
+test('revision restore rejects an edit acknowledged during payload preparation', async () => {
+  const h = harness();
+  const note = h.db.createNote({ id: 'race', title: 'Race', content: 'initial' });
+  await h.db.flush();
+  note.update({ content: 'selected revision' });
+  h.db.saveNote(note);
+  await h.db.flush();
+  const selected = (await h.recovery.listRevisions(note.id))[0];
+  let release;
+  let reached;
+  const started = new Promise((resolve) => {
+    reached = resolve;
+  });
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const build = h.revisionStore.buildRestorePayload.bind(h.revisionStore);
+  h.revisionStore.buildRestorePayload = async (...args) => {
+    const result = await build(...args);
+    reached();
+    await gate;
+    return result;
+  };
+  const restore = h.recovery.restore({ noteId: note.id, revisionId: selected.id });
+  await started;
+  note.update({ content: 'acknowledged while preparing' });
+  h.db.saveNote(note);
+  assert.equal(await h.db.flushCurrentWrites(), true);
+  const rejected = assert.rejects(restore, /changed after this preview/);
+  release();
+  await rejected;
+  assert.equal(h.storage.values.get('notes')[0].content, 'acknowledged while preparing');
+  assert.equal(h.db.getNote(note.id).content, 'acknowledged while preparing');
+});
+
+test('portable restore rejects a destination edited after its reviewed preview', async () => {
+  const h = harness();
+  const note = h.db.createNote({ id: 'race', title: 'Race', content: 'original' });
+  await h.db.flush();
+  const backup = await h.recovery.createBackup();
+  const verified = await h.recovery.verifyBackup(backup.text);
+  const plan = await h.recovery.previewRestore({ verified });
+  note.update({ content: 'acknowledged after preview' });
+  h.db.saveNote(note);
+  assert.equal(await h.db.flushCurrentWrites(), true);
+  await assert.rejects(
+    () => h.recovery.restoreBackup({ confirmed: true, plan, type: 'portable', verified }),
+    /changed after this preview/,
+  );
+  assert.equal(h.storage.values.get('notes')[0].content, 'acknowledged after preview');
+});
+
+test('revision restore rejects an edit acknowledged after the reviewed preview', async () => {
+  const h = harness();
+  const note = h.db.createNote({ id: 'preview-race', title: 'Preview race', content: 'initial' });
+  await h.db.flush();
+  note.update({ content: 'selected revision' });
+  h.db.saveNote(note);
+  await h.db.flush();
+  const selected = (await h.recovery.listRevisions(note.id))[0];
+  const preview = await h.recovery.previewRevision({ noteId: note.id, revisionId: selected.id });
+  note.update({ content: 'acknowledged during confirmation' });
+  h.db.saveNote(note);
+  assert.equal(await h.db.flushCurrentWrites(), true);
+  await assert.rejects(() => h.recovery.restore({ noteId: note.id, revisionId: selected.id, preview }), {
+    code: 'stale_plan',
+  });
+  assert.equal(h.storage.values.get('notes')[0].content, 'acknowledged during confirmation');
+  assert.equal(h.db.getNote(note.id).content, 'acknowledged during confirmation');
+});
+
+test('history comparison captures its destination before asynchronous materialization', async () => {
+  const h = harness();
+  const note = h.db.createNote({ id: 'preview-load', title: 'Preview load', content: 'initial' });
+  await h.db.flush();
+  note.update({ content: 'selected revision' });
+  h.db.saveNote(note);
+  await h.db.flush();
+  const selected = (await h.recovery.listRevisions(note.id))[0];
+  const materialize = h.revisionStore.materialize.bind(h.revisionStore);
+  h.revisionStore.materialize = async (...args) => {
+    note.tags.push('added during preview');
+    note.update({ content: 'edited while loading preview' });
+    h.db.saveNote(note);
+    await h.db.flushCurrentWrites();
+    return materialize(...args);
+  };
+  const preview = await h.recovery.previewRevision({ noteId: note.id, revisionId: selected.id });
+  h.revisionStore.materialize = materialize;
+  assert.equal(preview.currentNote.content, 'selected revision');
+  assert.deepEqual(preview.currentNote.tags, []);
+  await assert.rejects(() => h.recovery.restore({ noteId: note.id, revisionId: selected.id, preview }), {
+    code: 'stale_plan',
+  });
+  assert.equal(h.storage.values.get('notes')[0].content, 'edited while loading preview');
+});

@@ -51,12 +51,34 @@ a pre-restore portable safety download before atomically replacing the current v
 Keep downloaded backups somewhere independent of the browser profile and test a
 representative backup periodically with **Verify backup**.
 
+## Upgrading from an earlier NoteForge
+
+The first time this version opens, it moves your notes into per-note storage
+automatically. The notes, settings and schema an earlier version saved are copied
+exactly and left untouched in their original place, and a copy of both original
+stores is kept for recovery. If the original data cannot be read or uses a format
+this version does not understand, NoteForge opens the read-only recovery reader
+instead and writes nothing.
+
+A notice then asks you to close NoteForge tabs that were opened before the update.
+An older tab keeps working until it is closed, but its saves no longer change your
+notes. Anything it saves appears under **Changes need review**, labelled as saved in
+an older NoteForge window after the update. For each one you can compare it with
+the saved note, keep the saved version, save it as a copy, or replace the saved note
+with it. A note deleted in an older tab is never deleted for you: you can keep it or
+delete it yourself. Settings changed in an older tab are kept in the recovery archive
+and are not applied. Two older tabs can still overwrite each other before NoteForge
+notices, as they always could; the last version they saved is kept for review.
+
+The GitHub Pages mirror and systembydave.com keep separate browser storage. Each
+upgrades on its own the first time you open it.
+
 ## Storage support
 
 | Environment | Current notes | Revisions | Local snapshots | Portable backup |
 | --- | --- | --- | --- | --- |
 | IndexedDB available | Yes | Yes | Yes | Yes |
-| `localStorage` fallback | Yes, within browser quota | Unavailable | Unavailable | Yes |
+| No IndexedDB (`localStorage` only) | Read only: the recovery reader shows and exports saved notes; editing is off | Unavailable | Unavailable | Yes, for supported saved data |
 | Storage quota pressure | Current-note writes remain priority | Pauses before reserve is consumed | Pauses before reserve is consumed | Download remains available while the current vault can be read |
 
 Backup center reports the active backend, quota estimate when the browser exposes

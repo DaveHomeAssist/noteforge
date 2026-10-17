@@ -160,6 +160,7 @@ export class BackupView {
    *   restoreBackup:(request:object)=>Promise<object>|object
    * }} service
    * @param {{
+   *   refreshPreview?:()=>Promise<void>|void,
    *   confirmRestore?:(details:object)=>Promise<boolean>|boolean,
    *   onRestored?:(result:object)=>void
    * }} [options]
@@ -175,6 +176,9 @@ export class BackupView {
     this.els = els;
     this.service = service;
     this.confirmRestore = options.confirmRestore;
+    this.refreshPreview = options.refreshPreview;
+    this.epoch = 0;
+    this.stale = false;
     this.onRestored = options.onRestored;
     this.verified = null;
     this.restorePlan = null;
@@ -183,7 +187,10 @@ export class BackupView {
     this.loadToken = 0;
     this.snapshotAvailable = typeof service.createLocalSnapshot === 'function';
 
-    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus() });
+    this.modal = new Modal(els.overlay, { initialFocus: () => this.#initialFocus(), onEscape: () => this.close() });
+    this.els.overlay.addEventListener('click', (event) => {
+      if (event.target.closest('[data-close]')) this.close();
+    });
     this.els.download?.addEventListener('click', () => this.#download());
     this.els.createSnapshot?.addEventListener('click', () => this.#createSnapshot());
     this.els.file?.addEventListener('change', () => this.#fileChanged());
@@ -204,12 +211,19 @@ export class BackupView {
   }
 
   async show() {
+    this.epoch++;
+    this.restorePlan = null;
+    this.stale = false;
+    this.#syncActions();
+    if (this.els.preview)
+      this.els.preview.innerHTML = '<p class="muted">Review a fresh restore preview before applying.</p>';
     this.#renderLoading();
     this.modal.open();
     await this.refresh();
   }
 
   close() {
+    this.epoch++;
     this.loadToken += 1;
     this.modal.close();
   }
@@ -349,6 +363,8 @@ export class BackupView {
   }
 
   #fileChanged() {
+    this.epoch++;
+    this.stale = false;
     this.verified = null;
     this.restorePlan = null;
     this.restoreSource = null;
@@ -362,7 +378,7 @@ export class BackupView {
 
   async #download() {
     if (this.busy) return;
-    await this.#runAction('Creating and verifying portable backup…', async () => {
+    await this.#runAction('Creating and verifying portable backup…', async (current) => {
       let result;
       if (typeof this.service.downloadBackup === 'function') {
         result = await this.service.downloadBackup();
@@ -383,7 +399,9 @@ export class BackupView {
       } else {
         throw new Error('Portable backup creation is unavailable.');
       }
+      if (!current()) return;
       await this.refresh();
+      if (!current()) return;
       this.#setStatus(
         result?.message ||
           'Portable JSON backup verified and downloaded. Store it somewhere independent of this browser.',
@@ -393,9 +411,11 @@ export class BackupView {
 
   async #createSnapshot() {
     if (this.busy || typeof this.service.createLocalSnapshot !== 'function') return;
-    await this.#runAction('Creating local snapshot…', async () => {
+    await this.#runAction('Creating local snapshot…', async (current) => {
       const result = await this.service.createLocalSnapshot();
+      if (!current()) return;
       await this.refresh();
+      if (!current()) return;
       this.#setStatus(
         result?.created === false
           ? "Today's local snapshot already exists. It remains browser-local and is not a portable backup."
@@ -415,8 +435,9 @@ export class BackupView {
       return;
     }
 
-    await this.#runAction('Verifying backup integrity…', async () => {
+    await this.#runAction('Verifying backup integrity…', async (current) => {
       const result = await this.service.verifyBackup(file);
+      if (!current()) return;
       if (!result || result.valid === false)
         throw new Error(result?.message || 'Backup integrity verification failed.');
       this.verified = result;
@@ -435,31 +456,43 @@ export class BackupView {
 
   async #previewRestore() {
     if (!this.restoreSource || this.busy) return;
-    if (typeof this.service.previewRestore !== 'function') {
-      this.#setStatus('Restore preview is unavailable.', true);
-      return;
-    }
-    await this.#runAction('Building restore preview…', async () => {
-      const plan = await this.service.previewRestore(this.restoreSource);
+    const source = this.restoreSource;
+    this.restorePlan = null;
+    await this.#runAction('Building restore preview…', async (current) => {
+      await this.refreshPreview?.();
+      if (!current()) return;
+      let plan;
+      if (source.type === 'local') {
+        plan = await this.service.previewLocalSnapshot({ snapshotId: source.snapshotId });
+      } else {
+        // Re-read the selected source as well as the current destination.
+        const verified =
+          typeof this.service.verifyBackup === 'function'
+            ? await this.service.verifyBackup(source.file ?? source.verified?.text)
+            : source.verified;
+        if (!current()) return;
+        if (!verified || verified.valid === false) throw new Error('The selected backup could not be verified.');
+        this.verified = verified;
+        this.restoreSource = { ...source, verified };
+        plan = await this.service.previewRestore(this.restoreSource);
+      }
+      if (!current()) return;
       if (!plan || plan.valid === false) throw new Error(plan?.message || 'The restore preview could not be built.');
-      this.#showRestorePlan(plan, 'portable backup');
+      this.#showRestorePlan(plan, source.type === 'local' ? 'local snapshot' : 'portable backup');
     });
   }
 
   async #onSnapshotClick(event) {
     const button = event.target.closest('button[data-snapshot-id]');
     if (!button || this.busy || typeof this.service.previewLocalSnapshot !== 'function') return;
-    await this.#runAction('Building local snapshot preview…', async () => {
-      const snapshotId = button.dataset.snapshotId;
-      const plan = await this.service.previewLocalSnapshot({ snapshotId });
-      if (!plan || plan.valid === false) throw new Error(plan?.message || 'The local snapshot could not be previewed.');
-      this.restoreSource = { type: 'local', snapshotId };
-      this.verified = plan.verified || { valid: true };
-      this.#showRestorePlan(plan, 'local snapshot');
-    });
+    this.epoch++;
+    this.restoreSource = { type: 'local', snapshotId: button.dataset.snapshotId };
+    this.verified = null;
+    await this.#previewRestore();
   }
 
   #showRestorePlan(plan, label) {
+    this.stale = false;
     this.restorePlan = plan;
     const warnings = Array.isArray(plan.warnings) ? plan.warnings : [];
     if (this.els.preview) {
@@ -481,9 +514,11 @@ export class BackupView {
       this.#setStatus('Restore is blocked because explicit confirmation is unavailable.', true);
       return;
     }
+    const epoch = this.epoch;
+    const request = { ...this.restoreSource, plan: structuredClone(this.restorePlan), confirmed: true };
     const details = {
       source: this.restoreSource,
-      plan: this.restorePlan,
+      plan: request.plan,
       message:
         'Replace the current vault with this verified recovery source? NoteForge will prepare a separate safety backup download before applying the replacement.',
     };
@@ -495,7 +530,13 @@ export class BackupView {
     } catch (error) {
       this.busy = false;
       this.#syncActions();
+      if (epoch !== this.epoch || !this.open) return;
       this.#setStatus(error?.message || 'Restore confirmation failed.', true);
+      return;
+    }
+    if (epoch !== this.epoch || !this.open) {
+      this.busy = false;
+      this.#syncActions();
       return;
     }
     if (!approved) {
@@ -505,29 +546,37 @@ export class BackupView {
       return;
     }
 
-    await this.#runAction('Restoring verified backup…', async () => {
-      const result = await this.service.restoreBackup({
-        ...this.restoreSource,
-        plan: this.restorePlan,
-        confirmed: true,
-      });
-      this.onRestored?.(result);
+    await this.#runAction('Restoring verified backup…', async (current) => {
+      const result = await this.service.restoreBackup(request);
+      if (!current()) return;
+      await this.onRestored?.(result);
+      if (!current()) return;
       this.verified = null;
       this.restorePlan = null;
       this.restoreSource = null;
       if (this.els.file) this.els.file.value = '';
       await this.refresh();
-      this.#setStatus('Restore completed successfully.');
+      if (current()) this.#setStatus('Restore completed successfully.');
     });
   }
 
   async #runAction(message, action) {
+    const epoch = this.epoch;
+    const current = () => epoch === this.epoch && this.open;
     this.busy = true;
     this.#syncActions();
     this.#setStatus(message);
     try {
-      await action();
+      await action(current);
     } catch (error) {
+      if (!current()) return;
+      if (error?.code === 'stale_plan') {
+        this.stale = true;
+        this.restorePlan = null;
+        this.#setStatus('The source or current vault changed. Refresh the restore preview and review it again.', true);
+        return;
+      }
+      this.restorePlan = null;
       this.#setStatus(error?.message || 'The backup action failed.', true);
       if (this.els.preview && /verify|backup|restore/i.test(error?.message || '')) {
         this.els.preview.innerHTML = `<div class="backup-view__notice backup-view__notice--error" role="alert"><strong>The backup action failed.</strong><p>${escapeHtml(error?.message || 'Unknown error.')}</p></div>`;
@@ -543,9 +592,12 @@ export class BackupView {
     if (this.els.download) this.els.download.disabled = this.busy;
     if (this.els.createSnapshot) this.els.createSnapshot.disabled = this.busy || !this.snapshotAvailable;
     if (this.els.verify) this.els.verify.disabled = this.busy || !hasFile;
-    if (this.els.previewRestore)
+    if (this.els.file) this.els.file.disabled = this.busy;
+    if (this.els.previewRestore) {
       this.els.previewRestore.disabled =
-        this.busy || !this.restoreSource || this.restoreSource.type !== 'portable' || !this.verified;
+        this.busy || !this.restoreSource || (this.restoreSource.type === 'portable' && !this.verified);
+      this.els.previewRestore.textContent = this.stale ? 'Refresh restore preview' : 'Preview restore';
+    }
     if (this.els.restore) this.els.restore.disabled = this.busy || !this.restorePlan;
   }
 

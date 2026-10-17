@@ -1,8 +1,9 @@
 // Deterministic app states for the accessibility and visual suites. Every state
-// starts from a fresh profile of the production build (Vite preview under
+// starts from an explicitly activated disposable vault in the production build (Vite preview under
 // /noteforge/) with the suite's fixed clock, so the seeded sample notes, their
 // timestamps, and the open note are identical on every run.
-import { captureRuntimeErrors, newAppContext, previewRoot, TIMEOUT } from './runtime.mjs';
+import { activatedAppContext } from './activated-vault.mjs';
+import { captureRuntimeErrors, previewRoot, TIMEOUT } from './runtime.mjs';
 
 export const VIEWPORTS = {
   390: { width: 390, height: 844 },
@@ -184,7 +185,12 @@ async function settle(page) {
  * and navigate to `surface`. Returns the context (close it) and the page.
  */
 export async function openSurface(browser, { viewport, theme = 'light', surface = 'shell', runtimeErrors }) {
-  const context = await newAppContext(browser, { viewport: VIEWPORTS[viewport], serviceWorkers: 'block' });
+  const context = await activatedAppContext(
+    browser,
+    new URL('noteforge/', previewRoot()).href,
+    { viewport: VIEWPORTS[viewport], serviceWorkers: 'block' },
+    runtimeErrors,
+  );
   const page = await context.newPage();
   if (runtimeErrors) captureRuntimeErrors(page, runtimeErrors);
   await page.goto(new URL('noteforge/', previewRoot()).href, { waitUntil: 'load', timeout: TIMEOUT });

@@ -58,3 +58,7 @@
     max-width: none;
   }
 }
+.bulk-actions [data-bulk-review] {
+  max-height: 12rem;
+  overflow: auto;
+}

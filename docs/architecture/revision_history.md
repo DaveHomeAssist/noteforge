@@ -77,3 +77,14 @@ A revision record is immutable and contains:
 ## Consequences
 
 This adds storage/index complexity but gives later multi-note mutations a common rollback boundary. Content addressing and hard retention bounds prevent history from growing without limit. Recovery is visibly reduced when durable IndexedDB is unavailable rather than silently pretending to work.
+
+## Reviewed restore precondition
+
+The History comparison captures a detached current note and mutation token
+before loading a revision. The confirmation handoff carries that same snapshot
+into restore. A newer local edit or remote commit invalidates the operation;
+History requires Refresh comparison and a second confirmation. The app refresh
+preserves queued or editor-owned drafts instead of adopting a new base over
+them. Safety capture and the atomic write validate the reviewed predecessor,
+so confirmation latency cannot silently broaden what is replaced. A dismissed
+confirmation cannot restore after History has been closed or reopened.

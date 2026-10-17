@@ -75,8 +75,9 @@ export function recordRecent(ids, noteId, valid = () => true) {
 
 /** Stateful adapter loaded after the first usable note. */
 export class NavigationController {
-  constructor(db, { state = createNavigationState(), recentIds = [] } = {}) {
+  constructor(db, { state = createNavigationState(), recentIds = [], saveRecent = (_ids) => {} } = {}) {
     this.db = db;
+    this.saveRecent = saveRecent;
     this.state = pruneNavigation(state, (id) => Boolean(db.getNote(id)));
     this.recentIds = normalizeRecentIds(recentIds, (id) => Boolean(db.getNote(id)));
   }
@@ -86,7 +87,7 @@ export class NavigationController {
     const recent = recordRecent(this.recentIds, id, (noteId) => Boolean(this.db.getNote(noteId)));
     if (JSON.stringify(recent) !== JSON.stringify(this.recentIds)) {
       this.recentIds = recent;
-      this.db.setConfig({ recentNoteIds: recent });
+      this.saveRecent(recent);
     }
   }
 
@@ -114,7 +115,7 @@ export class NavigationController {
     const recent = normalizeRecentIds(this.recentIds, valid);
     if (JSON.stringify(recent) !== JSON.stringify(this.recentIds)) {
       this.recentIds = recent;
-      this.db.setConfig({ recentNoteIds: recent });
+      this.saveRecent(recent);
     }
   }
 }

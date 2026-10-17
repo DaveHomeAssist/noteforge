@@ -46,6 +46,9 @@ export class QuickCaptureView {
     this.service = service;
     this.readClipboard = readClipboard || (() => navigator.clipboard?.readText?.());
     this.onSaved = onSaved;
+    this.session = 0;
+    this.activeSave = null;
+    this.pendingCapture = null;
     this.modal = new Modal(els.overlay, { initialFocus: () => this.els.text });
     this.els.form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -60,6 +63,12 @@ export class QuickCaptureView {
   }
 
   show({ payload = null, destinationId = null } = {}) {
+    this.session++;
+    this.activeSave = null;
+    this.pendingCapture = null;
+    const submit = this.els.form.querySelector('[type="submit"]');
+    submit.disabled = false;
+    submit.textContent = 'Save capture';
     this.#renderDestinations(destinationId);
     this.els.title.value = payload?.title || '';
     this.els.text.value = payload?.text || '';
@@ -112,37 +121,72 @@ export class QuickCaptureView {
     }
   }
 
+  #fields() {
+    return {
+      title: this.els.title.value,
+      text: this.els.text.value,
+      url: this.els.url.value,
+      file: this.els.image.files?.[0] || null,
+      selected: this.els.destination.value,
+      newTitle: this.els.newTitle.value,
+    };
+  }
+
   async #save() {
+    if (this.activeSave || !this.open) return;
+    const session = this.session;
+    const attempt = this.pendingCapture || { fields: this.#fields(), input: null };
+    this.activeSave = attempt;
+    const current = () => this.open && session === this.session && this.activeSave === attempt;
     const submit = this.els.form.querySelector('[type="submit"]');
     submit.disabled = true;
     this.els.status.textContent = 'Preparing capture…';
     try {
-      const file = this.els.image.files?.[0] || null;
-      const imageDataUrl = file ? await fileToBannerDataURL(file) : '';
-      const markdown = buildCaptureMarkdown({
-        title: this.els.title.value,
-        text: this.els.text.value,
-        url: this.els.url.value,
-        imageDataUrl,
-        imageAlt: file?.name?.replace(/\.[^.]+$/, '') || '',
-      });
-      const selected = this.els.destination.value;
-      const destination = selected === 'new' ? 'new' : selected.startsWith('existing:') ? 'existing' : 'inbox';
-      const result = await this.service.save({
-        destination,
-        noteId: destination === 'existing' ? selected.slice('existing:'.length) : null,
-        newTitle: this.els.newTitle.value,
-        markdown,
-      });
-      this.els.status.textContent = `Saved to “${result.note.title}”.`;
-      this.els.text.value = '';
-      this.els.url.value = '';
-      this.els.image.value = '';
-      this.onSaved(result);
+      if (!attempt.input) {
+        const { title, text, url, file, selected, newTitle } = attempt.fields;
+        const imageDataUrl = file ? await fileToBannerDataURL(file) : '';
+        if (!current()) return;
+        const markdown = buildCaptureMarkdown({
+          title,
+          text,
+          url,
+          imageDataUrl,
+          imageAlt: file?.name?.replace(/\.[^.]+$/, '') || '',
+        });
+        const destination = selected === 'new' ? 'new' : selected.startsWith('existing:') ? 'existing' : 'inbox';
+        attempt.input = {
+          destination,
+          noteId: destination === 'existing' ? selected.slice('existing:'.length) : null,
+          newTitle,
+          markdown,
+        };
+      }
+      this.pendingCapture = attempt;
+      const result = await this.service.save(attempt.input);
+      if (!current()) return;
+      this.pendingCapture = null;
+      const fields = this.#fields();
+      const unchanged = Object.keys(fields).every((key) => fields[key] === attempt.fields[key]);
+      this.els.status.textContent = `Saved to “${result.note.title}”.${unchanged ? '' : ' New input has not been saved.'}`;
+      if (unchanged) {
+        this.els.text.value = '';
+        this.els.url.value = '';
+        this.els.image.value = '';
+        try {
+          await this.onSaved(result);
+        } catch {
+          if (current())
+            this.els.status.textContent = `Saved to “${result.note.title}”. The destination could not be opened.`;
+        }
+      }
     } catch (error) {
-      this.els.status.textContent = error?.message || String(error);
+      if (current()) this.els.status.textContent = error?.message || String(error);
     } finally {
-      submit.disabled = false;
+      if (this.activeSave === attempt && session === this.session) {
+        this.activeSave = null;
+        submit.disabled = false;
+        submit.textContent = this.pendingCapture ? 'Retry capture' : 'Save capture';
+      }
     }
   }
 }

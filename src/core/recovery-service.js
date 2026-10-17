@@ -1,3 +1,4 @@
+import { stalePlan } from './stale-plan.js';
 import { downloadText } from '../utils/download.js';
 import { CURRENT_SCHEMA_VERSION } from './migrations.js';
 import { Note } from './note.js';
@@ -69,24 +70,36 @@ export class RecoveryService {
   async previewRevision({ noteId, revisionId }) {
     const current = this.db.notes.get(noteId);
     if (!current) throw new Error('The current note no longer exists.');
+    const token = this.db.captureMutationToken();
+    const currentNote = detached(current.toJSON());
     const revision = await this.revisions.materialize(revisionId);
     if (revision.noteId !== noteId) throw new Error('The selected revision belongs to another note.');
     return {
       revision,
       snapshot: { ...detached(revision.metadata), content: revision.content },
-      currentNote: current.toJSON(),
+      currentNote,
+      token,
     };
   }
 
-  async restore({ noteId, revisionId }) {
+  async restore({ noteId, revisionId, preview = null }) {
     const current = this.db.notes.get(noteId);
     if (!current) throw new Error('The note to restore no longer exists.');
-    const prepared = await this.revisions.prepareRestore(current, revisionId, { restoredAt: this.now() });
-    const restored = Note.fromJSON(prepared.payload);
-    this.db.saveNote(restored, { captureRevision: false });
-    if (!(await this.db.flushCurrentWrites()))
-      throw new Error('The safety revision was kept, but the restored note could not be saved.');
-    return { note: restored, safetyRevision: prepared.safetyCapture.revision };
+    if (preview && (preview.revision?.id !== revisionId || preview.currentNote?.id !== noteId || !preview.token)) {
+      throw new TypeError('The restore preview does not match the selected note and revision.');
+    }
+    const token = preview ? detached(preview.token) : this.db.captureMutationToken();
+    const before = detached(preview ? preview.currentNote : current.toJSON());
+    const payload = await this.revisions.buildRestorePayload(Note.fromJSON(before), revisionId, {
+      restoredAt: this.now(),
+    });
+    const restored = Note.fromJSON(payload);
+    let safetyCapture;
+    await this.db.commitPlannedNotes([restored.toJSON()], [before], 'pre_restore', token, async (expected, reason) => {
+      safetyCapture = await this.revisions.capture(expected[0], { reason, force: true });
+      return safetyCapture.captured;
+    });
+    return { note: restored, safetyRevision: safetyCapture.revision };
   }
 
   async restoreAsCopy({ noteId, revisionId }) {
@@ -131,14 +144,14 @@ export class RecoveryService {
   }
 
   async ensureRollingSnapshots() {
-    const state = this.vaultState();
+    const state = await this.db.readCommittedVault();
     const daily = await this.revisions.createSnapshot(state, { kind: 'daily', createdAt: this.now() });
     const weekly = await this.revisions.createSnapshot(state, { kind: 'weekly', createdAt: this.now() });
     return { daily, weekly };
   }
 
   async createLocalSnapshot() {
-    return this.revisions.createSnapshot(this.vaultState(), { kind: 'daily', createdAt: this.now() });
+    return this.revisions.createSnapshot(await this.db.readCommittedVault(), { kind: 'daily', createdAt: this.now() });
   }
 
   async listLocalSnapshots() {
@@ -147,7 +160,7 @@ export class RecoveryService {
 
   async createBackup() {
     const { createBackup, serializeBackup, verifyBackup } = await loadBackupCore();
-    const envelope = await createBackup(this.vaultState(), { createdAt: this.now().toISOString() });
+    const envelope = await createBackup(await this.db.readCommittedVault(), { createdAt: this.now().toISOString() });
     await verifyBackup(envelope);
     return {
       envelope,
@@ -161,12 +174,14 @@ export class RecoveryService {
     };
   }
 
-  async downloadBackup() {
+  async downloadBackup({ recordTimestamp = true } = {}) {
     const result = await this.createBackup();
     this.download(result.text, result.filename, 'application/json');
-    const timestamp = this.now().toISOString();
-    this.db.setConfig({ lastPortableBackupAt: timestamp });
-    await this.db.flushCurrentWrites();
+    if (recordTimestamp) {
+      const timestamp = this.now().toISOString();
+      this.db.setConfig({ lastPortableBackupAt: timestamp });
+      await this.db.flushCurrentWrites();
+    }
     return { ...result, message: 'Portable JSON backup verified and downloaded.' };
   }
 
@@ -187,13 +202,18 @@ export class RecoveryService {
   }
 
   async previewRestore(source) {
+    const token = this.db.captureMutationToken();
+    const state = this.vaultState();
     const { createRestorePreview } = await loadBackupCore();
     const verified = source?.verified;
     if (!verified?.envelope) throw new Error('Verify the portable backup before previewing it.');
-    return createRestorePreview(this.vaultState(), verified.envelope);
+    const plan = await createRestorePreview(state, verified.envelope);
+    return { ...plan, token, sourceFingerprint: JSON.stringify(plan.restoreState) };
   }
 
   async previewLocalSnapshot({ snapshotId }) {
+    const token = this.db.captureMutationToken();
+    const state = this.vaultState();
     const { createBackup, createRestorePreview } = await loadBackupCore();
     const snapshot = await this.revisions.materializeSnapshot(snapshotId);
     const snapshotState = {
@@ -202,8 +222,13 @@ export class RecoveryService {
       config: snapshot.config ?? {},
     };
     const envelope = await createBackup(snapshotState, { createdAt: snapshot.createdAt });
-    const plan = await createRestorePreview(this.vaultState(), envelope);
-    return { ...plan, verified: { valid: true, local: true } };
+    const plan = await createRestorePreview(state, envelope);
+    return {
+      ...plan,
+      token,
+      sourceFingerprint: JSON.stringify(plan.restoreState),
+      verified: { valid: true, local: true },
+    };
   }
 
   async restoreBackup({ confirmed, plan, type, file, verified, snapshotId }) {
@@ -220,11 +245,14 @@ export class RecoveryService {
     } else {
       throw new Error('The recovery source is missing or unsupported.');
     }
+    if (JSON.stringify(freshPlan.restoreState) !== plan.sourceFingerprint) {
+      throw stalePlan('The backup changed after preview. Verify it and review the restore again.');
+    }
     // A portable safety artifact is generated immediately before replacement.
     // This is independent of browser-local history and survives site-data loss.
     const safety = await this.createBackup();
     this.download(safety.text, `noteforge-pre-restore-${fileDate(this.now())}.json`, 'application/json');
-    const restored = await this.db.replaceVault(freshPlan.restoreState);
+    const restored = await this.db.replaceVault(freshPlan.restoreState, plan.token, { rejectStale: true });
     if (!restored)
       throw new Error('The current vault was left in memory because the restore batch could not be saved.');
     return { restored: true, summary: freshPlan.summary };

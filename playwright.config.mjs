@@ -39,6 +39,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
+    ...['chromium', 'firefox', 'webkit'].map((browserName) => ({
+      name: `durability-${browserName}`,
+      testMatch: ['editor-scale.spec.mjs', 'identity-commit.spec.mjs', 'editor-save-state.spec.mjs', 'capture-receipts.spec.mjs', 'durability.spec.mjs', 'vault-transactions.spec.mjs', 'legacy-storage.spec.mjs', 'storage-recovery.spec.mjs', 'conflict-recovery.spec.mjs', 'vault-refresh.spec.mjs', 'planned-preview.spec.mjs', 'editor-adoption.spec.mjs', 'review-findings.spec.mjs', 'legacy-capture.spec.mjs'],
+      use: { browserName, channel: undefined },
+    })),
     {
       name: 'features',
       testMatch: ['features.spec.mjs', 'smokes.spec.mjs', 'dialogs.spec.mjs', 'shell.spec.mjs', 'banner.spec.mjs'],

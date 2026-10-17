@@ -96,9 +96,9 @@ export class Modal {
     this.#restoreFocus();
   }
 
-  /** Replace a trigger that was re-rendered while the dialog stayed open. */
+  /** Resolve a trigger at close when it can be re-rendered while the dialog is open. */
   setReturnFocus(element) {
-    if (element && typeof element.focus === 'function') this._returnFocus = element;
+    if (typeof element === 'function' || (element && typeof element.focus === 'function')) this._returnFocus = element;
   }
 
   /** (Re)apply the initial focus — call after rebuilding panel contents. */
@@ -120,12 +120,12 @@ export class Modal {
     if (typeof f === 'function') el = f();
     else if (typeof f === 'string') el = (this.panel || this.overlay).querySelector(f);
     else if (f) el = f;
-    if (!el || el.offsetParent === null) el = this.panel || this.#focusables()[0] || null;
+    if (!el || el.offsetParent === null || el.matches(':disabled')) el = this.panel || this.#focusables()[0] || null;
     return el;
   }
 
   #restoreFocus() {
-    const prev = this._returnFocus;
+    const prev = typeof this._returnFocus === 'function' ? this._returnFocus() : this._returnFocus;
     this._returnFocus = null;
     const shown = (el) =>
       el &&

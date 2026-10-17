@@ -13,7 +13,7 @@ export function createFindReplaceElements(root = document.querySelector('.main')
   panel.innerHTML = `<header><h2 id="find-replace-title">Find and replace</h2><div class="find-replace__scope" role="group" aria-label="Search scope"><button type="button" class="btn btn--ghost" data-scope="current" aria-pressed="true">Current note</button><button type="button" class="btn btn--ghost" data-scope="vault" aria-pressed="false">Vault</button></div><button type="button" class="btn btn--ghost" data-find-close aria-label="Close find and replace">${icon('x')}</button></header>
     <div class="find-replace__controls"><label>Find<input id="find-input" type="text" autocomplete="off"></label><label>Replace with<input id="replace-input" type="text" autocomplete="off"></label><label class="find-replace__check"><input id="find-case" type="checkbox"> Match case</label><label class="find-replace__check"><input id="find-word" type="checkbox"> Whole word</label><label class="find-replace__check find-replace__vault-option" hidden><input id="find-archive" type="checkbox"> Include Archive</label><label class="find-replace__check find-replace__vault-option" hidden><input id="find-trash" type="checkbox"> Include Trash</label></div>
     <div class="find-replace__actions"><button type="button" class="btn btn--ghost" data-find-prev>Previous</button><button type="button" class="btn btn--ghost" data-find-next>Next</button><button type="button" class="btn btn--ghost" data-find-preview>Preview</button><button type="button" class="btn btn--primary" data-find-apply disabled>Apply</button></div>
-    <div class="find-replace__preview" aria-live="polite"></div><footer><span class="find-replace__status" role="status" aria-live="polite"></span></footer>`;
+    <div class="find-replace__preview" role="region" aria-label="Replacement preview" tabindex="0" aria-live="polite"></div><footer><span class="find-replace__status" role="status" aria-live="polite"></span></footer>`;
   root?.insertBefore(panel, root.firstChild);
   return {
     panel,
@@ -30,13 +30,17 @@ export function createFindReplaceElements(root = document.querySelector('.main')
 }
 
 export class FindReplaceView {
-  constructor(els, db, editor, { confirmVaultApply = () => false, onApplied = () => {} } = {}) {
+  constructor(els, db, editor, { confirmVaultApply = () => false, onApplied = () => {}, refreshPreview } = {}) {
     this.els = els;
     this.db = db;
     this.editor = editor;
     this.bulk = new BulkOperations(db);
     this.confirmVaultApply = confirmVaultApply;
     this.onApplied = onApplied;
+    this.refreshPreview = refreshPreview;
+    this.epoch = 0;
+    this.busy = false;
+    this.stale = false;
     this.scope = 'current';
     this.plan = null;
     this.matchIndex = -1;
@@ -55,8 +59,11 @@ export class FindReplaceView {
       els.includeArchived,
       els.includeTrash,
     ]) {
-      input.addEventListener('input', () => this.#invalidate());
-      input.addEventListener('change', () => this.#invalidate());
+      const invalidate = () => {
+        if (this.inputState !== this.#inputState()) this.#invalidate();
+      };
+      input.addEventListener('input', invalidate);
+      input.addEventListener('change', invalidate);
     }
   }
 
@@ -72,6 +79,7 @@ export class FindReplaceView {
   }
 
   close() {
+    this.#invalidate();
     this.els.panel.hidden = true;
     this.els.status.textContent = '';
     this.editor.container.querySelector('.editor__title')?.focus();
@@ -95,12 +103,27 @@ export class FindReplaceView {
     this.#invalidate();
   }
 
+  #inputState() {
+    return JSON.stringify([
+      this.els.find.value,
+      this.els.replacement.value,
+      this.els.caseSensitive.checked,
+      this.els.wholeWord.checked,
+      this.els.includeArchived.checked,
+      this.els.includeTrash.checked,
+    ]);
+  }
+
   #invalidate() {
+    this.inputState = this.#inputState();
+    this.epoch++;
+    this.stale = false;
     this.plan = null;
     this.matchIndex = -1;
     this.els.apply.disabled = true;
     this.els.status.textContent = 'Choose Preview before applying changes.';
     this.els.preview.innerHTML = '<p class="muted">No data has been changed.</p>';
+    this.#syncApply();
   }
 
   #onClick(event) {
@@ -114,6 +137,8 @@ export class FindReplaceView {
   }
 
   #preview() {
+    if (this.busy) return;
+    this.inputState = this.#inputState();
     if (this.scope === 'vault') return this.#previewVault();
     const note = this.editor.currentId ? this.db.getNote(this.editor.currentId) : null;
     if (!note) {
@@ -134,14 +159,46 @@ export class FindReplaceView {
     this.els.status.textContent = this.plan.count ? 'Preview ready.' : 'No matches in the current note.';
   }
 
-  #previewVault() {
-    this.plan = this.bulk.planVaultReplace({
+  async #previewVault() {
+    const epoch = ++this.epoch;
+    const options = {
       query: this.els.find.value,
       replacement: this.els.replacement.value,
       ...this.#options(),
       includeArchived: this.els.includeArchived.checked,
       includeTrash: this.els.includeTrash.checked,
-    });
+    };
+    this.plan = null;
+    this.busy = true;
+    this.#syncApply();
+    this.els.status.textContent = 'Refreshing saved notes for a new preview…';
+    try {
+      if (this.refreshPreview) await this.refreshPreview();
+      if (epoch !== this.epoch || !this.open) return;
+      this.stale = false;
+      this.plan = this.bulk.planVaultReplace(options);
+      this.#renderVaultPreview();
+    } catch (error) {
+      if (epoch === this.epoch && this.open) this.els.status.textContent = error?.message || String(error);
+    } finally {
+      this.busy = false;
+      this.#syncApply();
+    }
+  }
+
+  #syncApply() {
+    this.els.apply.disabled =
+      this.busy ||
+      this.stale ||
+      !(this.scope === 'vault' ? this.plan?.valid && this.plan.changed.length : this.plan?.changed);
+    const preview = this.els.panel.querySelector('[data-find-preview]');
+    if (preview) {
+      preview.disabled = this.busy;
+      preview.textContent = this.stale ? 'Refresh preview' : 'Preview';
+    }
+  }
+
+  #renderVaultPreview() {
     if (!this.plan.valid) {
       this.els.preview.innerHTML = `<p class="find-replace__error" role="alert">${escapeHtml(this.plan.message)}</p>`;
       this.els.status.textContent = this.plan.message;
@@ -180,7 +237,7 @@ export class FindReplaceView {
   }
 
   async #apply() {
-    if (!this.plan) return;
+    if (!this.plan || this.busy || this.stale) return;
     if (this.scope === 'current') {
       if (this.editor.currentId !== this.plan.noteId || this.editor.getSourceMarkdown() !== this.plan.source) {
         this.#preview();
@@ -195,24 +252,39 @@ export class FindReplaceView {
       return;
     }
     if (!this.plan.valid || !this.plan.changed.length) return;
-    if (
-      !(await this.confirmVaultApply({
-        message: `Apply replacements to ${this.plan.changed.length} note${this.plan.changed.length === 1 ? '' : 's'}? Every affected note requires a local safety revision first.`,
-        plan: this.plan,
-      }))
-    )
-      return;
-    this.els.apply.disabled = true;
-    this.els.status.textContent = 'Applying revision-protected vault replacement…';
+    const plan = this.plan;
+    const epoch = this.epoch;
+    this.busy = true;
+    this.#syncApply();
     try {
-      const report = await this.bulk.applyVaultReplace(this.plan);
+      const approved = await this.confirmVaultApply({
+        message: `Apply replacements to ${plan.changed.length} note${plan.changed.length === 1 ? '' : 's'}? Every affected note requires a local safety revision first.`,
+        plan,
+      });
+      if (epoch !== this.epoch || !this.open || plan !== this.plan) return;
+      if (!approved) {
+        this.els.status.textContent = 'Vault replacement cancelled.';
+        return;
+      }
+      this.els.status.textContent = 'Applying revision-protected vault replacement…';
+      const report = await this.bulk.applyVaultReplace(plan);
+      if (epoch !== this.epoch || !this.open) return;
+      this.plan = null;
       this.els.status.textContent = `${report.changed.length} changed · ${report.unchanged.length} unchanged · ${report.skipped.length} skipped · ${report.failed.length} failed.`;
       this.onApplied({ scope: 'vault', report });
-      this.plan = null;
     } catch (error) {
-      const report = error.report || { changed: [], unchanged: [], skipped: [], failed: this.plan.changed };
-      this.els.status.textContent = `${error?.message || error} ${report.changed.length} changed · ${report.unchanged.length} unchanged · ${report.skipped.length} skipped · ${report.failed.length} failed.`;
-      this.els.apply.disabled = false;
+      if (epoch !== this.epoch || !this.open) return;
+      this.stale = error?.code === 'stale_plan';
+      if (this.stale) {
+        this.plan = null;
+        this.els.status.textContent = 'Notes changed. Refresh the preview and review it before applying.';
+      } else {
+        const report = error.report || { changed: [], unchanged: [], skipped: [], failed: plan.changed };
+        this.els.status.textContent = `${error?.message || error} ${report.changed.length} changed · ${report.unchanged.length} unchanged · ${report.skipped.length} skipped · ${report.failed.length} failed.`;
+      }
+    } finally {
+      this.busy = false;
+      this.#syncApply();
     }
   }
 }

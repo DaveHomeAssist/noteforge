@@ -4,6 +4,7 @@ import '../components/accessibility-hardening.css';
 export class Phase6Controller {
   constructor({
     db,
+    windowState,
     primaryEditor,
     primaryElement,
     onWorkspaceCreated,
@@ -15,9 +16,12 @@ export class Phase6Controller {
     showStorageError,
     announce,
     confirm,
+    refreshPreview,
   }) {
     this.confirm = confirm;
+    this.refreshPreview = refreshPreview;
     this.db = db;
+    this.windowState = windowState;
     this.primaryEditor = primaryEditor;
     this.primaryElement = primaryElement;
     this.onWorkspaceCreated = onWorkspaceCreated;
@@ -46,6 +50,7 @@ export class Phase6Controller {
       primaryElement: this.primaryElement,
       primaryEditor: this.primaryEditor,
       db: this.db,
+      windowState: this.windowState,
       actions: this.primaryEditor.actions,
       beforeHandoff: () => this.db.flushCurrentWrites(),
       onCommitOpen: (id, options) => this.commitOpen(id, options),
@@ -108,6 +113,7 @@ export class Phase6Controller {
       .then(([{ ReconciliationView, createReconciliationElements }, { ReconciliationService }, recovery]) => {
         const service = new ReconciliationService({ db: this.db, recovery });
         this.reconciliation = new ReconciliationView(createReconciliationElements(), this.db, service, {
+          refreshPreview: this.refreshPreview,
           confirmApply: ({ message }) =>
             this.confirm({ title: 'Apply the folder changes?', message, confirmLabel: 'Apply' }),
           onApplied: (report) =>

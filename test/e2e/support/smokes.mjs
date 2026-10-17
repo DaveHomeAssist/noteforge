@@ -4,6 +4,7 @@
 // context through `newAppContext` (fixed clock, time zone, locale), asserts with
 // a fail-fast `check`, and returns its PASS lines for the report attachment.
 
+import { activatedAppContext } from './activated-vault.mjs';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { captureRuntimeErrors, confirmAll, confirmNext, newAppContext, TIMEOUT } from './runtime.mjs';
@@ -108,7 +109,7 @@ export async function warmLazyAppModules(browser, base) {
 }
 
 export async function runRecoverySmoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
+  const context = await activatedAppContext(browser, base, { viewport: { width: 390, height: 844 } }, runtimeErrors);
   const page = await context.newPage();
   await page.route(
     '**/src/components/history-view.js*',
@@ -440,7 +441,7 @@ export async function runRecoverySmoke(browser, base, runtimeErrors) {
 }
 
 export async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
+  const context = await activatedAppContext(browser, base, { viewport: { width: 390, height: 844 } }, runtimeErrors);
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
@@ -683,7 +684,7 @@ export async function runLinkIntegritySmoke(browser, base, runtimeErrors) {
 }
 
 export async function runPhase3Smoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
+  const context = await activatedAppContext(browser, base, { viewport: { width: 390, height: 844 } }, runtimeErrors);
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];
@@ -764,6 +765,7 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
     await page.locator('#find-input').fill('needle');
     await page.locator('#replace-input').fill('done');
     await page.locator('[data-find-preview]').click();
+    await page.locator('[data-find-apply]:not([disabled])').waitFor({ state: 'visible' });
     const previewText = await page.locator('.find-replace__preview').innerText();
     check(
       'integrated vault replace preview reports active changes and Archive/Trash skips',
@@ -995,7 +997,7 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
 }
 
 export async function runPhase4Smoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
+  const context = await activatedAppContext(browser, base, { viewport: { width: 390, height: 844 } }, runtimeErrors);
   const page = await context.newPage();
   let releaseDailyImport = () => {};
   let markDailyImportRequested;
@@ -1532,7 +1534,7 @@ export async function runPhase4Smoke(browser, base, runtimeErrors) {
 }
 
 export async function runPhase5Smoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 } });
+  const context = await activatedAppContext(browser, base, { viewport: { width: 390, height: 844 } }, runtimeErrors);
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.__phase5Clipboard = '';
@@ -1722,6 +1724,7 @@ export async function runPhase5Smoke(browser, base, runtimeErrors) {
     await page.evaluate(() => window.app.openNote('phase5-invalid'));
     await page.locator('.editor__properties').click();
     await page.locator('#properties-overlay').waitFor({ state: 'visible' });
+    await page.locator('.properties-raw-form textarea:not([disabled])').waitFor({ state: 'visible' });
     check(
       'invalid YAML remains visible while typed property controls fail closed',
       await page.evaluate(
@@ -1732,8 +1735,10 @@ export async function runPhase5Smoke(browser, base, runtimeErrors) {
     );
     await page.locator('.properties-raw-form textarea').fill('---\naliases: [Repair Later]\nunknown: keep\n---');
     await page.locator('.properties-raw-form button[type="submit"]').click();
-    await page.waitForFunction(() =>
-      /Raw YAML source saved/.test(document.querySelector('#properties-status')?.textContent || ''),
+    await page.waitForFunction(
+      () => /Raw YAML source saved/.test(document.querySelector('#properties-status')?.textContent || ''),
+      undefined,
+      { timeout: 15_000 },
     );
     check(
       'raw repair re-enables typed controls and preserves the note body',
@@ -1770,6 +1775,17 @@ export async function runPhase5Smoke(browser, base, runtimeErrors) {
         title: window.app?.db?.getNote?.(window.app?.currentId)?.title || '',
         appStatus: document.querySelector('#app-status')?.textContent || '',
         propertiesStatus: document.querySelector('#properties-status')?.textContent || '',
+        editors: Object.values(window.app?.workspace?.editors || {}).map((editor) => ({
+          id: editor.currentId,
+          canRefresh: editor.canRefreshFromStorage(),
+          editing: editor.blockEditor?.isEditing(),
+          focusedId: editor.blockEditor?.focusedId,
+          source: editor.blockEditor?.serialize(),
+          baseline: editor._sourceContent,
+          saved: window.app.db.getNote(editor.currentId)?.content,
+          title: editor.container.querySelector('.editor__title')?.value,
+          active: editor.container.contains(document.activeElement),
+        })),
         openOverlay: [...document.querySelectorAll('.modal:not([hidden])')].map((node) => node.id),
       }))
       .catch(() => null);
@@ -1782,7 +1798,12 @@ export async function runPhase5Smoke(browser, base, runtimeErrors) {
 }
 
 export async function runPhase6Smoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const context = await activatedAppContext(
+    browser,
+    base,
+    { viewport: { width: 1280, height: 900 }, acceptDownloads: true },
+    runtimeErrors,
+  );
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.__phase6Clipboard = '';
@@ -2092,7 +2113,12 @@ export async function runPhase6Smoke(browser, base, runtimeErrors) {
 }
 
 export async function runPhase7Smoke(browser, base, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const context = await activatedAppContext(
+    browser,
+    base,
+    { viewport: { width: 1280, height: 900 }, acceptDownloads: true },
+    runtimeErrors,
+  );
   const page = await context.newPage();
   await confirmAll(page, 'accept');
   captureRuntimeErrors(page, runtimeErrors);
@@ -2376,7 +2402,12 @@ export async function runPhase7Smoke(browser, base, runtimeErrors) {
 
 // `root` is the Vite preview of the production build that global setup started.
 export async function runProductionOfflineSmoke(browser, root, runtimeErrors) {
-  const context = await newAppContext(browser, { viewport: { width: 390, height: 844 }, serviceWorkers: 'allow' });
+  const context = await activatedAppContext(
+    browser,
+    new URL('/noteforge/', root).href,
+    { viewport: { width: 390, height: 844 }, serviceWorkers: 'allow' },
+    runtimeErrors,
+  );
   const page = await context.newPage();
   captureRuntimeErrors(page, runtimeErrors);
   const checks = [];

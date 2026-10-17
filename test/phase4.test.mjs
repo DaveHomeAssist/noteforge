@@ -239,21 +239,15 @@ test('calendar aggregation combines Daily notes, date blocks, and due tasks whil
   assert.equal(calendarPeriod('month', '2026-08-20').days.length, 42);
 });
 
-test('CaptureService creates/reuses Inbox and routes exact Markdown through durable normal saves', async () => {
-  const { db, backend, captures } = await database();
+test('CaptureService never claims an exact commit from an unversioned injected backend', async () => {
+  const { db, backend } = await database();
   const service = new CaptureService(db);
-  const first = await service.save({ destination: 'inbox', markdown: 'First capture' });
-  assert.equal(first.created, true);
-  assert.equal(first.note.title, 'Inbox');
-  const second = await service.save({ destination: 'inbox', markdown: 'Second capture' });
-  assert.equal(second.created, false);
-  assert.equal(second.note.content, 'First capture\n\nSecond capture');
-  assert.equal(captures.at(-1).reason, 'quick_capture');
-  assert.equal(backend.values.get('notes').find((stored) => stored.id === second.note.id).content, second.note.content);
-  const other = db.createNote({ id: 'other', title: 'Other', content: 'Start' });
+  await assert.rejects(service.save({ destination: 'inbox', markdown: 'Retained capture' }), /still pending/);
   await db.flush();
-  await service.save({ destination: 'existing', noteId: other.id, markdown: 'Finish' });
-  assert.equal(db.getNote(other.id).content, 'Start\n\nFinish');
+  // This legacy test backend can store data but cannot acknowledge a note
+  // version. Real IndexedDB create/reuse/append acceptance lives in capture-receipts.spec.mjs.
+  assert.equal(backend.values.get('notes').find((stored) => stored.title === 'Inbox').content, 'Retained capture');
+  assert.equal(db.getNoteSaveState(db.getAllNotes().find((note) => note.title === 'Inbox').id).status, 'unavailable');
 });
 
 test('CaptureService reports failed persistence and refuses hidden Inbox ambiguity', async () => {
