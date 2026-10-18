@@ -472,3 +472,42 @@ test('Daily restore confirmation cannot appear after Escape during its lazy load
     await context.close();
   }
 });
+
+test('a pending Capture survives same-owner workspace initialization', async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  let releaseWorkspace, releaseCapture;
+  const workspace = new Promise((resolve) => (releaseWorkspace = resolve));
+  const capture = new Promise((resolve) => (releaseCapture = resolve));
+  let requested = false;
+  await page.route(/\/assets\/phase6-[^/]+\.js$/, async (route) => {
+    await workspace;
+    await route.continue();
+  });
+  await page.route(/\/assets\/quick-capture-view-[^/]+\.js$/, async (route) => {
+    requested = true;
+    await capture;
+    await route.continue();
+  });
+  try {
+    await page.goto(previewRoot(), { waitUntil: 'load' });
+    await page.waitForFunction(() => window.app?.ready);
+    await page.evaluate(() => window.app.ready);
+    expect(await page.evaluate(() => Boolean(window.app.workspace))).toBe(false);
+    await invoke(page, 'capture');
+    await expect.poll(() => requested).toBe(true);
+    releaseWorkspace();
+    await page.waitForFunction(() => window.app.workspace);
+    await page.evaluate(() => window.app.phase6Ready);
+    releaseCapture();
+    await expect(page.locator('#quick-capture-overlay')).toBeVisible();
+    await expect(page.locator('#quick-capture-overlay')).toHaveCount(1);
+    expect(errors).toEqual([]);
+  } finally {
+    releaseWorkspace();
+    releaseCapture();
+    await context.close();
+  }
+});

@@ -1154,7 +1154,7 @@ class App {
     const ownerEditor = this.workspace?.activeEditor || this.editor;
     const owner = ownerEditor?.container;
     const noteId = this.currentId;
-    const pane = this.workspace?.state.activePane;
+    const pane = this.workspace?.state.activePane ?? 'primary';
     return this.features.run({
       key,
       label,
@@ -1165,7 +1165,7 @@ class App {
         (!owner || owner.isConnected) &&
         ownerEditor?.currentId === noteId &&
         this.currentId === noteId &&
-        this.workspace?.state.activePane === pane,
+        (this.workspace?.state.activePane ?? 'primary') === pane,
     });
   }
 
