@@ -66,6 +66,7 @@ over. CI runs it after every build on Node 22 and 24.
 | 2026-10-03 | Separate per-window session state, not releasable | 85,269 B (1,301 B over) | 19,653 B | 42,259 B | 246,229 B (2,517 B over) |
 | 2026-10-04 | Atomic identity checkpoint, not releasable | 87,494 B (3,526 B over) | 20,288 B | 43,253 B | 253,172 B (9,460 B over) |
 | 2026-10-04 | Final Phase 1 candidate f64812d with option C; limits rebaselined to the approved caps | 92,770 B | 20.3 KiB | 42.2 KiB | 258,731 B |
+| 2026-10-18 | Feature recovery: essential CSS and invocation boundary in shell; feature JS and History presentation stay lazy; caps unchanged | 98,873 B | 19,974 B | 42,222 B | 262,719 B |
 
 The session-state change adds no dependencies and does not raise any limit.
 Its build remains blocked by the existing shell/precache budgets. It separates

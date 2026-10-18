@@ -22,6 +22,9 @@ for (const theme of ['light', 'dark']) {
       test(`${surface} · ${theme} · ${viewport}`, async ({ browser, runtimeErrors }) => {
         const { context, page } = await openSurface(browser, { viewport, theme, surface, runtimeErrors });
         try {
+          // Closing the library menu can leave the pointer over a note row.
+          // Compare Trash itself without a load-timing-dependent sidebar hover.
+          if (surface === 'trash') await page.mouse.move(0, 0);
           await expect(page).toHaveScreenshot(`${surface}-${theme}-${viewport}.png`, {
             animations: 'disabled',
             caret: 'hide',

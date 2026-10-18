@@ -18,6 +18,16 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 
 ## [Unreleased]
 
+### Fixed
+- Optional feature failures now have accessible loading, cancellation and bounded
+  recovery. Dismissed or superseded openings cannot appear later or steal focus.
+- Concurrent openings reuse feature loads and singleton dialogs. Explicit Quick
+  Capture payloads survive cancellation without changing their destination.
+- Essential Properties, Capture, Palette and Backup styles ship with the shell;
+  failed optional stylesheets require a safe reload instead of opening unstyled.
+- Save and reload waits for durable writes; draft export remains available when
+  saving fails. Feature JavaScript stays lazy and all size caps are unchanged.
+
 ### Added
 - Each note now saves on its own with a version check in one IndexedDB transaction, so edits to different notes in different windows both survive, and a stale save of the same note is kept as a draft to review instead of overwriting the newer version. Rename, bulk and other previewed changes are rejected if anything they depend on changed after the preview.
 - **Changes need review** compares a kept draft with the saved note and offers keep the saved version, save the draft as a copy, or replace the saved version, without overwriting anything automatically.

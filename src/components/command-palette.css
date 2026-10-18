@@ -1,5 +1,4 @@
-/* Command palette styles. Deferred with the lazily imported palette module so
-   they stay out of the shell route budget (test/bundle-budgets.json). */
+/* Essential palette layout and controls ship with the shell; feature JavaScript stays lazy. */
 
 /* --- command palette ------------------------------------------------------ */
 

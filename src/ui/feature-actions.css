@@ -1,0 +1,20 @@
+.feature-status {
+  position: fixed;
+  z-index: 1000;
+  inset: auto 16px 72px auto;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 104px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.feature-status > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

@@ -6,6 +6,7 @@
 import { escapeHtml } from '../utils/helpers.js';
 import { Modal } from './modal.js';
 import './recovery.css';
+import './history-view.css';
 import { icon } from '../ui/icons.js';
 
 const REASON_LABELS = {

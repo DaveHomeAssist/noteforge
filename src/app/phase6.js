@@ -64,7 +64,7 @@ export class Phase6Controller {
     return this;
   }
 
-  async #ensureClipper() {
+  async prepareClipper() {
     if (this.clipper) return this.clipper;
     if (this.clipperReady) return this.clipperReady;
     this.clipperReady = import('../components/clipper-view.js')
@@ -84,7 +84,7 @@ export class Phase6Controller {
 
   async showClipper() {
     await this.ready;
-    (await this.#ensureClipper()).show();
+    (await this.prepareClipper()).show();
   }
 
   async openClipperIntake(input = window.location.href) {
@@ -102,7 +102,7 @@ export class Phase6Controller {
     return true;
   }
 
-  async #ensureReconciliation() {
+  async prepareReconciliation() {
     if (this.reconciliation) return this.reconciliation;
     if (this.reconciliationReady) return this.reconciliationReady;
     this.reconciliationReady = Promise.all([
@@ -132,7 +132,7 @@ export class Phase6Controller {
 
   async showReconciliation() {
     await this.ready;
-    const view = await this.#ensureReconciliation();
+    const view = await this.prepareReconciliation();
     this.workspace.flushPending();
     if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show();

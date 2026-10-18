@@ -71,6 +71,12 @@ and dark mode — all stored in your browser, no backend required.
   autocomplete. Display text, heading fragments, and embeds parse from one
   source-aware grammar; rename previews every affected note/link, captures safety
   revisions, rewrites atomically, and keeps the old title as an alias.
+- **Feature recovery** — optional tools report loading or failure without an
+  unhandled error. Cancel or navigate away to dismiss pending openings. A failed
+  network load permits one explicit retry; persistent failures offer **Save and
+  reload**, **Export drafts**, and **Dismiss**. Reload waits for confirmed saved
+  writes. The draft export contains in-memory notes and editor drafts; it is a
+  recovery aid, not a verified portable backup.
 - **Collapsible note context** — the panel button beside Properties hides or shows
   the outline, backlinks, and mentions together, returning space to the editor.
   Your choice is remembered across notes, split panes, and reloads.
