@@ -17,7 +17,7 @@ const OVERSCAN = 6; // rows rendered beyond the viewport on each side
 
 export class NoteList {
   /**
-   * @param {{ list:HTMLElement, tags:HTMLElement, count:HTMLElement, search:HTMLInputElement, sort?:HTMLSelectElement }} els
+   * @param {{ list:HTMLElement, tags:HTMLElement, count:HTMLElement, search:HTMLInputElement, sort?:HTMLSelectElement, select?:HTMLButtonElement }} els
    * @param {import('../core/database.js').Database} db
    * @param {{ onOpen:(id:string)=>void, onTogglePin:(id:string)=>void,
    *           onOpenArchived?:(id:string)=>void, onReparent?:(id:string, parentId:string|null)=>void,
@@ -39,6 +39,8 @@ export class NoteList {
     this.activeId = null;
     this.dragId = null;
     this.selection = createSelection();
+    this.selectionMode = !els.select;
+    els.select?.addEventListener('click', () => this.setSelectionMode(!this.selectionMode));
     const collapsed = windowState.get('collapsed');
     this.collapsed = new Set(Array.isArray(collapsed) ? collapsed : []);
 
@@ -89,6 +91,17 @@ export class NoteList {
     return this._rows?.length || 0;
   }
 
+  setSelectionMode(enabled) {
+    this.selectionMode = enabled;
+    if (!enabled) this.clearSelection();
+    if (this.els.select) {
+      this.els.select.textContent = enabled ? 'Done' : 'Select';
+      this.els.select.setAttribute('aria-pressed', String(enabled));
+      this.els.select.setAttribute('aria-label', enabled ? 'Finish selecting notes' : 'Select notes');
+    }
+    this.#renderList();
+  }
+
   getSelection() {
     return [...this.selection.ids];
   }
@@ -102,6 +115,7 @@ export class NoteList {
 
   focusSelectionControl(id) {
     if (!id || !(this._rows || []).some((row) => row.note.id === id)) return false;
+    if (!this.selectionMode) this.setSelectionMode(true);
     this.reveal(id);
     const control = this.els.list.querySelector(`.note-item[data-id="${CSS.escape(id)}"] [data-select]`);
     control?.focus();
@@ -137,15 +151,15 @@ export class NoteList {
     const chips = counts
       .map(
         ([tag, n]) => `
-        <button class="tag-chip ${this.activeTag === tag ? 'tag-chip--on' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${this.activeTag === tag}">
+        <button class="tag-chip ${this.activeTag === tag ? 'tag-chip--on' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${this.activeTag === tag}" aria-label="Filter by ${escapeHtml(tag)}, ${n} notes">
           #${escapeHtml(tag)}<span class="tag-chip__n">${n}</span>
         </button>`,
       )
       .join('');
     const clear = this.activeTag
-      ? `<button class="tag-chip tag-chip--clear" data-tag="">${icon('x')} clear</button>`
+      ? `<button class="tag-chip tag-chip--clear" data-tag="">${icon('x')} Clear filter</button>`
       : '';
-    this.els.tags.innerHTML = chips + clear;
+    this.els.tags.innerHTML = '<span class="tag-filter__label">Filter by tag</span>' + chips + clear;
   }
 
   #onTagClick(e) {
@@ -318,14 +332,14 @@ export class NoteList {
     return `
         <div class="note-item ${note.id === this.activeId ? 'note-item--on' : ''} ${note.pinned ? 'note-item--pinned' : ''} ${note.isArchived ? 'note-item--archived' : ''} ${this.selection.ids.has(note.id) ? 'note-item--selected' : ''}"
              data-id="${escapeHtml(note.id)}" draggable="true" style="--depth:${depth}"${note.id === this.activeId ? ' aria-current="page"' : ''}>
-          <button type="button" class="note-item__select" data-select role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? icon('check') : ''}</button>
+          <button type="button" class="note-item__select" data-select ${this.selectionMode ? '' : 'hidden'} role="checkbox" aria-checked="${this.selection.ids.has(note.id)}" aria-label="Select ${escapeHtml(note.title || 'Untitled')}">${this.selection.ids.has(note.id) ? icon('check') : ''}</button>
           ${twist}
           <button class="note-item__main" data-open>
             <span class="note-item__title">${title}</span>
             <span class="note-item__snippet">${this.#hlSubstring(truncate(note.content, 90), freeText)}</span>
             <span class="note-item__meta">
-              ${formatDate(note.updatedAt)}
-              ${note.tags.length ? `· ${note.tags.map((t) => '#' + escapeHtml(t)).join(' ')}` : ''}
+              ${this.#sortMode() === 'title' ? '' : formatDate(this.#sortMode() === 'created' ? note.createdAt : note.updatedAt)}
+              ${this.activeTag ? '' : note.tags.map((t) => '#' + escapeHtml(t)).join(' ')}
             </span>
           </button>
           ${note.isArchived ? '<span class="note-item__state">Archived</span>' : `<button class="note-item__add" data-add title="New sub-note" aria-label="New sub-note">＋</button><button class="note-item__pin" data-pin title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">${icon('pin')}</button>`}
@@ -366,6 +380,13 @@ export class NoteList {
   }
 
   #onListKeydown(event) {
+    if (event.key === 'Escape' && this.els.select && this.selectionMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setSelectionMode(false);
+      this.els.select.focus();
+      return;
+    }
     const select = event.target.closest('[data-select]');
     const item = select?.closest('.note-item');
     const ordered = (this._rows || []).map((row) => row.note.id);

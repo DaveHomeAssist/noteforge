@@ -120,3 +120,7 @@
     flex-direction: column;
   }
 }
+.saved-searches--empty {
+  padding-block: 2px;
+  border-bottom: 0;
+}

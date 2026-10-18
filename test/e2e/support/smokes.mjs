@@ -881,7 +881,11 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
 
     stage = 'applying batch tag and Trash actions';
     await openSidebar();
+    if ((await page.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await page.locator('#select-notes').click();
     await page.locator('.note-item[data-id="phase3-batch-a"] [data-select]').click();
+    if ((await page.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await page.locator('#select-notes').click();
     await page.locator('.note-item[data-id="phase3-batch-b"] [data-select]').click();
     await page.locator('.bulk-actions').waitFor({ state: 'visible' });
     await page.locator('[data-bulk-tag]').fill('reviewed');
@@ -898,7 +902,11 @@ export async function runPhase3Smoke(browser, base, runtimeErrors) {
         return revisions.some((revision) => revision.reason === 'pre_bulk_action');
       }),
     );
+    if ((await page.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await page.locator('#select-notes').click();
     await page.locator('.note-item[data-id="phase3-batch-a"] [data-select]').click();
+    if ((await page.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await page.locator('#select-notes').click();
     await page.locator('.note-item[data-id="phase3-batch-b"] [data-select]').click();
     await page.locator('.bulk-actions').waitFor({ state: 'visible' });
     await confirmNext(page, 'accept');
@@ -2623,6 +2631,8 @@ export async function runProductionOfflineSmoke(browser, root, runtimeErrors) {
     checks.push('PASS  production find/replace and saved-view chunks work on first use offline');
     await page.locator('[data-find-close]').click();
     await page.locator('#sidebar-toggle').click();
+    if ((await page.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await page.locator('#select-notes').click();
     await page.locator('.note-item [data-select]').first().click();
     await page.locator('.bulk-actions').waitFor({ state: 'visible' });
     checks.push('PASS  production multi-select bulk-action chunk opens on first use offline');

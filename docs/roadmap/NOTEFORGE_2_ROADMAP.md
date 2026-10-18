@@ -247,3 +247,10 @@ Sprint records live in [`docs/roadmap/sprints/`](sprints/); the first is [Phase 
 8. Replace the byte ceiling with per-route gzip budgets in `test/bundle-budget.mjs`.
 9. Write NFM spec v1 from the existing parsers; commit the corpus; prune branches; tag `v1.1.0`.
 10. Start the Phase 1 token file and icon sprite behind a feature flag; open the design review with screenshots at 390 / 1440 / 2560.
+
+### Six component clarity increment
+
+The [component clarity brief](../implementation/component_clarity.md) scopes the
+rail, breadcrumb, workspace actions, tabs, note header and library improvements.
+Implementation and focused regression coverage are on the release branch; final
+CI, both deployments and runtime evidence must be verified before release closure.

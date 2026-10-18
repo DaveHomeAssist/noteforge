@@ -15,6 +15,7 @@ import {
 } from '../utils/workspace.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { icon } from '../ui/icons.js';
+import { bindActionMenu } from '../ui/action-menu.js';
 
 const otherPane = (name) => (name === 'primary' ? 'secondary' : 'primary');
 
@@ -70,7 +71,7 @@ export class WorkspaceView {
       this.#restoreScroll('primary');
       return this;
     }
-    if (primaryId && primaryId !== outgoingId) this.primaryEditor.open(primaryId);
+    if (primaryId !== outgoingId) this.primaryEditor.open(primaryId);
     if (secondaryId) this.secondaryEditor.open(secondaryId);
     if (activeId && activeId !== outgoingId) {
       this.state.activePane = this.#locate(activeId)?.pane || this.state.activePane;
@@ -96,24 +97,29 @@ export class WorkspaceView {
           <button type="button" class="btn btn--ghost" data-pane-visible="primary">Pane 1</button>
           <button type="button" class="btn btn--ghost" data-pane-visible="secondary">Pane 2</button>
         </div>
-        <span class="workspace__status muted" aria-live="polite"></span>
-        <button type="button" class="btn btn--ghost" data-move-active aria-label="Move the active tab to the other pane" title="Move to other pane (Alt+Shift+M)">${icon('arrow-left-right')}</button>
-        <button type="button" class="btn btn--ghost" data-close-active aria-label="Close the active tab" title="Close tab (Delete)">${icon('x')}</button>
-        <button type="button" class="btn btn--ghost workspace__action" data-reopen>${icon('rotate-ccw')}<span class="workspace__label">Reopen tab</span></button>
+        <span class="workspace__status sr-only" aria-live="polite"></span>
         <button type="button" class="btn btn--ghost workspace__action" data-split aria-pressed="false">${icon('columns-2')}<span class="workspace__label">Split view</span></button>
+        <button type="button" class="btn btn--ghost" data-action-menu title="Tab actions" aria-label="Tab actions" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-actions">${icon('ellipsis')}</button>
+        <div id="workspace-actions" class="action-menu" role="menu" aria-label="Tab actions" popover>
+          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-move-active aria-label="Move active tab to other pane">${icon('arrow-left-right')} Move to other pane <kbd>Alt+Shift+M</kbd></button>
+          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-close-active aria-label="Close active tab">${icon('x')} Close tab <kbd>Delete</kbd></button>
+          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-reopen>${icon('rotate-ccw')} Reopen tab</button>
+        </div>
       </header>
       <div class="workspace__panes">
         <section class="workspace__pane" data-pane="primary" aria-label="Primary note pane">
-          <div class="workspace-tabs" role="tablist" aria-label="Primary open notes"></div>
+          <div class="workspace__pane-header"><div class="workspace-tabs" role="tablist" aria-label="Primary open notes"></div></div>
         </section>
         <div class="workspace__splitter" role="separator" aria-label="Resize note panes" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" tabindex="0"></div>
         <section class="workspace__pane" data-pane="secondary" aria-label="Secondary note pane">
-          <div class="workspace-tabs" role="tablist" aria-label="Secondary open notes"></div>
+          <div class="workspace__pane-header"><div class="workspace-tabs" role="tablist" aria-label="Secondary open notes"></div></div>
           <section class="editor editor--secondary"></section>
         </section>
       </div>`;
     primaryElement.parentNode.insertBefore(this.element, primaryElement);
     this.element.querySelector('[data-pane="primary"]').appendChild(primaryElement);
+    this.toolbar = this.element.querySelector('.workspace__toolbar');
+    this.disposeMenu = bindActionMenu(this.toolbar);
     this.secondaryElement = this.element.querySelector('.editor--secondary');
     this.panesElement = this.element.querySelector('.workspace__panes');
     this.statusElement = this.element.querySelector('.workspace__status');
@@ -169,7 +175,10 @@ export class WorkspaceView {
     this.state = activateWorkspacePane(this.state, located.pane);
     this.state.panes[located.pane].activeNoteId = noteId;
     this.#persist();
-    await this.onCommitOpen(noteId, { workspaceCommitted: true, preserveEditor });
+    await this.onCommitOpen(noteId, {
+      workspaceCommitted: true,
+      preserveEditor,
+    });
     if (focusTab) this.#tab(noteId)?.focus();
     return true;
   }
@@ -300,6 +309,7 @@ export class WorkspaceView {
   }
 
   destroy() {
+    this.disposeMenu?.();
     this.secondaryEditor.destroy();
     for (const timer of this.scrollTimers.values()) clearTimeout(timer);
     this.scrollTimers.clear();
@@ -346,6 +356,8 @@ export class WorkspaceView {
       button.classList.toggle('btn--active', this.state.activePane === pane);
       button.setAttribute('aria-pressed', String(this.state.activePane === pane));
     }
+    const header = this.element.querySelector(`[data-pane="${this.state.activePane}"] .workspace__pane-header`);
+    if (this.toolbar.parentElement !== header) header.appendChild(this.toolbar);
     this.#renderTabs();
   }
 
@@ -360,7 +372,7 @@ export class WorkspaceView {
           if (!note || note.isTrashed) return '';
           const selected = id === active;
           const tabIndex = selected || (!active && this.state.panes[pane].tabs[0] === id) ? '0' : '-1';
-          // The tablist may own only tabs, so the per-tab move and close buttons
+          // The tablist may own only tabs, so the per-tab close buttons
           // are pointer affordances outside the accessibility tree. Everyone else
           // uses the labelled toolbar actions for the active tab (touch screen
           // readers included) or Delete and Alt+Shift+M (aria-keyshortcuts).
@@ -371,7 +383,6 @@ export class WorkspaceView {
             aria-selected="${selected}" tabindex="${tabIndex}" title="${escapeHtml(note.title)}${note.isArchived ? ' — archived' : ''}">
             <span>${escapeHtml(note.title || 'Untitled')}</span>${note.isArchived ? '<span class="workspace-tab__state">Archived</span>' : ''}
           </button>
-          <button type="button" class="workspace-tab__move" data-move="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Move to other pane (Alt+Shift+M)">${icon('arrow-left-right')}</button>
           <button type="button" class="workspace-tab__close" data-close-tab="${escapeHtml(id)}" aria-hidden="true" tabindex="-1" title="Close tab (Delete)">${icon('x')}</button>
         </div>`;
         })
@@ -482,10 +493,8 @@ export class WorkspaceView {
     this.element.addEventListener('click', (event) => {
       const tab = event.target.closest('[data-tab]');
       const close = event.target.closest('[data-close-tab]');
-      const move = event.target.closest('[data-move]');
       const pane = event.target.closest('[data-pane-visible]');
       if (close) void this.closeTab(close.dataset.closeTab);
-      else if (move) void this.moveToOtherPane(move.dataset.move);
       else if (tab) void this.activate(tab.dataset.tab);
       else if (pane) {
         const noteId = this.state.panes[pane.dataset.paneVisible].activeNoteId;

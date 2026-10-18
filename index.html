@@ -45,6 +45,7 @@
       <button id="rail-sidebar-btn" class="rail__btn rail__btn--desktop" aria-label="Notes sidebar" aria-controls="sidebar" aria-expanded="true" title="Show or hide the notes sidebar (Ctrl+\)"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-panel-left"></use></svg></button>
       <button id="rail-search-btn" class="rail__btn" aria-label="Search notes" title="Search (Ctrl+K)"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-search"></use></svg></button>
       <button id="capture-btn" class="rail__btn" aria-label="Open Quick Capture" title="Quick Capture (Ctrl+Shift+C)"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-inbox"></use></svg></button>
+      <span class="rail__divider" aria-hidden="true"></span>
       <button id="rail-tasks-btn" class="rail__btn" aria-label="Tasks" aria-pressed="false" title="Tasks"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-square-check-big"></use></svg></button>
       <button id="rail-calendar-btn" class="rail__btn" aria-label="Calendar" aria-pressed="false" title="Calendar"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-calendar"></use></svg></button>
       <button id="graph-btn" class="rail__btn" aria-label="Toggle graph view" aria-pressed="false" title="Graph view"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-waypoints"></use></svg></button>
@@ -64,7 +65,7 @@
           </div>
           <button id="new-note-btn" class="btn btn--primary" title="New note (Ctrl+N)"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-plus"></use></svg> New</button>
           <div class="menu">
-            <button id="menu-btn" class="btn btn--ghost" title="More" aria-label="More actions" aria-haspopup="menu" aria-controls="menu-dropdown" aria-expanded="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-ellipsis"></use></svg></button>
+            <button id="menu-btn" class="btn btn--ghost" title="Library actions" aria-label="Library actions" aria-haspopup="menu" aria-controls="menu-dropdown" aria-expanded="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="%BASE_URL%icons.svg#i-ellipsis"></use></svg></button>
             <div class="menu__dropdown" id="menu-dropdown" role="menu" aria-labelledby="menu-btn" hidden>
               <div class="menu__group" role="group" aria-labelledby="menu-group-create">
                 <div class="menu__label" aria-hidden="true" id="menu-group-create">Create</div>
@@ -110,10 +111,16 @@
 
       <div class="search">
         <input type="search" id="search-input" class="search__input"
-               placeholder="Search…  (Ctrl+K)  ·  tag: in:title has:banner" autocomplete="off" />
+               placeholder="Search notes…" aria-label="Search notes" aria-describedby="search-help" autocomplete="off" />
+        <kbd class="search__shortcut" aria-hidden="true">Ctrl/⌘ K</kbd>
+        <p id="search-help" class="search__help">Filter with <code>tag:projects</code>, <code>in:title</code> or <code>has:banner</code>.</p>
       </div>
 
+      <div id="tag-filter" class="tag-filter" role="group" aria-label="Filter notes by tag"></div>
+
       <div class="list-controls">
+        <div class="list-controls__heading"><h2>Notes</h2><span id="note-count" class="muted" aria-live="polite"></span></div>
+        <button id="select-notes" type="button" class="btn btn--ghost" aria-label="Select notes" aria-pressed="false">Select</button>
         <label class="sort-field">Sort
           <select id="sort-select" class="sort-select" title="Sort notes">
             <option value="updated">Updated</option>
@@ -123,13 +130,8 @@
         </label>
       </div>
 
-      <div id="tag-filter" class="tag-filter"></div>
-
       <div id="note-list" class="note-list"></div>
 
-      <footer class="sidebar__footer">
-        <span id="note-count" class="muted"></span>
-      </footer>
       <div class="sidebar__resize" id="sidebar-resize" role="separator" aria-orientation="vertical" aria-controls="sidebar" aria-label="Resize notes sidebar" aria-valuemin="240" aria-valuemax="480" aria-valuenow="320" tabindex="0"></div>
     </aside>
 

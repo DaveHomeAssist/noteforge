@@ -17,7 +17,7 @@ export function createSavedSearchElements({
   const section = document.createElement('section');
   section.className = 'saved-searches';
   section.setAttribute('aria-labelledby', 'saved-searches-title');
-  section.innerHTML = `<header><h2 id="saved-searches-title">Saved views</h2><button type="button" class="btn btn--ghost" data-saved-manage aria-label="Manage saved views">Manage</button></header><div class="saved-searches__list"></div><button type="button" class="saved-searches__save" data-saved-create>＋ Save current search</button><span class="saved-searches__status sr-only" role="status" aria-live="polite"></span>`;
+  section.innerHTML = `<header><h2 id="saved-searches-title">Saved views</h2><button type="button" class="btn btn--ghost" data-saved-manage aria-label="Manage saved views">Manage</button></header><div class="saved-searches__list"></div><button type="button" class="saved-searches__save" data-saved-create>＋ Save this search</button><span class="saved-searches__status sr-only" role="status" aria-live="polite"></span>`;
   sidebarAnchor?.parentNode?.insertBefore(section, sidebarAnchor);
 
   const overlay = document.createElement('div');
@@ -104,6 +104,10 @@ export class SavedSearchesView {
   }
 
   render() {
+    const empty = this.records.length === 0;
+    this.els.section.querySelector('header').hidden = empty;
+    this.els.list.hidden = empty;
+    this.els.section.classList.toggle('saved-searches--empty', empty);
     this.els.list.innerHTML = this.records.length
       ? this.records
           .map(

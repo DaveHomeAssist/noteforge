@@ -1,5 +1,16 @@
 # Changelog
 
+## Component clarity
+
+- Grouped rail utilities with keyboard-visible labels, a compact hosted breadcrumb,
+  and one desktop row for tabs and workspace actions.
+- Added accessible Tab actions and Note actions menus; context highlighting now
+  means the panel is open. Selected tabs remain distinct from keyboard focus.
+- Simplified search help, empty saved views, counts, sorting, tag filters and
+  explicit bulk selection. Existing notes and drafts are preserved.
+- Removed the repeated heading from newly loaded Project Ideas sample notes only.
+
+
 All notable changes to NoteForge are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are git tags
 on `main` and the live surfaces (systembydave.com/noteforge, the GitHub Pages

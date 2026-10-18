@@ -44,6 +44,18 @@ async function visible(page, selector) {
 /** name → how to reach it from the booted shell. */
 export const SURFACES = {
   shell: async () => {},
+  'tab-actions': async (page) => {
+    await page.getByRole('button', { name: 'Tab actions', exact: true }).click();
+    await visible(page, '#workspace-actions');
+  },
+  'note-actions': async (page) => {
+    await page.getByRole('button', { name: 'Note actions', exact: true }).click();
+    await visible(page, '.editor .action-menu');
+  },
+  'note-selection': async (page) => {
+    await page.locator('#select-notes').click();
+    await page.locator('.note-item [data-select]').first().click();
+  },
   menu: async (page) => {
     await openMenu(page);
   },
@@ -130,7 +142,11 @@ export const SURFACES = {
   },
   // A notice with an action, as after moving a note to Trash.
   toast: async (page) => {
-    await page.evaluate(() => window.app.toast('Moved “Welcome” to Trash.', { action: { label: 'Undo', run() {} } }));
+    await page.evaluate(() =>
+      window.app.toast('Moved “Welcome” to Trash.', {
+        action: { label: 'Undo', run() {} },
+      }),
+    );
     await visible(page, '.toasts .toast .toast__close');
   },
   // A destructive confirmation with the pointer on its confirm button, so the
@@ -193,8 +209,13 @@ export async function openSurface(browser, { viewport, theme = 'light', surface 
   );
   const page = await context.newPage();
   if (runtimeErrors) captureRuntimeErrors(page, runtimeErrors);
-  await page.goto(new URL('noteforge/', previewRoot()).href, { waitUntil: 'load', timeout: TIMEOUT });
-  await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+  await page.goto(new URL('noteforge/', previewRoot()).href, {
+    waitUntil: 'load',
+    timeout: TIMEOUT,
+  });
+  await page.waitForFunction(() => window.app?.ready, undefined, {
+    timeout: TIMEOUT,
+  });
   await page.evaluate(() => window.app.ready);
   // Attached, not visible: on tablets the list starts inside the closed overlay.
   await page.locator('.note-item').first().waitFor({ state: 'attached', timeout: TIMEOUT });
@@ -202,6 +223,7 @@ export async function openSurface(browser, { viewport, theme = 'light', surface 
   if (theme === 'dark') {
     await page.locator('#theme-btn:visible, #mobile-theme-btn:visible').first().click();
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await page.mouse.move(0, 0);
   }
   await SURFACES[surface](page);
   await page.evaluate(() => document.fonts.ready);

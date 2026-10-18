@@ -65,9 +65,7 @@ This note is referenced by [[Welcome]].`,
   {
     title: 'Project Ideas',
     tags: ['projects'],
-    content: `# Project Ideas
-
-- A habit tracker that syncs with [[Welcome|this app]]
+    content: `- A habit tracker that syncs with [[Welcome|this app]]
 - Weekly review template
 - Reading list with ratings
 
