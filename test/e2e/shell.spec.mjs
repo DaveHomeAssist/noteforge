@@ -9,7 +9,9 @@ import { expect, test } from './support/test.mjs';
 async function reload(page) {
   await page.evaluate(() => window.app.db.flush());
   await page.reload({ waitUntil: 'load' });
-  await page.waitForFunction(() => window.app?.ready, undefined, { timeout: TIMEOUT });
+  await page.waitForFunction(() => window.app?.ready, undefined, {
+    timeout: TIMEOUT,
+  });
   await page.evaluate(() => window.app.ready);
 }
 
@@ -17,7 +19,10 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
   browser,
   runtimeErrors,
 }) => {
-  const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 1440,
+    runtimeErrors,
+  });
   try {
     const rail = page.getByRole('navigation', { name: 'Workspace' });
     for (const name of [
@@ -79,7 +84,9 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
     await expect(page.locator('#sidebar'), 'search expands a collapsed sidebar').toBeVisible();
     await expect(page.locator('#search-input')).toBeFocused();
 
-    const handle = page.getByRole('separator', { name: 'Resize notes sidebar' });
+    const handle = page.getByRole('separator', {
+      name: 'Resize notes sidebar',
+    });
     await handle.focus();
     await page.keyboard.press('ArrowRight');
     await expect(handle).toHaveAttribute('aria-valuenow', '336');
@@ -104,10 +111,13 @@ test('desktop rail opens its tools and the sidebar collapses and resizes, persis
 });
 
 test('the overflow menu is a grouped WAI-ARIA menu driven from the keyboard', async ({ browser, runtimeErrors }) => {
-  const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 1440,
+    runtimeErrors,
+  });
   try {
     const button = page.locator('#menu-btn');
-    const menu = page.getByRole('menu', { name: 'More actions' });
+    const menu = page.getByRole('menu', { name: 'Library actions' });
     await expect(button).toHaveAttribute('aria-haspopup', 'menu');
     await button.focus();
     await page.keyboard.press('ArrowDown');
@@ -171,7 +181,10 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
   browser,
   runtimeErrors,
 }) => {
-  const { context, page } = await openSurface(browser, { viewport: 390, runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 390,
+    runtimeErrors,
+  });
   try {
     const rail = page.getByRole('navigation', { name: 'Workspace' });
     const railBox = await rail.boundingBox();
@@ -184,7 +197,7 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
     }
     await expect(page.locator('#rail-sidebar-btn')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    for (const selector of ['.editor__properties', '.editor__pin', '.editor__delete']) {
+    for (const selector of ['.editor__properties', '.editor__context-toggle', '.editor__menu-toggle']) {
       const b = await page.locator(selector).boundingBox();
       expect(b.x + b.width, `${selector} stays on screen`).toBeLessThanOrEqual(390);
     }
@@ -196,7 +209,9 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
       centers.push(b.y + b.height / 2);
     }
     expect(Math.max(...centers) - Math.min(...centers), 'workspace toolbar actions fit on one row').toBeLessThan(12);
-    await expect(page.getByRole('button', { name: 'Reopen tab' })).toBeVisible();
+    await page.getByRole('button', { name: 'Tab actions', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Reopen tab' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await openMenu(page);
     const dropdown = await page.locator('#menu-dropdown').boundingBox();
@@ -219,14 +234,20 @@ test('phone layout: the rail is a bottom bar of touch targets and nothing overfl
 async function contextBeside(page, root = page) {
   const blocks = await root.locator('.editor__blocks').first().boundingBox();
   const backlinks = await root.locator('.backlinks').first().boundingBox();
-  return { beside: backlinks.x >= blocks.x + blocks.width, below: backlinks.y >= blocks.y + blocks.height - 1 };
+  return {
+    beside: backlinks.x >= blocks.x + blocks.width,
+    below: backlinks.y >= blocks.y + blocks.height - 1,
+  };
 }
 
 test('wide editors put outline, backlinks, and mentions in a context column; narrow ones stack them', async ({
   browser,
   runtimeErrors,
 }) => {
-  let { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  let { context, page } = await openSurface(browser, {
+    viewport: 1440,
+    runtimeErrors,
+  });
   try {
     const wide = await contextBeside(page);
     expect(wide.beside, 'backlinks sit beside the text at 1440 px').toBe(true);
@@ -243,7 +264,10 @@ test('wide editors put outline, backlinks, and mentions in a context column; nar
   } finally {
     await context.close();
   }
-  ({ context, page } = await openSurface(browser, { viewport: 390, runtimeErrors }));
+  ({ context, page } = await openSurface(browser, {
+    viewport: 390,
+    runtimeErrors,
+  }));
   try {
     const narrow = await contextBeside(page);
     expect(narrow.below, 'phones stack backlinks under the text').toBe(true);
@@ -254,7 +278,11 @@ test('wide editors put outline, backlinks, and mentions in a context column; nar
 
 test('the text column keeps its width in empty and short notes', async ({ browser, runtimeErrors }) => {
   for (const viewport of [1440, 390]) {
-    const { context, page } = await openSurface(browser, { viewport, surface: 'new-note', runtimeErrors });
+    const { context, page } = await openSurface(browser, {
+      viewport,
+      surface: 'new-note',
+      runtimeErrors,
+    });
     try {
       const title = await page.locator('.editor__title:visible').boundingBox();
       const blocks = page.locator('.editor__blocks:visible');
@@ -280,10 +308,16 @@ test('menus and dialogs animate in, and reduced motion removes the animation', a
   const animation = (locator) =>
     locator.evaluate((element) => {
       const style = getComputedStyle(element);
-      return { name: style.animationName, seconds: Number.parseFloat(style.animationDuration) };
+      return {
+        name: style.animationName,
+        seconds: Number.parseFloat(style.animationDuration),
+      };
     });
   for (const reducedMotion of ['no-preference', 'reduce']) {
-    const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+    const { context, page } = await openSurface(browser, {
+      viewport: 1440,
+      runtimeErrors,
+    });
     try {
       await page.emulateMedia({ reducedMotion });
       await page.locator('#menu-btn').click();
@@ -303,7 +337,10 @@ test('menus and dialogs animate in, and reduced motion removes the animation', a
 });
 
 test('tablets overlay the sidebar on the editor and close it after use', async ({ browser, runtimeErrors }) => {
-  const { context, page } = await openSurface(browser, { viewport: 768, runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 768,
+    runtimeErrors,
+  });
   try {
     const sidebar = page.locator('#sidebar');
     const toggle = page.getByRole('button', { name: 'Notes sidebar' });
@@ -359,7 +396,10 @@ test('the palette finds tags and filters the note list by one, keeping the sort'
   browser,
   runtimeErrors,
 }) => {
-  const { context, page } = await openSurface(browser, { viewport: 1440, runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 1440,
+    runtimeErrors,
+  });
   try {
     await page.locator('#sort-select').selectOption('title');
     await page.keyboard.press('Control+p');
@@ -382,9 +422,16 @@ for (const theme of ['light', 'dark']) {
       browser,
       runtimeErrors,
     }) => {
-      const { context, page } = await openSurface(browser, { viewport: 1440, theme, runtimeErrors });
+      const { context, page } = await openSurface(browser, {
+        viewport: 1440,
+        theme,
+        runtimeErrors,
+      });
       try {
-        await page.setViewportSize({ width, height: width === 375 ? 812 : width === 3840 ? 1080 : 900 });
+        await page.setViewportSize({
+          width,
+          height: width === 375 ? 812 : width === 3840 ? 1080 : 900,
+        });
         const toggle = page.locator('.editor__context-toggle').first();
         const blocks = page.locator('.editor__blocks').first();
         const before = await blocks.boundingBox();
@@ -447,7 +494,11 @@ test('context toggling preserves pending edits and follows notes and both panes'
   browser,
   runtimeErrors,
 }) => {
-  const { context, page } = await openSurface(browser, { viewport: 1440, surface: 'new-note', runtimeErrors });
+  const { context, page } = await openSurface(browser, {
+    viewport: 1440,
+    surface: 'new-note',
+    runtimeErrors,
+  });
   try {
     await page.locator('.blk').first().click();
     await page.keyboard.type('A draft survives context toggling');
@@ -464,7 +515,13 @@ test('context toggling preserves pending edits and follows notes and both panes'
     await reload(page);
     await expect(page.locator('.editor__blocks').first()).toContainText('A draft survives context toggling');
     await page.getByRole('button', { name: 'Split view', exact: true }).click();
-    await page.getByRole('button', { name: 'Move the active tab to the other pane', exact: true }).click();
+    await page.getByRole('button', { name: 'Tab actions', exact: true }).click();
+    await page
+      .getByRole('menuitem', {
+        name: 'Move active tab to other pane',
+        exact: true,
+      })
+      .click();
     await page.locator('.note-item__main').filter({ hasText: 'Welcome' }).first().click();
     const toggles = page.locator('.editor__context-toggle:visible');
     await expect(toggles).toHaveCount(2);

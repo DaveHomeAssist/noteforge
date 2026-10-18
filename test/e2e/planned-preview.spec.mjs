@@ -401,6 +401,8 @@ test('bulk stale action preserves its payload and requires a reviewed retry', as
   const context = await browser.newContext();
   try {
     const { app, writer } = await openWork(context);
+    if ((await app.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+      await app.locator('#select-notes').click();
     await app.locator('.note-item[data-id="a"] [data-select]').click();
     await app.locator('[data-bulk-tag]').fill('retained-tag');
     expect(await writer.evaluate(() => window.save('Remote body for bulk'))).toBe(true);
@@ -769,6 +771,8 @@ for (const action of ['archive', 'unarchive', 'reparent', 'trash']) {
         window.app.noteList.applySearchState({ query: action === 'unarchive' ? 'is:archived' : '' });
       }, action);
       await writer.evaluate(() => window.db.refreshCurrentVault());
+      if ((await app.locator('#select-notes').getAttribute('aria-pressed')) === 'false')
+        await app.locator('#select-notes').click();
       await app.locator('.note-item[data-id="a"] [data-select]').click();
       const apply = app.locator(`[data-bulk-action="${action}"]`);
       await expect(apply).toBeEnabled();

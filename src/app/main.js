@@ -173,7 +173,14 @@ class App {
     this.editor = new Editor(this.el.editor, this.db, actions);
     this.db.onFlushDrafts = () => this.editor?.flushPending();
     this.noteList = new NoteList(
-      { list: this.el.list, tags: this.el.tags, count: this.el.count, search: this.el.search, sort: this.el.sort },
+      {
+        list: this.el.list,
+        tags: this.el.tags,
+        count: this.el.count,
+        search: this.el.search,
+        sort: this.el.sort,
+        select: document.getElementById('select-notes'),
+      },
       this.db,
       {
         onOpen: (id) => this.openNote(id),
@@ -1333,6 +1340,12 @@ class App {
   // --- chrome (buttons, menu, import/export) ------------------------------
 
   #wireChrome() {
+    const rail = document.querySelector('.rail');
+    rail.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') rail.dataset.hintsHidden = '';
+    });
+    for (const type of ['pointerover', 'focusin']) rail.addEventListener(type, () => delete rail.dataset.hintsHidden);
+
     this.el.newBtn.addEventListener('click', () => this.newNote());
     this.el.graphBtn.addEventListener('click', () => this.toggleGraph());
     // Subject-area views announce themselves; the main area follows.
@@ -1607,6 +1620,10 @@ class App {
         if (!this.el.menuDropdown.hidden) {
           this.#closeMenu();
           this.el.menuBtn.focus();
+        } else if (this.noteList.selectionMode && this.el.sidebar.contains(e.target)) {
+          e.preventDefault();
+          this.noteList.setSelectionMode(false);
+          this.noteList.els.select?.focus();
         } else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();
         else if (this.tabletMql.matches && !this.#sidebarCollapsed()) {
           this.#closeSidebarOverlay();

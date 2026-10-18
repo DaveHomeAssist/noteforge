@@ -1730,8 +1730,8 @@
     const pin = container.querySelector('.editor__pin');
     const del = container.querySelector('.editor__delete');
     check('title input has an accessible name', title?.getAttribute('aria-label') === 'Note title');
-    check('pin button is named + keeps state in aria-pressed', pin?.getAttribute('aria-label') === 'Pin note' && pin.getAttribute('aria-pressed') === 'false');
-    check('delete button is named (no longer announced as "wastebasket")', del?.getAttribute('aria-label') === 'Delete note');
+    check('pin menu item is named + keeps state in aria-checked', pin?.getAttribute('aria-label') === 'Pin note' && pin.getAttribute('aria-checked') === 'false');
+    check('delete button is named (no longer announced as "wastebasket")', del?.getAttribute('aria-label') === 'Move to Trash');
   });
 
   section('block editor preserves undo history across a same-note rebuild', () => {
@@ -2560,8 +2560,8 @@
       const closeActive = workspace.element.querySelector('[data-close-active]');
       const moveActive = workspace.element.querySelector('[data-move-active]');
       check('Phase 6 toolbar gives the active tab labelled close and move actions outside the tablist',
-        closeActive?.getAttribute('aria-label') === 'Close the active tab'
-        && moveActive?.getAttribute('aria-label') === 'Move the active tab to the other pane'
+        closeActive?.getAttribute('aria-label') === 'Close active tab'
+        && moveActive?.getAttribute('aria-label') === 'Move active tab to other pane'
         && !closeActive.closest('[role="tablist"]') && !closeActive.disabled && !moveActive.disabled);
       const activeBefore = workspace.state.panes[workspace.state.activePane].activeNoteId;
       workspaceAnnouncement = '';

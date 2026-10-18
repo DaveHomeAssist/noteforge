@@ -131,9 +131,10 @@ export class Modal {
       el &&
       el !== document.body &&
       el.isConnected &&
+      !el.matches(':disabled') &&
       typeof el.focus === 'function' &&
       (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : el.offsetParent !== null);
-    // The trigger may live in a now-closed menu or a closed tablet sidebar.
+    // The trigger may be disabled while its action settles, or live in a closed menu/sidebar.
     const target = [prev, document.getElementById('menu-btn'), document.getElementById('rail-sidebar-btn')].find(shown);
     target?.focus();
   }

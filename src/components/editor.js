@@ -6,6 +6,7 @@ import { BlockEditor } from './block-editor.js';
 import { BannerControl } from './banner.js';
 import { escapeHtml, debounce, formatDate } from '../utils/helpers.js';
 import { icon } from '../ui/icons.js';
+import { bindActionMenu } from '../ui/action-menu.js';
 
 export class Editor {
   /**
@@ -113,7 +114,7 @@ export class Editor {
     const titleSelection = wasTitle ? [title.selectionStart, title.selectionEnd] : null;
     const wasBlock = this.blockEditor?.host.contains(active);
     const wasTagInput = active?.classList.contains('editor__tag-input');
-    const wasPin = active?.classList.contains('editor__pin');
+    const wasMenu = active?.matches('.editor__menu-toggle, .editor__pin');
     this.#render(note, replaced);
     const nextTitle = this.container.querySelector('.editor__title');
     if (titleDraft !== null && nextTitle) nextTitle.value = titleDraft;
@@ -126,8 +127,8 @@ export class Editor {
     } else if (wasTagInput) {
       const ti = this.container.querySelector('.editor__tag-input');
       if (ti) ti.focus();
-    } else if (wasPin) {
-      this.container.querySelector('.editor__pin')?.focus();
+    } else if (wasMenu) {
+      this.container.querySelector('.editor__menu-toggle')?.focus();
     }
   }
 
@@ -155,7 +156,9 @@ export class Editor {
     if (!btn || !note) return;
     btn.classList.toggle('editor__pin--on', note.pinned);
     btn.title = note.pinned ? 'Unpin' : 'Pin to top';
-    btn.setAttribute('aria-pressed', String(note.pinned));
+    btn.setAttribute('aria-checked', String(note.pinned));
+    btn.setAttribute('aria-label', note.pinned ? 'Unpin note' : 'Pin note');
+    btn.innerHTML = `${icon('pin')} ${note.pinned ? 'Unpin note' : 'Pin note'}`;
   }
 
   reflectTitle(id) {
@@ -197,6 +200,8 @@ export class Editor {
   // --- rendering ----------------------------------------------------------
 
   #teardown() {
+    this.disposeMenu?.();
+    this.disposeMenu = null;
     this._titleInput = null;
     this.titleComposing = false;
     this.saveStatus = null;
@@ -250,11 +255,14 @@ export class Editor {
         <div class="editor__tools">
           <button type="button" class="btn btn--ghost editor__context-toggle" aria-expanded="true"
                   aria-label="Hide note context" aria-controls="${contextId}-outline ${contextId}-backlinks ${contextId}-mentions"
-                  title="Hide outline, backlinks, and mentions">${icon('panel-right')}</button>
+                  title="Hide outline, backlinks, and mentions">${icon('panel-right')}<span>Context</span></button>
           <button class="btn btn--ghost editor__properties" title="Edit note properties" aria-label="Edit note properties">Properties</button>
-          <button class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
-                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="Pin note" aria-pressed="${note.pinned}">${icon('pin')}</button>
-          <button class="btn btn--danger-ghost editor__delete" title="Delete note" aria-label="Delete note">${icon('trash-2')}</button>
+          <button type="button" class="btn btn--ghost editor__menu-toggle" data-action-menu title="Note actions" aria-label="Note actions" aria-haspopup="menu" aria-expanded="false" aria-controls="${contextId}-actions">${icon('ellipsis')}</button>
+          <div id="${contextId}-actions" class="action-menu" role="menu" aria-label="Note actions" popover>
+          <button role="menuitemcheckbox" tabindex="-1" class="btn btn--ghost editor__pin ${note.pinned ? 'editor__pin--on' : ''}"
+                  title="${note.pinned ? 'Unpin' : 'Pin to top'}" aria-label="${note.pinned ? 'Unpin note' : 'Pin note'}" aria-checked="${note.pinned}">${icon('pin')} ${note.pinned ? 'Unpin note' : 'Pin note'}</button>
+          <button role="menuitem" tabindex="-1" class="btn btn--danger-ghost editor__delete" title="Delete note" aria-label="Move to Trash">${icon('trash-2')} Move to Trash</button>
+          </div>
         </div>
       </div>
 
@@ -386,6 +394,7 @@ export class Editor {
   // --- events -------------------------------------------------------------
 
   #wire(note) {
+    this.disposeMenu = bindActionMenu(this.container);
     this.container
       .querySelector('.editor__context-toggle')
       .addEventListener('click', () => this.actions.toggleContext?.());
@@ -482,7 +491,9 @@ export class Editor {
     for (const a of this.container.querySelectorAll('.backlinks__item')) {
       a.addEventListener('click', (e) => {
         e.preventDefault();
-        this.actions.openNote(a.dataset.id, { headingAnchor: a.dataset.contextAnchor || null });
+        this.actions.openNote(a.dataset.id, {
+          headingAnchor: a.dataset.contextAnchor || null,
+        });
       });
     }
 
@@ -539,7 +550,9 @@ export class Editor {
   #reflectSaveState() {
     if (!this.currentId || !this.saveStatus) return;
     const note = this.db.getNote(this.currentId);
-    const state = this.db.getNoteSaveState?.(this.currentId) ?? { status: 'unavailable' };
+    const state = this.db.getNoteSaveState?.(this.currentId) ?? {
+      status: 'unavailable',
+    };
     const titleDraft = this.titleComposing || (this._titleInput && this._titleInput.value !== note?.title);
     const contentDraft = this.blockEditor?.isComposing || this.getSourceMarkdown() !== note?.content;
     const messages = {

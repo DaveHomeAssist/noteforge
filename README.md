@@ -10,6 +10,13 @@ and dark mode — all stored in your browser, no backend required.
 
 ## Features
 
+- **Focused workspace controls** — tabs and Split view share a row; Tab actions
+  keeps close, reopen and pane moves together. Note actions contains pin and
+  recoverable deletion; Context is highlighted while its panel is open.
+- **Clearer note library** — search help appears on focus, empty saved views stay
+  compact, and Notes includes count and sort. Use Select for bulk actions (Escape
+  finishes selection); tag filters have explicit state and a Clear filter action.
+
 - **Command palette** (`Ctrl/⌘+P`) — the keyboard spine. Fuzzy quick-open notes,
   run any action (new note, templates, toggle theme/graph, Trash, export…). Type
   `>` to restrict to commands, `#` to search headings across all notes.
