@@ -35,6 +35,27 @@ for (const theme of ['light', 'dark']) {
       await expect(page.locator('#select-notes')).toBeFocused();
       await expect(page.locator('.note-item [data-select]').first()).toBeHidden();
       expect(await page.evaluate(() => window.app.noteList.getSelection())).toEqual([]);
+      for (const target of ['[data-bulk-tag]', '[data-bulk-action="archive"]', '#select-notes', '#search-input']) {
+        await page.locator('#select-notes').click();
+        await page.locator('.note-item [data-select]').first().click();
+        await expect(page.locator('.bulk-actions')).toBeVisible();
+        await page.locator(target).focus();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#select-notes')).toBeFocused();
+        await expect(page.locator('#select-notes')).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('.bulk-actions')).toBeHidden();
+        expect(await page.evaluate(() => window.app.noteList.getSelection())).toEqual([]);
+      }
+      await page.locator('#select-notes').click();
+      await page.locator('.note-item [data-select]').first().click();
+      await page.locator('[data-bulk-action="trash"]').click();
+      await expect(page.locator('#confirm-dialog')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#confirm-dialog')).toBeHidden();
+      await expect(page.locator('.bulk-actions')).toBeVisible();
+      expect(await page.evaluate(() => window.app.noteList.getSelection())).toHaveLength(1);
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.bulk-actions')).toBeHidden();
       await page.locator('.tag-chip[data-tag="projects"]').click();
       await expect(page.locator('.tag-chip[data-tag="projects"]')).toHaveAttribute('aria-pressed', 'true');
       await page.getByRole('button', { name: 'Clear filter' }).click();
@@ -117,6 +138,19 @@ for (const viewport of [
         document.head.append(style);
       });
       expect((await page.locator('.sbd-site-return').boundingBox()).height).toBe(32);
+      if (viewport.width === 375) {
+        await page.locator('#sidebar-toggle').click();
+        await page.locator('#select-notes').click();
+        await page.locator('.note-item [data-select]').first().click();
+        await page.locator('[data-bulk-tag]').focus();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#select-notes')).toBeFocused();
+        await expect(page.locator('.bulk-actions')).toBeHidden();
+        await expect(page.locator('.app')).toHaveClass(/sidebar-open/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.app')).not.toHaveClass(/sidebar-open/);
+      }
+
       for (const button of [
         page.getByRole('button', { name: 'Tab actions', exact: true }),
         page.getByRole('button', { name: 'Note actions', exact: true }),

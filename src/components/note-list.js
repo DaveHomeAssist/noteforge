@@ -380,13 +380,6 @@ export class NoteList {
   }
 
   #onListKeydown(event) {
-    if (event.key === 'Escape' && this.els.select && this.selectionMode) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.setSelectionMode(false);
-      this.els.select.focus();
-      return;
-    }
     const select = event.target.closest('[data-select]');
     const item = select?.closest('.note-item');
     const ordered = (this._rows || []).map((row) => row.note.id);

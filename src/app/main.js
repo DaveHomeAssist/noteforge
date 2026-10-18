@@ -1620,6 +1620,10 @@ class App {
         if (!this.el.menuDropdown.hidden) {
           this.#closeMenu();
           this.el.menuBtn.focus();
+        } else if (this.noteList.selectionMode && this.el.sidebar.contains(e.target)) {
+          e.preventDefault();
+          this.noteList.setSelectionMode(false);
+          this.noteList.els.select?.focus();
         } else if (this.el.app.classList.contains('sidebar-open')) this.#closeSidebar();
         else if (this.tabletMql.matches && !this.#sidebarCollapsed()) {
           this.#closeSidebarOverlay();
