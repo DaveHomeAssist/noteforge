@@ -76,6 +76,7 @@ export class Modal {
 
   open() {
     if (this.isOpen) return;
+    document.dispatchEvent(new Event('noteforge:modal-open'));
     this.isOpen = true;
     this._returnFocus = document.activeElement;
     this.overlay.hidden = false;

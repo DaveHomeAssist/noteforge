@@ -66,6 +66,13 @@ export class Phase5Controller {
     this.ready = this.reconcileAliases();
   }
 
+  destroy() {
+    this.destroyed = true;
+    this.unsubscribe?.();
+    clearTimeout(this.refreshTimer);
+    this.properties?.close();
+  }
+
   async #ensureProperties() {
     if (this.properties) return this.properties;
     if (this.propertiesReady) return this.propertiesReady;
@@ -87,9 +94,14 @@ export class Phase5Controller {
     return this.propertiesReady;
   }
 
-  async showProperties(noteId) {
+  async prepareProperties() {
     await this.ready;
-    return (await this.#ensureProperties()).show(noteId);
+    return this.#ensureProperties();
+  }
+
+  async showProperties(noteId, request = { current: () => true }) {
+    const view = await this.prepareProperties();
+    if (request.current()) return view.show(noteId);
   }
 
   async read(noteId) {
@@ -180,7 +192,7 @@ export class Phase5Controller {
   }
 
   #queueDerivedRefresh() {
-    if (this.refreshTimer) return;
+    if (this.destroyed || this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
       if (this.reconcileReady) {

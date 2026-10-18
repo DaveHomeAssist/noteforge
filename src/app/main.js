@@ -16,10 +16,47 @@ import { icon } from '../ui/icons.js';
 import { moveMenuFocus } from '../ui/menu-nav.js';
 import { WindowState } from '../core/window-state.js';
 import { showStorageRecovery } from './storage-recovery.js';
+import { FeatureActions } from '../ui/feature-actions.js';
+import { downloadText } from '../utils/download.js';
+import '../components/properties-view.css';
+import '../components/quick-capture-view.css';
+import '../components/command-palette.css';
+import '../components/recovery.css';
 
 class App {
   constructor() {
     this.db = new Database();
+    this.features = new FeatureActions({
+      saveAndReload: async (request) => {
+        this.editor?.flushPending();
+        if (!(await this.db.flushCurrentWrites()))
+          throw new Error('Some drafts are not saved. Resolve the save issue or export your drafts before reloading.');
+        if (request.current()) window.location.reload();
+      },
+      exportDrafts: (request) => {
+        const editors = Object.values(this.workspace?.editors || { primary: this.editor }).filter(Boolean);
+        const drafts = editors
+          .filter((editor) => editor.currentId)
+          .map((editor) => ({
+            id: editor.currentId,
+            title: editor.container.querySelector('.editor__title')?.value,
+            content: editor.getSourceMarkdown(),
+          }));
+        downloadText(
+          JSON.stringify(
+            {
+              notes: [...this.db.notes.values()].map((note) => note.toJSON()),
+              drafts,
+              pendingCapture: this.pendingCapture || request.payload,
+            },
+            null,
+            2,
+          ),
+          'noteforge-recovery-drafts.json',
+          'application/json',
+        );
+      },
+    });
     this.currentId = null;
     this.view = 'editor'; // 'editor' | 'graph'
     this.navigation = { back: [], current: null, forward: [] };
@@ -244,11 +281,13 @@ class App {
   // --- note selection -----------------------------------------------------
 
   openNote(id, opts = {}) {
+    this.features.cancel();
     if (this.phase6?.workspace && !opts.workspaceCommitted) return this.phase6.workspace.requestOpen(id, opts);
     return this.#openNoteNow(id, opts);
   }
 
   #openNoteNow(id, opts = {}) {
+    this.features.cancel();
     const note = this.db.getNote(id);
     if (!note) return false;
     if (opts.origin === 'reload') {
@@ -347,10 +386,18 @@ class App {
     this.openNote(note.id, { focus: 'content' });
   }
 
-  async openDailyNote(date = null) {
-    this.#closeMenu();
+  openDailyNote(date = null) {
     this.#closeSidebar();
-    return (await this.#ensurePhase4()).openDailyNote(date);
+    return this.#runFeature(
+      'daily',
+      'Daily note',
+      async () => {
+        const phase = await this.#ensurePhase4();
+        await phase.prepareDailyNote();
+        return phase;
+      },
+      (phase, request) => phase.openDailyNote(date, request),
+    );
   }
 
   /** Create a new note nested under `parentId`. */
@@ -621,22 +668,31 @@ class App {
     }
   }
 
-  async #showHistory() {
-    this.#closeMenu();
-    await this.#ensureHistory();
-    const note = this.currentId ? this.db.getNote(this.currentId) : null;
-    if (!note) return;
-    this.editor?.flushPending();
-    await this.db.flush();
-    await this.history.show(note.id);
+  #showHistory() {
+    const id = this.currentId;
+    return this.#runFeature(
+      'history',
+      'Note history',
+      () => this.#ensureHistory(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        await this.db.flush();
+        if (id && this.db.getNote(id)) await request.commit(() => view.show(id));
+      },
+    );
   }
 
-  async #showBackup() {
-    this.#closeMenu();
-    await this.#ensureBackup();
-    this.editor?.flushPending();
-    await this.db.flush();
-    await this.backup.show();
+  #showBackup() {
+    return this.#runFeature(
+      'backup',
+      'Backup center',
+      () => this.#ensureBackup(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        await this.db.flush();
+        await request.commit(() => view.show());
+      },
+    );
   }
 
   async #ensureLinkTools() {
@@ -665,26 +721,39 @@ class App {
     return this.linkToolsReady;
   }
 
-  async #showRename(noteId, proposedTitle) {
-    const note = this.db.getNote(noteId);
-    if (!note) return;
-    this.editor?.flushPending();
-    await this.db.flush();
-    const tools = await this.#ensureLinkTools();
-    tools.showRename(noteId, proposedTitle);
+  #showRename(noteId, proposedTitle) {
+    return this.#runFeature(
+      'links',
+      'Link tools',
+      () => this.#ensureLinkTools(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        await this.db.flush();
+        if (this.db.getNote(noteId)) request.commit(() => view.showRename(noteId, proposedTitle));
+      },
+    );
   }
 
-  async #showMention(mention) {
-    this.editor?.flushPending();
-    await this.db.flush();
-    const tools = await this.#ensureLinkTools();
-    tools.showMention(mention);
+  #showMention(mention) {
+    return this.#runFeature(
+      'links',
+      'Link tools',
+      () => this.#ensureLinkTools(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        await this.db.flush();
+        request.commit(() => view.showMention(mention));
+      },
+    );
   }
 
-  async #showLinkReport() {
-    this.#closeMenu();
-    const tools = await this.#ensureLinkTools();
-    tools.showReport();
+  #showLinkReport() {
+    return this.#runFeature(
+      'links',
+      'Link tools',
+      () => this.#ensureLinkTools(),
+      (view, request) => request.commit(() => view.showReport()),
+    );
   }
 
   async #refreshMutationPreview() {
@@ -700,6 +769,15 @@ class App {
 
   async #ensureHistory() {
     if (this.history) return this.history;
+    if (this.historyReady) return this.historyReady;
+    this.historyReady = this.#createHistory().catch((error) => {
+      this.historyReady = null;
+      throw error;
+    });
+    return this.historyReady;
+  }
+
+  async #createHistory() {
     const [{ HistoryView, createHistoryElements }] = await Promise.all([
       import('../components/history-view.js'),
       this.#ensureRecovery(),
@@ -716,6 +794,15 @@ class App {
 
   async #ensureBackup() {
     if (this.backup) return this.backup;
+    if (this.backupReady) return this.backupReady;
+    this.backupReady = this.#createBackup().catch((error) => {
+      this.backupReady = null;
+      throw error;
+    });
+    return this.backupReady;
+  }
+
+  async #createBackup() {
     const [{ BackupView, createBackupElements }] = await Promise.all([
       import('../components/backup-view.js'),
       this.#ensureRecovery(),
@@ -963,8 +1050,9 @@ class App {
           openNote: (id, options) => this.openNote(id, options),
           showStorageError: () => this.#showStorageError(),
           announce: (message) => this.#announce(message),
-          confirm: (options) => this.confirm(options),
+          confirm: (options, request) => this.confirm(options, request),
           toast: (message, options) => this.toast(message, options),
+          openCapture: (options) => this.#showQuickCapture(options),
         });
         return this.phase4;
       })
@@ -978,11 +1066,7 @@ class App {
   #ensurePhase5() {
     if (this.phase5Ready) return this.phase5Ready;
     if (this.phase5) return Promise.resolve(this.phase5);
-    this.phase5Ready = Promise.all([
-      import('./phase5.js'),
-      import('../components/properties-view.css'),
-      this.#ensureRecovery(),
-    ])
+    this.phase5Ready = Promise.all([import('./phase5.js'), this.#ensureRecovery()])
       .then(async ([{ Phase5Controller }]) => {
         this.phase5 = new Phase5Controller({
           refreshPreview: () => this.#refreshMutationPreview(),
@@ -996,6 +1080,7 @@ class App {
         return this.phase5;
       })
       .catch((error) => {
+        this.phase5?.destroy();
         this.phase5Ready = null;
         this.phase5 = null;
         throw error;
@@ -1064,31 +1149,87 @@ class App {
     else setTimeout(initialize, 0);
   }
 
-  async #showProperties(noteId = this.currentId) {
+  #runFeature(key, label, load, open, payload = null) {
     this.#closeMenu();
-    const phase5 = await this.#ensurePhase5();
+    const ownerEditor = this.workspace?.activeEditor || this.editor;
+    const owner = ownerEditor?.container;
+    const editorNoteId = ownerEditor?.currentId;
+    const noteId = this.currentId;
+    const pane = this.workspace?.state.activePane ?? 'primary';
+    return this.features.run({
+      key,
+      label,
+      load,
+      open,
+      payload,
+      valid: () =>
+        (!owner || owner.isConnected) &&
+        ownerEditor?.currentId === editorNoteId &&
+        this.currentId === noteId &&
+        (this.workspace?.state.activePane ?? 'primary') === pane,
+    });
+  }
+
+  #showProperties(noteId = this.currentId) {
+    return this.#runFeature(
+      'properties',
+      'Note properties',
+      async () => (await this.#ensurePhase5()).prepareProperties(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        await this.db.flush();
+        await request.commit(() => view.show(noteId));
+      },
+    );
+  }
+
+  #showQuickCapture(options = {}) {
+    this.#closeSidebar();
+    if (options.payload || options.destinationId) this.pendingCapture = structuredClone(options);
+    const payload = structuredClone(this.pendingCapture || options);
+    return this.#runFeature(
+      'capture',
+      'Quick Capture',
+      async () => (await this.#ensurePhase4()).prepareQuickCapture(),
+      async (view, request) => {
+        this.editor?.flushPending();
+        if (!(await this.db.flushCurrentWrites())) this.#showStorageError();
+        request.commit(() => {
+          view.show(payload);
+          this.pendingCapture = null;
+        });
+      },
+      payload,
+    );
+  }
+
+  #showTaskDashboard() {
+    this.#closeSidebar();
+    return this.#runFeature(
+      'tasks',
+      'Tasks',
+      async () => {
+        await this.#ensureRecovery();
+        return (await this.#ensurePhase4()).prepareTaskDashboard();
+      },
+      (view, request) => this.#openSavedView(view, request),
+    );
+  }
+
+  #showCalendar(options = {}) {
+    this.#closeSidebar();
+    return this.#runFeature(
+      'calendar',
+      'Calendar',
+      async () => (await this.#ensurePhase4()).prepareCalendar(),
+      (view, request) => this.#openSavedView(view, request, options),
+    );
+  }
+
+  async #openSavedView(view, request, options) {
     this.editor?.flushPending();
-    await this.db.flush();
-    await phase5.showProperties(noteId);
-  }
-
-  async #showQuickCapture(options = {}) {
-    this.#closeMenu();
-    this.#closeSidebar();
-    return (await this.#ensurePhase4()).showQuickCapture(options);
-  }
-
-  async #showTaskDashboard() {
-    this.#closeMenu();
-    this.#closeSidebar();
-    await this.#ensureRecovery();
-    return (await this.#ensurePhase4()).showTaskDashboard();
-  }
-
-  async #showCalendar(options = {}) {
-    this.#closeMenu();
-    this.#closeSidebar();
-    return (await this.#ensurePhase4()).showCalendar(options);
+    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
+    return request.commit(() => view.show(options));
   }
 
   async #openShareTarget() {
@@ -1099,15 +1240,23 @@ class App {
     return (await this.#ensurePhase6()).openClipperIntake();
   }
 
-  async #showClipper() {
-    this.#closeMenu();
-    return (await this.#ensurePhase6()).showClipper();
+  #showClipper() {
+    return this.#runFeature(
+      'clipper',
+      'Web clipper',
+      async () => (await this.#ensurePhase6()).prepareClipper(),
+      (view, request) => request.commit(() => view.show()),
+    );
   }
 
-  async #showReconciliation() {
-    this.#closeMenu();
+  #showReconciliation() {
     this.#closeSidebar();
-    return (await this.#ensurePhase6()).showReconciliation();
+    return this.#runFeature(
+      'reconciliation',
+      'Folder reconciliation',
+      async () => (await this.#ensurePhase6()).prepareReconciliation(),
+      (view, request) => this.#openSavedView(view, request),
+    );
   }
 
   #selectionChanged(ids) {
@@ -1147,33 +1296,52 @@ class App {
     else this.editor?.refresh();
   }
 
-  async #showTrash() {
-    this.#closeMenu();
-    (await this.#ensureTrash()).show();
+  #showTrash() {
+    return this.#runFeature(
+      'trash',
+      'Trash',
+      () => this.#ensureTrash(),
+      (view, request) => request.commit(() => view.show()),
+    );
   }
 
-  async #showPalette(prefill = '') {
-    this.#closeMenu();
-    (await this.#ensurePalette()).show(prefill);
+  #showPalette(prefill = '') {
+    return this.#runFeature(
+      'palette',
+      'Command palette',
+      () => this.#ensurePalette(),
+      (view, request) => {
+        request.commit(() => view.show(prefill));
+      },
+    );
   }
 
-  async #showSettings() {
-    this.#closeMenu();
-    (await this.#ensureSettings()).show();
+  #showSettings() {
+    return this.#runFeature(
+      'settings',
+      'Settings',
+      () => this.#ensureSettings(),
+      (view, request) => request.commit(() => view.show()),
+    );
   }
 
-  async #showArchive(selectedId = null) {
-    this.#closeMenu();
-    (await this.#ensureArchive()).show({ selectedId });
+  #showArchive(selectedId = null) {
+    return this.#runFeature(
+      'archive',
+      'Archive',
+      () => this.#ensureArchive(),
+      (view, request) => request.commit(() => view.show({ selectedId })),
+    );
   }
 
-  async #showFindReplace(scope = 'current') {
-    this.#closeMenu();
+  #showFindReplace(scope = 'current') {
     this.#closeSidebar();
-    const view = await this.#ensureFindReplace();
-    this.editor?.flushPending();
-    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
-    view.show({ scope });
+    return this.#runFeature(
+      'find',
+      'Find and replace',
+      () => this.#ensureFindReplace(),
+      (view, request) => this.#openSavedView(view, request, { scope }),
+    );
   }
 
   #syncNavigationFrom(controller) {
@@ -1276,14 +1444,20 @@ class App {
   }
 
   /** In-app confirmation (lazily loaded src/ui/dialogs.js); resolves true or false. */
-  async confirm(options) {
-    const { confirmDialog } = await import('../ui/dialogs.js');
-    return confirmDialog(options);
+  async confirm(options, request = null) {
+    try {
+      const { confirmDialog } = await import('../ui/dialogs.js');
+      if (request && !request.current()) return false;
+      return await confirmDialog(options);
+    } catch {
+      this.#announce('Confirmation is unavailable. Nothing was confirmed. Save and reload before trying again.');
+      return false;
+    }
   }
 
   /** Non-blocking notice (lazily loaded src/ui/dialogs.js). */
   toast(message, options) {
-    void import('../ui/dialogs.js').then(({ toast }) => toast(message, options));
+    void import('../ui/dialogs.js').then(({ toast }) => toast(message, options)).catch(() => this.#announce(message));
   }
 
   async #archiveCurrent() {
@@ -1306,6 +1480,7 @@ class App {
    * (Tasks, Calendar) that opens there instead of in a dialog (WEB-2).
    */
   setView(view) {
+    if (view !== this.view) this.features.cancel();
     const leaving = this.view;
     // Set the view first: a view closing below reports its close, and that
     // handler must not send the main area back to the editor.
@@ -1329,12 +1504,18 @@ class App {
       editorArea.focus?.({ preventScroll: true });
   }
 
-  async toggleGraph() {
+  toggleGraph() {
     if (this.view === 'graph') return this.setView('editor');
-    await this.#ensureGraph();
-    this.editor?.flushPending();
-    if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
-    this.setView('graph');
+    return this.#runFeature(
+      'graph',
+      'Graph',
+      () => this.#ensureGraph(),
+      async (_view, request) => {
+        this.editor?.flushPending();
+        if (!(await this.db.flushCurrentWrites())) return this.#showStorageError();
+        request.commit(() => this.setView('graph'));
+      },
+    );
   }
 
   // --- chrome (buttons, menu, import/export) ------------------------------

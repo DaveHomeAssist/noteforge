@@ -23,7 +23,7 @@ export function editorTaskOccurrence(content, reference) {
 }
 
 export class Phase4Controller {
-  constructor({ db, editor, openNote, showStorageError, announce, confirm, toast }) {
+  constructor({ db, editor, openNote, showStorageError, announce, confirm, toast, openCapture }) {
     this.db = db;
     this.editor = editor;
     this.openNote = openNote;
@@ -31,6 +31,7 @@ export class Phase4Controller {
     this.announce = announce;
     this.confirm = confirm;
     this.toast = toast;
+    this.openCapture = openCapture;
     this.quickCapture = null;
     this.quickCaptureReady = null;
     this.taskDashboard = null;
@@ -44,18 +45,21 @@ export class Phase4Controller {
     return Boolean(this.quickCapture?.open);
   }
 
-  async openDailyNote(date = null) {
-    const [{ resolveDailyNote }, { localDateKey }] = await Promise.all([
-      import('../utils/daily-workflow.js'),
-      import('../utils/local-date.js'),
-    ]);
+  prepareDailyNote() {
+    return Promise.all([import('../utils/daily-workflow.js'), import('../utils/local-date.js')]);
+  }
+
+  async openDailyNote(date = null, request = { current: () => true, commit: (action) => action() }) {
+    const [{ resolveDailyNote }, { localDateKey }] = await this.prepareDailyNote();
+    if (!request.current()) return null;
     this.editor?.flushPending();
     if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
+    if (!request.current()) return null;
     const dateKey = date || localDateKey();
     const resolution = resolveDailyNote([...this.db.notes.values()], dateKey);
     try {
       if (resolution.status === 'active') {
-        this.openNote(resolution.note.id);
+        request.commit(() => this.openNote(resolution.note.id));
         this.announce(`Opened Daily note ${dateKey}.`);
         return resolution.note;
       }
@@ -71,11 +75,17 @@ export class Phase4Controller {
       if (resolution.status === 'trashed' || resolution.status === 'archived') {
         const archived = resolution.status === 'archived';
         const verb = archived ? 'Unarchive' : 'Restore';
-        const approved = await this.confirm({
-          title: `${verb} the Daily note?`,
-          message: `“${dateKey}” is ${archived ? 'archived' : 'in Trash'}. ${verb} and open it?`,
-          confirmLabel: `${verb} and open`,
-        });
+        const approved = await request.commit(() =>
+          this.confirm(
+            {
+              title: `${verb} the Daily note?`,
+              message: `“${dateKey}” is ${archived ? 'archived' : 'in Trash'}. ${verb} and open it?`,
+              confirmLabel: `${verb} and open`,
+            },
+            request,
+          ),
+        );
+        if (!request.current()) return null;
         if (!approved) {
           this.announce(`Daily note ${verb.toLowerCase()} cancelled.`);
           return null;
@@ -85,16 +95,19 @@ export class Phase4Controller {
           this.showStorageError();
           return null;
         }
-        this.openNote(resolution.note.id);
+        if (!request.current()) return null;
+        request.commit(() => this.openNote(resolution.note.id));
         this.announce(`${archived ? 'Unarchived' : 'Restored'} and opened Daily note ${dateKey}.`);
         return this.db.getNote(resolution.note.id);
       }
-      const note = this.db.createNote(templateById('daily').build({ date: dateKey }));
+      const note = request.commit(() => this.db.createNote(templateById('daily').build({ date: dateKey })));
+      if (!note) return null;
       if (!(await this.db.flushCurrentWrites())) {
         this.showStorageError();
         return null;
       }
-      this.openNote(note.id, { focus: 'content' });
+      if (!request.current()) return null;
+      request.commit(() => this.openNote(note.id, { focus: 'content' }));
       this.announce(`Created Daily note ${dateKey}.`);
       return note;
     } catch (error) {
@@ -103,7 +116,7 @@ export class Phase4Controller {
     }
   }
 
-  #ensureQuickCapture() {
+  prepareQuickCapture() {
     if (this.quickCapture) return Promise.resolve(this.quickCapture);
     if (this.quickCaptureReady) return this.quickCaptureReady;
     this.quickCaptureReady = Promise.all([
@@ -126,7 +139,7 @@ export class Phase4Controller {
     return this.quickCaptureReady;
   }
 
-  #ensureTaskDashboard() {
+  prepareTaskDashboard() {
     if (this.taskDashboard) return Promise.resolve(this.taskDashboard);
     if (this.taskDashboardReady) return this.taskDashboardReady;
     this.taskDashboardReady = Promise.all([
@@ -146,7 +159,7 @@ export class Phase4Controller {
     return this.taskDashboardReady;
   }
 
-  #ensureCalendar() {
+  prepareCalendar() {
     if (this.calendar) return Promise.resolve(this.calendar);
     if (this.calendarReady) return this.calendarReady;
     this.calendarReady = import('../components/calendar-view.js')
@@ -173,7 +186,8 @@ export class Phase4Controller {
   }
 
   async showQuickCapture(options = {}) {
-    const view = await this.#ensureQuickCapture();
+    if (this.openCapture) return this.openCapture(options);
+    const view = await this.prepareQuickCapture();
     this.editor?.flushPending();
     // A conflict in another note must not block opening a capture draft.
     // Each submitted destination has its own acknowledgement and recovery.
@@ -182,14 +196,14 @@ export class Phase4Controller {
   }
 
   async showTaskDashboard() {
-    const view = await this.#ensureTaskDashboard();
+    const view = await this.prepareTaskDashboard();
     this.editor?.flushPending();
     if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show();
   }
 
   async showCalendar(options = {}) {
-    const view = await this.#ensureCalendar();
+    const view = await this.prepareCalendar();
     this.editor?.flushPending();
     if (!(await this.db.flushCurrentWrites())) return this.showStorageError();
     view.show(options);
