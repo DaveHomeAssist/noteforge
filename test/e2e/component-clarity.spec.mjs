@@ -46,6 +46,14 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.bulk-actions')).toBeHidden();
         expect(await page.evaluate(() => window.app.noteList.getSelection())).toEqual([]);
       }
+      await page.locator('#select-notes').focus();
+      const confirmation = page.evaluate(() => window.app.confirm({ message: 'Disabled return target' }));
+      await expect(page.locator('#confirm-dialog')).toBeVisible();
+      await page.locator('#select-notes').evaluate((button) => (button.disabled = true));
+      await page.keyboard.press('Escape');
+      expect(await confirmation).toBe(false);
+      await expect(page.locator('#menu-btn')).toBeFocused();
+      await page.locator('#select-notes').evaluate((button) => (button.disabled = false));
       await page.locator('#select-notes').click();
       await page.locator('.note-item [data-select]').first().click();
       await page.locator('[data-bulk-action="trash"]').click();
