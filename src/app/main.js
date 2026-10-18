@@ -1153,6 +1153,7 @@ class App {
     this.#closeMenu();
     const ownerEditor = this.workspace?.activeEditor || this.editor;
     const owner = ownerEditor?.container;
+    const editorNoteId = ownerEditor?.currentId;
     const noteId = this.currentId;
     const pane = this.workspace?.state.activePane ?? 'primary';
     return this.features.run({
@@ -1163,7 +1164,7 @@ class App {
       payload,
       valid: () =>
         (!owner || owner.isConnected) &&
-        ownerEditor?.currentId === noteId &&
+        ownerEditor?.currentId === editorNoteId &&
         this.currentId === noteId &&
         (this.workspace?.state.activePane ?? 'primary') === pane,
     });

@@ -19,6 +19,7 @@ async function launch(browser, setup = async () => {}) {
   await page.goto(previewRoot(), { waitUntil: 'load' });
   await page.waitForFunction(() => window.app?.workspace);
   await page.evaluate(() => window.app.ready);
+  await page.evaluate(() => Promise.all([window.app.phase5Ready, window.app.phase6Ready]));
   return { context, page, errors };
 }
 async function invoke(page, feature) {
@@ -193,6 +194,9 @@ test('recovery blocks reload on unsaved writes and exports the mounted draft', a
   try {
     await page.evaluate(() => window.app.workspace.activeEditor.setAutosaveInterval(60_000));
     await page.locator('.editor:visible .blk[contenteditable="true"]').first().fill('Preserve this draft');
+    await expect
+      .poll(() => page.evaluate(() => window.app.workspace.activeEditor.getSourceMarkdown()))
+      .toContain('Preserve this draft');
     await invoke(page, 'capture');
     await expect(page.getByRole('button', { name: 'Save and reload', exact: true })).toBeVisible();
     await page.evaluate(() => {
@@ -413,6 +417,33 @@ test('Daily note loading can be cancelled before creating a note and keeps its r
     expect(errors).toEqual([]);
   } finally {
     release();
+    await context.close();
+  }
+});
+
+test('Daily note restore works after the current note is trashed', async ({ browser }) => {
+  const { context, page, errors } = await launch(browser);
+  try {
+    const note = await page.evaluate(() => window.app.openDailyNote('2041-02-04'));
+    await page.evaluate(async (id) => {
+      window.app.db.deleteNote(id);
+      await window.app.db.flushCurrentWrites();
+    }, note.id);
+    for (const choice of ['Cancel', 'Restore and open']) {
+      await page.evaluate(() => {
+        window.__dailyRestore = window.app.openDailyNote('2041-02-04');
+      });
+      await expect(page.locator('#confirm-dialog')).toBeVisible();
+      await page.locator('#confirm-dialog').getByRole('button', { name: choice, exact: true }).click();
+      await page.evaluate(() => window.__dailyRestore);
+      expect(await page.evaluate((id) => Boolean(window.app.db.notes.get(id)?.isTrashed), note.id)).toBe(
+        choice === 'Cancel',
+      );
+    }
+    await expect(page.locator('.editor__title:visible')).toHaveValue('2041-02-04');
+    await expect(page.locator('#app-status')).toContainText('Restored and opened');
+    expect(errors).toEqual([]);
+  } finally {
     await context.close();
   }
 });
