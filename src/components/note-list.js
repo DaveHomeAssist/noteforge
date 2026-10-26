@@ -148,11 +148,13 @@ export class NoteList {
       this.els.tags.innerHTML = '';
       return;
     }
+    // The space after the tag keeps "#tag 2" as two words, so the visible text stays part of the
+    // aria-label (WCAG 2.5.3, axe label-content-name-mismatch). The flex gap hides it visually.
     const chips = counts
       .map(
         ([tag, n]) => `
         <button class="tag-chip ${this.activeTag === tag ? 'tag-chip--on' : ''}" data-tag="${escapeHtml(tag)}" aria-pressed="${this.activeTag === tag}" aria-label="Filter by ${escapeHtml(tag)}, ${n} notes">
-          #${escapeHtml(tag)}<span class="tag-chip__n">${n}</span>
+          #${escapeHtml(tag)} <span class="tag-chip__n">${n}</span>
         </button>`,
       )
       .join('');
