@@ -97,7 +97,7 @@ export class NoteList {
     if (this.els.select) {
       this.els.select.textContent = enabled ? 'Done' : 'Select';
       this.els.select.setAttribute('aria-pressed', String(enabled));
-      this.els.select.setAttribute('aria-label', enabled ? 'Finish selecting notes' : 'Select notes');
+      this.els.select.setAttribute('aria-label', enabled ? 'Done selecting notes' : 'Select notes');
     }
     this.#renderList();
   }
