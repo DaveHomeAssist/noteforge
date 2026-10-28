@@ -80,7 +80,7 @@ for (const theme of ['light', 'dark']) {
       await page.keyboard.press('ArrowDown');
       await expect(
         page.getByRole('menuitem', {
-          name: 'Move active tab to other pane',
+          name: 'Move to other pane',
         }),
       ).toBeFocused();
       await page.keyboard.press('Escape');
@@ -88,7 +88,7 @@ for (const theme of ['light', 'dark']) {
       await tabMenu.click();
       await page
         .getByRole('menuitem', {
-          name: 'Move active tab to other pane',
+          name: 'Move to other pane',
         })
         .click();
       await expect(page.locator('#workspace')).toHaveAttribute('data-active-pane', 'secondary');

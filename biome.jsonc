@@ -56,5 +56,15 @@
         "noImportantStyles": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      // The Playwright smokes assert what a user sees, so they read innerText on purpose:
+      // it skips hidden elements and keeps line breaks between blocks. textContent would let
+      // hidden text satisfy positive checks and trip negative ones such as the task dashboard's
+      // "no archived or trashed tasks" check. Application code under src/ keeps the rule.
+      "includes": ["test/e2e/**"],
+      "linter": { "rules": { "performance": { "useDomNodeTextContent": "off" } } }
+    }
+  ]
 }

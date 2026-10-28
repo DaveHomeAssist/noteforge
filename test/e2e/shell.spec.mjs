@@ -518,8 +518,7 @@ test('context toggling preserves pending edits and follows notes and both panes'
     await page.getByRole('button', { name: 'Tab actions', exact: true }).click();
     await page
       .getByRole('menuitem', {
-        name: 'Move active tab to other pane',
-        exact: true,
+        name: 'Move to other pane',
       })
       .click();
     await page.locator('.note-item__main').filter({ hasText: 'Welcome' }).first().click();

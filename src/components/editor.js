@@ -294,7 +294,7 @@ export class Editor {
                 : `<ul class="backlinks__list">${backlinks
                     .map(
                       (b) => `
-                  <li><a href="#" class="backlinks__item" data-id="${escapeHtml(b.sourceId)}" data-context-anchor="${escapeHtml(b.headingAnchor || '')}" aria-label="Open ${escapeHtml(b.sourceTitle)}${b.heading ? ` at ${escapeHtml(b.heading)}` : ''}">
+                  <li><a href="#" class="backlinks__item" data-id="${escapeHtml(b.sourceId)}" data-context-anchor="${escapeHtml(b.headingAnchor || '')}">
                     <strong>${escapeHtml(b.sourceTitle)}</strong>
                     ${b.heading ? `<span class="backlinks__heading">${escapeHtml(b.heading)}</span>` : ''}
                     <span class="backlinks__snippet">${escapeHtml(b.snippet || b.target)}</span>

@@ -101,8 +101,8 @@ export class WorkspaceView {
         <button type="button" class="btn btn--ghost workspace__action" data-split aria-pressed="false">${icon('columns-2')}<span class="workspace__label">Split view</span></button>
         <button type="button" class="btn btn--ghost" data-action-menu title="Tab actions" aria-label="Tab actions" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-actions">${icon('ellipsis')}</button>
         <div id="workspace-actions" class="action-menu" role="menu" aria-label="Tab actions" popover>
-          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-move-active aria-label="Move active tab to other pane">${icon('arrow-left-right')} Move to other pane <kbd>Alt+Shift+M</kbd></button>
-          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-close-active aria-label="Close active tab">${icon('x')} Close tab <kbd>Delete</kbd></button>
+          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-move-active>${icon('arrow-left-right')} Move to other pane <kbd>Alt+Shift+M</kbd></button>
+          <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-close-active>${icon('x')} Close tab <kbd>Delete</kbd></button>
           <button type="button" role="menuitem" tabindex="-1" class="btn btn--ghost" data-reopen>${icon('rotate-ccw')} Reopen tab</button>
         </div>
       </header>
