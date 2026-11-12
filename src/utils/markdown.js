@@ -94,6 +94,10 @@ const PURIFY_CONFIG = {
   // blocks render as native disclosure widgets. Everything else is sanitized.
   ADD_TAGS: ['details', 'summary', 'aside'],
   ADD_ATTR: ['data-wikilink', 'data-fragment', 'target', 'rel', 'open', 'contenteditable', 'role', 'aria-label'],
+  // Note content is untrusted (import, clipper, share target, paste). An inline
+  // `style` lets it cover the whole app with a fixed-position element or fetch
+  // a remote url(); the renderer itself never emits one.
+  FORBID_ATTR: ['style'],
 };
 
 /** Render markdown (with wikilinks) to sanitized HTML. */

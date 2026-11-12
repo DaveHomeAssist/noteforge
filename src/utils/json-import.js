@@ -10,6 +10,22 @@ export function parseNoteMergeImport(text) {
   return parsed;
 }
 
+// A hand-edited or third-party file can carry `"title": 2026` or `"tags": [7]`.
+// Stored as given, those survive a save and then throw in every consumer that
+// treats them as text (search, tag filters). Finite numbers become text; any
+// other non-text value is dropped so the app's own defaults apply.
+const importText = (value) => (typeof value === 'string' ? value : Number.isFinite(value) ? String(value) : '');
+const importDate = (value) => (typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : undefined);
+
+/** Importable entries as typed shallow copies; the parsed input is never mutated. */
 export function selectImportableNotes(entries) {
-  return entries.filter((data) => data && typeof data.content === 'string');
+  return entries
+    .filter((data) => data && typeof data.content === 'string')
+    .map((data) => ({
+      ...data,
+      title: importText(data.title),
+      tags: (Array.isArray(data.tags) ? data.tags : []).map(importText).filter(Boolean),
+      createdAt: importDate(data.createdAt),
+      updatedAt: importDate(data.updatedAt),
+    }));
 }

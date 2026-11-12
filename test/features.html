@@ -396,6 +396,12 @@
     check('no <script> in DOM', !be.host.innerHTML.toLowerCase().includes('<script'));
     check('no onerror in DOM', !be.host.innerHTML.toLowerCase().includes('onerror'));
     check('XSS did not execute', window.__x === undefined);
+    // An inline style could cover the whole app (position:fixed) or fetch a
+    // remote url(). The text stays; the attribute does not. The probe uses a
+    // harmless position so a regression fails here without blanketing the page.
+    const styled = mkBE('<div style="position:relative;background:url(https://example.com/x.gif)">styled text</div>');
+    check('inline-styled content still renders its text', styled.host.textContent.includes('styled text'));
+    check('no inline style from note content in DOM', !styled.host.querySelector('[style*="relative"], [style*="url("]'));
   });
 
   // ============ full app: tag mid-edit keeps content; serialize round-trip ============

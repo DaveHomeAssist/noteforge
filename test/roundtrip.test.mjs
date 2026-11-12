@@ -770,6 +770,56 @@ serviceWorkerHandlers.activate({
 });
 await activation;
 ok('service worker activation prunes only stale NoteForge caches', eq(deletedCaches, ['noteforge-oldbuild']));
+const shellWrites = [];
+const navigationHandlers = {};
+runInNewContext(serviceWorkerSource.replaceAll('__BUILD_HASH__', 'phase0test'), {
+  URL,
+  self: {
+    location: new URL('https://example.test/noteforge/sw.js'),
+    clients: { claim: async () => {} },
+    skipWaiting: async () => {},
+    addEventListener(type, handler) {
+      navigationHandlers[type] = handler;
+    },
+  },
+  caches: {
+    open: async () => ({
+      put: async (key) => {
+        shellWrites.push(key);
+      },
+    }),
+    match: async () => undefined,
+  },
+  fetch: async () => ({
+    ok: true,
+    type: 'basic',
+    clone() {
+      return this;
+    },
+  }),
+});
+for (const path of [
+  '/noteforge/',
+  '/noteforge/index.html',
+  '/noteforge/?source=share-target&title=x',
+  '/noteforge/icon.svg',
+  '/noteforge/sitemap.xml',
+  '/noteforge/manifest.webmanifest',
+]) {
+  let response;
+  navigationHandlers.fetch({
+    request: { method: 'GET', mode: 'navigate', url: `https://example.test${path}` },
+    respondWith(promise) {
+      response = promise;
+    },
+  });
+  await response;
+  await new Promise((resolve) => setImmediate(resolve)); // let the detached cache write settle
+}
+ok(
+  'service worker stores only the app start page as the offline shell',
+  eq(shellWrites, ['/noteforge/', '/noteforge/', '/noteforge/']),
+);
 
 // --- nested notes (tree helpers) ---
 const tN = (id, parentId = null) => ({ id, parentId, title: id, updatedAt: '2026-01-01T00:00:00Z' });
@@ -1126,3 +1176,39 @@ const unsafeImport = selectImportableNotes(
   parseNoteMergeImport(malformedImports.cases.find((fixtureCase) => fixtureCase.name === 'unsafe banner').json),
 )[0];
 ok('merge import model normalization removes an unsafe banner', Note.fromJSON(unsafeImport).banner === null);
+const typedImport = selectImportableNotes(
+  parseNoteMergeImport(
+    '[{"title":2026,"content":"Body","tags":[7,"kept",null,{"a":1},""],"createdAt":5,"updatedAt":"not a date"},' +
+      '{"title":{"a":1},"content":"Body","tags":"loose","createdAt":"2026-01-02T03:04:05.000Z"}]',
+  ),
+);
+ok(
+  'merge import turns numeric titles and tags into text and drops other non-text values',
+  eq(
+    typedImport.map(({ title, tags }) => ({ title, tags })),
+    [
+      { title: '2026', tags: ['7', 'kept'] },
+      { title: '', tags: [] },
+    ],
+  ),
+);
+ok(
+  'merge import keeps only parseable date strings',
+  typedImport[0].createdAt === undefined &&
+    typedImport[0].updatedAt === undefined &&
+    typedImport[1].createdAt === '2026-01-02T03:04:05.000Z',
+);
+const typedImportDb = new Database({ storageBackend: inertStorage });
+for (const data of typedImport)
+  typedImportDb.createNote(
+    { title: data.title || 'Untitled', content: data.content, tags: data.tags },
+    { allowIdentityConflicts: true },
+  );
+const typedImportHits = (() => {
+  try {
+    return [typedImportDb.searchNotes('2026').length, typedImportDb.searchNotes('kept').length];
+  } catch (error) {
+    return String(error);
+  }
+})();
+ok('search still works after a merge import of numeric titles and tags', eq(typedImportHits, [1, 1]));
