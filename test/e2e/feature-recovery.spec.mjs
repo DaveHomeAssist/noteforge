@@ -82,6 +82,23 @@ for (const [feature, { module, overlay }] of Object.entries(features)) {
       }
     });
 }
+test('activating a lazy menu feature keeps focus on the visible menu button', async ({ browser }) => {
+  const { context, page } = await launch(browser);
+  try {
+    await openMenu(page);
+    // Read focus in the activation task, before a rendering update could let the
+    // browser drop focus from the hidden menu item to <body> on its own.
+    const focused = await page.evaluate(() => {
+      const item = document.getElementById('backup-btn');
+      item.focus();
+      item.click();
+      return document.activeElement.id;
+    });
+    expect(focused).toBe('menu-btn');
+  } finally {
+    await context.close();
+  }
+});
 test('failed Capture module evaluation is handled with bounded recovery', async ({ browser }) => {
   let requests = 0;
   const { context, page, errors } = await launch(browser, async (page) => {
