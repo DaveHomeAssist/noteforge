@@ -53,12 +53,17 @@ self.addEventListener('fetch', (event) => {
 
   // Navigations: network-first so updates land, cached shell for offline launch.
   if (req.mode === 'navigate') {
+    // Only the app's own start page may become the offline shell. Any other
+    // in-scope file opened directly (icon.svg, sitemap.xml, the manifest) is a
+    // successful same-origin navigation too; stored under SHELL it would be
+    // what the next offline launch shows instead of the app.
+    const isShell = url.pathname === BASE || url.pathname === BASE + 'index.html';
     event.respondWith(
       fetch(req)
         .then((res) => {
           // Only cache a good shell — never store a 5xx/404 error page as the
           // offline fallback.
-          if (res && res.ok && res.type === 'basic') {
+          if (isShell && res && res.ok && res.type === 'basic') {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(SHELL, copy)).catch(() => {});
           }

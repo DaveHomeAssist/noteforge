@@ -19,6 +19,15 @@ mirror) carry the deployed commit in `<meta name="noteforge-build">`.
 ## [Unreleased]
 
 ### Fixed
+- Import JSON no longer stores a numeric or otherwise non-text title or tag.
+  Numbers become text and other values are dropped, so search and tag filters
+  keep working after importing a hand-edited or third-party file.
+- The service worker keeps only the app's start page as the offline launch page.
+  Opening another file in the app's folder (an icon, the sitemap) can no longer
+  replace it.
+- Inline `style` attributes in note content are no longer rendered. A note could
+  use one to cover the whole app or load a remote image through CSS. The note's
+  text and source are unchanged; only the inline styling is not applied.
 - Optional feature failures now have accessible loading, cancellation and bounded
   recovery. Dismissed or superseded openings cannot appear later or steal focus.
 - Concurrent openings reuse feature loads and singleton dialogs. Explicit Quick
