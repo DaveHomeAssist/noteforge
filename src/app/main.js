@@ -572,14 +572,17 @@ class App {
   #onMenuKeydown(e) {
     if (e.key === 'Tab') {
       this.#closeMenu();
-      this.el.menuBtn.focus();
       return;
     }
     moveMenuFocus(e, this.#menuItems());
   }
 
+  // Hiding the menu under its focused item would leave focus on a hidden node until
+  // the browser drops it to <body>; return it to the menu button instead.
   #closeMenu() {
+    const focused = this.el.menuDropdown.contains(document.activeElement);
     this.#setMenuOpen(false);
+    if (focused) this.el.menuBtn.focus();
   }
 
   async #reviewStorage() {
