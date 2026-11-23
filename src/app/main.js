@@ -579,6 +579,12 @@ class App {
   }
 
   #closeMenu() {
+    const dropdown = this.el.menuDropdown;
+    if (!dropdown || dropdown.hidden) return;
+    // Focus the menu button before hiding. A focused item inside a hidden menu
+    // makes WebKit move focus to the body on a later frame, so a dismissed
+    // opening cannot treat that item as a stable return target.
+    if (dropdown.contains(document.activeElement)) this.el.menuBtn?.focus();
     this.#setMenuOpen(false);
   }
 
