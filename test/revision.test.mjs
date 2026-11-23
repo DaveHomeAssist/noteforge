@@ -321,7 +321,10 @@ test('capture enforces count retention and collects only unreferenced blobs', as
 
 test('concurrent capture requests serialize parent ordering', async () => {
   const storage = new MemoryStorage();
-  const revisions = new RevisionStore(storage, { idFactory: ids('queued') });
+  const revisions = new RevisionStore(storage, {
+    idFactory: ids('queued'),
+    now: () => new Date('2026-08-19T12:00:00.000Z'),
+  });
   const [first, second] = await Promise.all([
     revisions.capture(note('queued', 'first'), { createdAt: '2026-08-19T10:00:00.000Z' }),
     revisions.capture(note('queued', 'second'), { createdAt: '2026-08-19T10:01:00.000Z' }),
@@ -336,7 +339,10 @@ test('concurrent capture requests serialize parent ordering', async () => {
 test('per-note index preserves parent order when revisions share a timestamp', async () => {
   const storage = new MemoryStorage();
   const idValues = ['z-old', 'a-new'];
-  const revisions = new RevisionStore(storage, { idFactory: () => idValues.shift() });
+  const revisions = new RevisionStore(storage, {
+    idFactory: () => idValues.shift(),
+    now: () => new Date('2026-08-20T12:00:00.000Z'),
+  });
   const createdAt = '2026-08-20T00:00:00.000Z';
   await revisions.capture(note('same-time', 'old'), { createdAt });
   await revisions.capture(note('same-time', 'new'), { createdAt });
